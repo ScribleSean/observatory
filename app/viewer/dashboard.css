@@ -44,6 +44,7 @@
 .ob-chips li { display: flex; align-items: center; gap: 6px; padding: var(--ob-space-1) 10px; border-radius: 999px; background: var(--ob-surface); font-size: var(--ob-meta-size); font-weight: 500; }
 .ob-chips li i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ob-accent); }
 .ob-chips li.warn i { background: var(--ob-warning); }
+.ob-chips li.off i { background: var(--ob-muted); }
 .ob-chips li.wide { align-items: flex-start; border-radius: 12px; }
 .ob-chips li.wide i { margin-top: 0.5em; }
 

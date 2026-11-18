@@ -5,17 +5,17 @@ import {readLines} from './jsonl.mjs';
 import {codexTurn,modelName} from './usage.mjs';
 import {addWrite,hashKey,patchFiles,retryState,retryCall,retryResult,retryRuns,shellWrites,repositoryResolver} from './activity.mjs';
 import {workKind} from '../ledger-kinds.mjs';
-import {MAX_FILES,walkFiles,eachLimited,cleanTitle,parseWithCache} from './common.mjs';
+import {MAX_FILES,walkFiles,eachLimited,cleanTitle,parseWithCache,notePrompt} from './common.mjs';
 
 const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 const THREAD=/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
 const KEEP=['"session_meta"','"turn_context"','"event_msg"','"function_call','"custom_tool_call'];
 
-export const STATE_VERSION=1;
+export const STATE_VERSION=2;
 
 function newState(id) {
   return {id,parent:null,kind:null,cwd:null,model:'unknown',first:null,last:null,started:false,copiedFrom:null,prior:null,
-    invalid:false,turns:[],totals:[],stop:null,lastRole:null,...retryState(),writes:{},branches:[],typed:[]};
+    invalid:false,turns:[],totals:[],stop:null,lastRole:null,...retryState(),writes:{},branches:[],typed:[],origin:null,task:null,prompted:false};
 }
 
 const json=text=>{try {return JSON.parse(text);} catch {return null;}};
@@ -65,6 +65,8 @@ export function codexEvent(state,event,{resolve,home}) {
     state.started=true;
     if(typeof payload.id==='string' && payload.id)state.id=payload.id.toLowerCase();
     if(typeof payload.cwd==='string')state.cwd=payload.cwd;
+    if(payload.source==='exec' || payload.originator==='codex_exec')state.origin='headless';
+    else if(typeof payload.source==='string' && payload.source || typeof payload.originator==='string' && payload.originator)state.origin='interactive';
     const parent=typeof payload.parent_thread_id==='string' && payload.parent_thread_id?payload.parent_thread_id.toLowerCase():null;
     const source=object(payload.source)?payload.source:null;
     const spawned=object(source?.subagent)?source.subagent:null;
@@ -87,7 +89,9 @@ export function codexEvent(state,event,{resolve,home}) {
   if(event.type==='event_msg') {
     if(payload.type==='task_started') {state.stop=null;state.lastRole='assistant';}
     else if(payload.type==='task_complete' || payload.type==='turn_aborted') {state.stop='end_turn';state.lastRole='assistant';}
-    else if(payload.type==='user_message') {state.typed.push(at);state.lastRole='user';state.stop=null;}
+    else if(payload.type==='user_message') {state.typed.push(at);state.lastRole='user';state.stop=null;notePrompt(state,payload.message);}
+    else if(payload.type==='item_completed' && object(payload.item) && payload.item.type==='UserMessage' && Array.isArray(payload.item.content))
+      notePrompt(state,payload.item.content.filter(part=>object(part) && part.type==='text' && typeof part.text==='string' && !part.text.trimStart().startsWith('<') && !part.text.startsWith('# AGENTS.md')).map(part=>part.text).join('\n'));
     if(payload.type!=='token_count' || !object(payload.info))return;
     const total=payload.info.total_token_usage,last=payload.info.last_token_usage;
     if(!object(total))return;
@@ -196,5 +200,7 @@ function toRecord({id,main,parts,unknown},names,resolve,kept) {
   return {id,title:cleanTitle(names.get(id) ?? null),first:firsts.length?Math.min(...firsts):null,last:lasts.length?Math.max(...lasts):null,
     requests,agents,writes,branches,runs,unknownTokens:unknown,rateLimits:null,typed:main?[...main.typed]:[],
     live:main?{last:main.last,stop:main.stop,lastRole:main.lastRole,pending:Object.keys(main.pend).length}:null,
-    repo:main?.cwd?resolve(main.cwd) ?? main.cwd:null};
+    // repo matches a live process by its folder and stays in memory. gitRepo is set only for a resolved git repository.
+    repo:main?.cwd?resolve(main.cwd) ?? main.cwd:null,gitRepo:main?.cwd?resolve(main.cwd) ?? null:null,
+    origin:main?.origin ?? null,task:main?.task ?? null};
 }

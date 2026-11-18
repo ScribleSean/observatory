@@ -15,6 +15,8 @@
 // first and last activity, requests {key, at, model, values: [input, cacheRead, cacheWrite, output],
 // agent}, agents {key, kind}, writes {repo, at}, branches {repo, name, at}, retry runs {at, count,
 // category}, rate limit and typed prompt times, the live turn state and the repository it ran in.
+// Also `origin` ('headless' for a run with no one typing, 'interactive', or null when unknown) and `task`,
+// the WorkKind of its first prompt (null when unknown). Only the kind is kept, never the prompt.
 // Paths stay inside the collector.
 import path from 'node:path';
 import {readClaudeSessions,STATE_VERSION as CLAUDE_VERSION} from './claude.mjs';

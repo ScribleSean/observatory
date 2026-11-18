@@ -50,7 +50,8 @@ namespace Observatory
 
     sealed class EngineRow
     {
-        public string Id, Name, Status, Phrase, Window;
+        // Headline and Resets are the hub's stored words for this engine (lib/forecast.mjs), shown as they are.
+        public string Id, Name, Status, Headline, Window, Resets;
         public double? Remaining;
     }
 
@@ -108,11 +109,6 @@ namespace Observatory
         static IEnumerable<Dictionary<string, object>> Rows(object value)
         {
             return (value as IList ?? new object[0]).OfType<Dictionary<string, object>>();
-        }
-
-        static string Capital(string text)
-        {
-            return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text.Substring(1);
         }
 
         static string Whole(double value)
@@ -210,19 +206,22 @@ namespace Observatory
                         Id = Get(row, "engine") as string ?? "",
                         Name = Get(row, "name") as string ?? "Unknown",
                         Status = Get(row, "status") as string ?? "unknown",
-                        Phrase = Get(row, "phrase") as string ?? "",
+                        Headline = Get(row, "headline") as string,
                         Window = Get(row, "window") as string,
+                        Resets = Get(row, "resets") as string,
                         Remaining = remaining.HasValue && remaining.Value <= 100 ? remaining : null,
                     });
                 }
                 var lead = engines.FirstOrDefault(engine => engine.Id == scarce);
+                // The stored words only. A combined.json from before they were stored reads Unknown.
                 if (lead != null)
                 {
-                    state.Headline = Capital(lead.Name + " " + lead.Phrase.Replace(" at this pace", ""));
+                    state.Headline = lead.Headline ?? "Unknown";
+                    state.Resets = lead.Resets;
                     state.HeadTone = lead.Status;
                     state.HeadEngine = lead.Id;
                 }
-                else if (state.Sentence != null) state.Headline = state.Sentence.Replace(" at this pace", "");
+                else state.Headline = Get(forecast, "asOf") is string ? state.Sentence : "Unknown";
             }
             var head = engines.FirstOrDefault(engine => engine.Id == state.HeadEngine);
             bool placed = false;

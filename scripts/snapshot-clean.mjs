@@ -1,6 +1,7 @@
 import { cleanIntervals, summarizeTracked } from './activity-timeline.mjs';
 import {createHmac} from 'node:crypto';
 import {LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
+import {isWorkKind} from './ledger-kinds.mjs';
 import {TOOL_CATEGORIES,cleanTitle} from './sources/pure.mjs';
 const fields = [
   'inputTokens',
@@ -122,7 +123,10 @@ function cleanLedgerSession(raw,titles,salt) {
   need(signals.retryTool===null || signals.retryTool===undefined || TOOL_CATEGORIES.includes(signals.retryTool));
   const kept=typeof raw.titleHash==='string' && TITLE_HASH.test(raw.titleHash)?raw.titleHash:null;
   const hash=titles?(title?null:kept):(title?titleHash(title,salt):kept);
-  return {id:raw.id,title:titles?title:null,...(hash?{titleHash:hash}:{}),
+  need(raw.origin===undefined || raw.origin===null || raw.origin==='headless' || raw.origin==='interactive');
+  need(raw.task===undefined || raw.task===null || isWorkKind(raw.task));
+  const repo=typeof raw.repo==='string' && LEDGER_REPO.test(raw.repo) && raw.repo!=='.' && raw.repo!=='..' && !/[\\/]/.test(raw.repo)?raw.repo:null;
+  return {id:raw.id,title:titles?title:null,...(hash?{titleHash:hash}:{}),origin:raw.origin ?? null,task:raw.task ?? null,repo,
     startedAt:raw.startedAt,lastActiveAt:raw.lastActiveAt,running:raw.running,
     state:raw.running && STATES.includes(raw.state)?raw.state:null,ratePerHour:raw.running?nullableUsd(raw.ratePerHour):null,
     tokens:Object.fromEntries(['input','output','cacheRead','cacheWrite'].map(key=>[key,nullableCount(raw.tokens[key])])),

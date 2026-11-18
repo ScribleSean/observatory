@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {weekView,joined,limitWindows,hasLastWeek,shippedPill,modelLabel,shareText,flagLines} from '../lib/view-week.mjs';
+import {weekView,joined,hasLastWeek,shippedPill,modelLabel,shareText,flagLines,sessionLabel} from '../lib/view-week.mjs';
 import {sessionView} from '../lib/view-session.mjs';
 import {sampleLedger} from '../lib/sample-ledger.mjs';
 import {limitShare,LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
 import {combine} from '../lib/combine.mjs';
+import {forecast,worded} from '../lib/forecast.mjs';
 import {summaryOf} from '../lib/summary.mjs';
 import {ownSnapshot} from './helpers.mjs';
 
@@ -13,9 +14,16 @@ const HOUR=3600000;
 const iso=offset=>new Date(now+offset).toISOString();
 const window=(engine,name,label,id,minutes,remaining,extra={})=>({engine,name,window:label,windowId:id,durationMinutes:minutes,remaining,
   resetsAt:iso(48*HOUR),status:'room',runoutAt:null,earliestAt:null,latestAt:null,previousUsed:null,...extra});
+// The windows as the hub stores them: each worded once (lib/forecast.mjs) after the change.
+const ENGINE_NAMES={claude:'Claude',codex:'Codex',grok:'Grok'};
 function feed(change=summary=>summary) {
-  return change({generatedAt:iso(0),timezone:'UTC',devices:[{host:'Mac',name:'Studio Mac'},{host:'Windows',name:'Desk PC'}],
-    glance:{forecast:{engines:[{engine:'claude',name:'Claude'},{engine:'codex',name:'Codex'}],scarce:{engine:'claude'}}},
+  const summary=change(base());
+  summary.week.windows=summary.week.windows.map(row=>worded(row,ENGINE_NAMES[row.engine],{now,timeZone:'UTC'}));
+  return summary;
+}
+function base() {
+  return ({generatedAt:iso(0),timezone:'UTC',devices:[{host:'Mac',name:'Studio Mac'},{host:'Windows',name:'Desk PC'}],
+    glance:{forecast:{asOf:iso(0),timeZone:'UTC',engines:[{engine:'claude',name:'Claude'},{engine:'codex',name:'Codex'}],scarce:{engine:'claude'}}},
     week:{windows:[
       window('claude','Claude Code','weekly','seven_day',10080,36,{status:'runs-out',runoutAt:iso(32*HOUR),previousUsed:71}),
       window('claude','Claude Code','5-hour','five_hour',300,59,{resetsAt:iso(2*HOUR)}),
@@ -66,7 +74,7 @@ test('the headline says how much is used, when it runs out and how long before t
   const view=weekView(feed(),{now});
   assert.equal(view.headline.title,'Claude weekly limit');
   assert.equal(view.headline.usedText,'64% used');
-  assert.deepEqual(view.headline.say,{lead:'Runs out',when:'Thu 2:45 AM',tail:'at this pace'});
+  assert.deepEqual(view.headline.say,{lead:'Claude runs out',when:'Thu 2:45 AM',tail:'at this pace'});
   assert.equal(view.headline.pill,'16 hours before the reset');
   assert.equal(view.headline.resets,'Resets Thu 6:45 PM');
   assert.deepEqual(view.headline.segments.map(segment=>segment.label),['Release review','Docs refresh','Game prototype','API cleanup','Weekly planning','Package updates']);
@@ -75,19 +83,19 @@ test('the headline says how much is used, when it runs out and how long before t
   assert.match(view.headline.rest.label,/^176 others$/);
   assert.equal(view.computers,'Studio Mac, Desk PC');
   const ranged=weekView(feed(summary=>{Object.assign(summary.week.windows[0],{earliestAt:iso(30*HOUR),latestAt:iso(34*HOUR)});return summary;}),{now});
-  assert.deepEqual(ranged.headline.say,{lead:'May run out',when:'Thu 1–5 AM',tail:''});
+  assert.deepEqual(ranged.headline.say,{lead:'Claude may run out',when:'Thu 1–5 AM',tail:''});
   const room=weekView(feed(summary=>{Object.assign(summary.week.windows[0],{status:'room',runoutAt:null});return summary;}),{now});
-  assert.equal(room.headline.say.lead,'Lasts until the reset at this pace');
+  assert.equal(room.headline.say.lead,'Claude has room');
   assert.equal(room.headline.pill,null);
   const out=weekView(feed(summary=>{Object.assign(summary.week.windows[0],{status:'out',remaining:0,runoutAt:null});return summary;}),{now});
-  assert.equal(out.headline.say.lead,'Out until Thu 6:45 PM');
+  assert.deepEqual(out.headline.say,{lead:'Claude is out until',when:'Thu 6:45 PM',tail:''});
   assert.equal(out.headline.tone,'spent');
 });
 
 test('every other limit window is a quiet meter, whatever engines are present',()=>{
   const view=weekView(feed(),{now});
   assert.deepEqual(view.meters.map(meter=>[meter.label,meter.usedText]),[['Claude 5-hour','41%'],['Codex weekly','19%'],['Codex 5-hour','12%']]);
-  assert.equal(view.meters[0].resets,'Resets 8:45 PM');
+  assert.equal(view.meters[0].resets,'Resets Tue 8:45 PM');
   const third=weekView(feed(summary=>{
     summary.glance.forecast.engines.push({engine:'grok',name:'Grok'});
     summary.week.windows.push(window('grok','Grok','weekly','weekly',10080,54));
@@ -208,14 +216,27 @@ test('the summary feed carries every limit window with its forecast and each com
   assert.deepEqual(summary.week.ledger.map(row=>row.host),['Mac','Windows']);
   assert.deepEqual(summary.week.windows.map(row=>[row.engine,row.window,row.remaining]),
     [['claude','5-hour',null],['claude','weekly',null],['codex','5-hour',81],['codex','weekly',47],['grok','weekly',54]]);
-  for(const row of summary.week.windows)assert.deepEqual(Object.keys(row),
-    ['engine','name','window','windowId','durationMinutes','remaining','resetsAt','status','runoutAt','earliestAt','latestAt','previousUsed']);
+  // The Week page reads the windows the hub stored with the forecast, not a second forecast.
+  assert.deepEqual(summary.week.windows,combined.glance.forecast.windows);
   // A reading of the window before this one becomes last week's use.
   const reset=Date.parse(combined.view.quota.windows[1].resetsAt);
   const view={...combined.view,limitHistory:[{host:'Mac',status:'ok',points:[
     {p:'codex',w:'secondary',o:'Mac',t:new Date(reset-8*24*HOUR).toISOString(),r:40,x:new Date(reset-7*24*HOUR).toISOString(),d:10080},
     {p:'codex',w:'secondary',o:'Mac',t:new Date(reset-7.5*24*HOUR).toISOString(),r:22,x:new Date(reset-7*24*HOUR).toISOString(),d:10080}]}]};
-  assert.equal(limitWindows(view,combined.glance.limits,{now:at}).find(row=>row.engine==='codex' && row.window==='weekly').previousUsed,78);
+  assert.equal(forecast(view,combined.glance.limits,{now:at,timeZone:'UTC'}).windows.find(row=>row.engine==='codex' && row.window==='weekly').previousUsed,78);
+});
+
+test('a tool gets a tab only when it has sessions in the period, so a tool whose source is off has none',()=>{
+  const both=weekView(feed(),{now});
+  assert.deepEqual(both.tools.map(tool=>tool.id),['claude','codex']);
+  const idle=weekView(feed(summary=>{
+    for(const row of summary.week.ledger)for(const tool of row.tools.filter(tool=>tool.tool==='codex'))
+      for(const period of tool.periods)Object.assign(period,{sessionCount:0,sessions:[],other:null,apiUsd:0});
+    return summary;
+  }),{now});
+  assert.deepEqual(idle.tools.map(tool=>tool.id),['claude']);
+  assert.equal(weekView(feed(),{now,tool:'codex'}).tool,'codex');
+  assert.equal(weekView(feed(summary=>{for(const row of summary.week.ledger)row.tools=row.tools.filter(tool=>tool.tool!=='codex');return summary;}),{now,tool:'codex'}).tool,'claude');
 });
 
 test('model names read as their family, and unknown ids stay as they are',()=>{
@@ -349,4 +370,46 @@ test('limitShare: Unknown for a zero, negative, non-finite or impossible input, 
     for(const args of [[bad,100,50],[10,bad,50],[10,100,bad]])assert.equal(limitShare(...args),null,String(args));
   assert.equal(limitShare(150,100,40),40,'a session never takes more than the part used');
   close(limitShare(25,100,40),10);
+});
+
+test('an untitled session is named from how it ran, what it was asked and where',()=>{
+  const shipped=repos=>({estimated:true,commits:0,onMain:0,merges:0,prsOpen:null,repos});
+  const label=(origin,task,repos=[],extra={})=>sessionLabel({origin,task,shipped:shipped(repos),...extra});
+  assert.equal(label('headless','review',['cube-type']),'Review run in cube-type');
+  assert.equal(label('headless',null,['cube-type']),'Headless run in cube-type');
+  assert.equal(label('interactive','review',['cube-type']),'Review session in cube-type');
+  assert.equal(label(null,null,['cube-type']),'Session in cube-type');
+  assert.equal(label('headless',null),'Headless run');
+  assert.equal(label('headless','search'),'Search run');
+  assert.equal(label('headless','other',['cube-type']),'Headless run in cube-type','the other kind says nothing');
+  assert.equal(label('headless','review',[],{repo:'nod'}),'Review run in nod','the folder the session ran in stands in when it wrote nowhere');
+  assert.equal(label(null,null),'Untitled session');
+  assert.equal(sessionLabel({}, null),null);
+  assert.equal(sessionLabel({title:'Own title',origin:'headless',task:'review'}),'Own title');
+  assert.equal(sessionLabel({titleHash:'3f2a9c0d1e2b',origin:'headless'}),'Session 3f2a');
+});
+
+test('a review, search or research that wrote nothing is Read-only, not No change, and is left out of the wasted share',()=>{
+  const none={estimated:true,commits:0,onMain:0,merges:0,prsOpen:null,repos:[]};
+  assert.deepEqual(shippedPill(none,'review'),{tone:'none',text:'Read-only',changes:null});
+  assert.equal(shippedPill(none,'search').text,'Read-only');
+  assert.equal(shippedPill(none,'research').text,'Read-only');
+  assert.equal(shippedPill(none,'build').text,'No change');
+  assert.equal(shippedPill(none,null).text,'No change');
+  assert.equal(shippedPill({...none,repos:['ferns']},'review').text,'No change','a review that wrote somewhere did change something');
+  assert.equal(shippedPill({...none,commits:2},'review').text,'2 commits');
+  assert.equal(shippedPill({...none,commits:null},'review').text,'Unknown');
+  const make=task=>feed(summary=>{
+    const period=summary.week.ledger[0].tools[0].periods[0];
+    period.sessions=[{...period.sessions[0],task,apiUsd:50,shipped:none},{...period.sessions[1],task:null,apiUsd:50,shipped:{...none,commits:3}}];
+    period.apiUsd=100;period.other=null;
+    summary.week.ledger[0].tools.splice(1);
+    summary.week.ledger.splice(1);
+    return summary;
+  });
+  const spent=view=>view.shipped.figures.find(figure=>figure.label==='Spent on no change').value;
+  assert.equal(spent(weekView(make('build'),{now})),'50%');
+  const readOnly=weekView(make('review'),{now});
+  assert.equal(spent(readOnly),'0%');
+  assert.equal(readOnly.table.rows[0].shipped.text,'Read-only');
 });

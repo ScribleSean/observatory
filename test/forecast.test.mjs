@@ -100,7 +100,7 @@ test('a window that has room in every past week says so with high confidence', (
 test('the range is worded by how sure it is', () => {
   const claude = { engine: 'claude', name: 'Claude', status: 'runs-out', remaining: 30, at: '2026-11-13T21:00:00Z', resetsAt: '2026-11-13T22:00:00Z', confidence: 'high' };
   assert.equal(sentence([{ ...claude, earliestAt: '2026-11-13T20:00:00Z', latestAt: '2026-11-13T21:40:00Z' }], context), 'Claude may run out Fri 3–5 PM.');
-  assert.equal(sentence([{ ...claude, earliestAt: '2026-11-13T02:00:00Z', latestAt: '2026-11-13T13:00:00Z' }], context), 'Claude may run out 9 PM to Fri 8 AM.');
+  assert.equal(sentence([{ ...claude, earliestAt: '2026-11-13T02:00:00Z', latestAt: '2026-11-13T13:00:00Z' }], context), 'Claude may run out Thu 9 PM to Fri 8 AM.');
   assert.equal(sentence([{ ...claude, earliestAt: '2026-11-13T20:00:00Z', latestAt: null }], context), 'Claude may run out from Fri 3 PM.');
   assert.equal(sentence([{ ...claude, status: 'room', remaining: 17, at: null, earliestAt: '2026-11-13T20:00:00Z', latestAt: null }], context), 'Claude likely lasts until Fri 5 PM.');
   assert.equal(sentence([{ ...claude, status: 'room', remaining: 17, at: null, earliestAt: null, latestAt: null }], context), 'Claude lasts until Fri 5 PM.');
@@ -111,10 +111,10 @@ test('the range is worded by how sure it is', () => {
 });
 
 test('ranges read as hours in a day, a night across two days, or days', () => {
-  assert.equal(between('2026-11-12T20:00:00Z', '2026-11-12T23:00:00Z', context), '3–6 PM');
-  assert.equal(between('2026-11-12T16:00:00Z', '2026-11-12T19:00:00Z', context), '11 AM–2 PM');
+  assert.equal(between('2026-11-12T20:00:00Z', '2026-11-12T23:00:00Z', context), 'Thu 3–6 PM');
+  assert.equal(between('2026-11-12T16:00:00Z', '2026-11-12T19:00:00Z', context), 'Thu 11 AM–2 PM');
   assert.equal(between('2026-11-13T11:00:00Z', '2026-11-13T14:00:00Z', context), 'Fri 6–9 AM');
-  assert.equal(between('2026-11-12T20:00:00Z', '2026-11-12T20:20:00Z', context), '3 PM');
+  assert.equal(between('2026-11-12T20:00:00Z', '2026-11-12T20:20:00Z', context), 'Thu 3 PM');
   assert.equal(between('2026-11-13T20:00:00Z', '2026-11-15T20:00:00Z', context), 'Fri to Sun');
   assert.equal(between('2026-11-12T20:00:00Z', '2026-11-14T20:00:00Z', context), 'by Sat');
   assert.equal(between('2026-11-17T20:00:00Z', '2026-11-20T20:00:00Z', context), 'Nov 17 to Nov 20');
@@ -209,7 +209,7 @@ test('the sentence names the scarcer engine first', () => {
   const codex = { engine: 'codex', name: 'Codex', status: 'room', remaining: 80, at: null };
   assert.equal(sentence([codex, claude], context), 'Claude runs out Fri 4 PM at this pace. Codex has room.');
   assert.equal(sentence([{ ...claude, status: 'room' }, codex], context), 'Claude and Codex have room.');
-  assert.equal(sentence([{ ...claude, status: 'out', at: '2026-11-12T20:00:00Z' }, codex], context), 'Claude is out until 3 PM. Codex has room.');
+  assert.equal(sentence([{ ...claude, status: 'out', at: '2026-11-12T20:00:00Z' }, codex], context), 'Claude is out until Thu 3 PM. Codex has room.');
 });
 
 test('a tight window that lasts says when it resets', () => {
@@ -218,7 +218,7 @@ test('a tight window that lasts says when it resets', () => {
 });
 
 test('times read as a weekday and hour, rounded to a quarter hour', () => {
-  assert.equal(when('2026-11-12T20:10:00Z', context), '3:15 PM');
+  assert.equal(when('2026-11-12T20:10:00Z', context), 'Thu 3:15 PM', 'a time today still names its day');
   assert.equal(when('2026-11-14T13:00:00Z', context), 'Sat 8 AM');
   assert.equal(when('2026-12-03T13:00:00Z', context), 'Dec 3');
 });
@@ -329,7 +329,7 @@ test('Grok with a limit shows the share left, today\'s requests and when it was 
   const grok = forecast({ ...codexView({}), grokLimits: grokSource() }, [...codexRows, grokRow], context).engines.find(engine => engine.engine === 'grok');
   assert.equal(grok.status, 'room');
   assert.equal(grok.remaining, 70);
-  assert.equal(grok.detail, '3 requests today · as of 8 AM');
+  assert.equal(grok.detail, '3 requests today · as of Thu 8 AM');
 });
 
 test('Grok without limit data shows its requests and no percent', () => {
@@ -338,7 +338,7 @@ test('Grok without limit data shows its requests and no percent', () => {
   assert.equal(grok.status, 'usage');
   assert.equal(grok.figure, '3');
   assert.equal(grok.remaining, null);
-  assert.equal(grok.phrase, 'requests today');
+  assert.equal(grok.phrase, 'has 3 requests today');
   assert.equal(result.menu, 'Codex 78%', 'a request count never fills the menu bar');
 });
 
@@ -377,7 +377,7 @@ test('a tight window of known length says when it runs out at its average pace',
   // 90 points in the three days since the weekly window opened.
   const row = { ...grokRow, remaining: 10 };
   const grok = forecast({ ...codexView({}), grokLimits: grokSource() }, [...codexRows, row], context).engines.find(engine => engine.engine === 'grok');
-  assert.equal(grok.phrase, 'runs out around 6 PM at this pace');
+  assert.equal(grok.phrase, 'runs out around Thu 6 PM at this pace');
 });
 
 test('a window the provider never named does not hide the ones it did', () => {

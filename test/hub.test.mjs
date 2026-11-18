@@ -57,6 +57,27 @@ test('an unreachable spoke keeps its last copy, marked stale, and is not written
   assert.equal(combined.glance.both.tokens,null);
 }));
 
+test('a spoke turned off in the settings is not reached, keeps its last copy and reads Off everywhere',()=>withFolder(async folder=>{
+  await seed(folder,'usage.json',ownSnapshot('Mac',now));
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
+  await runHub(config,{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now-3600000))),now:()=>now-3600000});
+  let pulls=0;
+  const transport={...fakeTransport(Error('unreachable')),pull:async()=>{pulls++;throw Error('unreachable');}};
+  const off=testConfig(folder,{role:'hub',hub:{spokes:[{...pc,off:true}]}});
+  const combined=await runHub(off,{transport,now:()=>now});
+  assert.equal(pulls,0,'an Off computer is never reached over SSH');
+  assert.deepEqual(combined.hub.spokes,[{name:'PC',host:'Windows',pull:'off',push:'skipped'}]);
+  const device=combined.devices.find(row=>row.host==='Windows');
+  assert.deepEqual([device.state,device.stateLabel,device.error],['off','Off',undefined]);
+  assert.ok(combined.snapshots.Windows,'its last copy still counts toward the week');
+  assert.ok(combined.glance.lines.includes('  PC: Off'));
+  // Turned back on but unreachable: the time of its last reading again, never Off.
+  const back=await runHub(config,{transport:fakeTransport(Error('unreachable')),now:()=>now+60000});
+  const late=back.devices.find(row=>row.host==='Windows');
+  assert.equal(late.state,'late');
+  assert.match(late.stateLabel,/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d\d (AM|PM)$/);
+}));
+
 test('a spoke that never answered is Unknown',()=>withFolder(async folder=>{
   await seed(folder,'usage.json',ownSnapshot('Mac',now));
   const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
@@ -198,6 +219,28 @@ test('a spoke recombines its fresh snapshot with the hub rows it was sent',()=>w
   assert.equal(combined.devices.find(d=>d.host==='Windows').collectedAt,fresh.collectedAt);
   assert.equal(combined.devices.find(d=>d.host==='Mac').collectedAt,ownSnapshot('Mac',now).collectedAt);
   assert.equal(combined.glance.today.length,2);
+}));
+
+test('a spoke shows another computer as Off exactly when the hub last said so, whatever the age of its copy',()=>withFolder(async folder=>{
+  // The other computer's snapshot never changes while it is off, so both copies of it are the same age.
+  const other=ownSnapshot('Mac',now-3*3600000);
+  const copy=(off,generated)=>({...combine([{host:'Mac',snapshot:other,...(off?{off:true}:{error:'unreachable'})},
+    {host:'Windows',snapshot:ownSnapshot('Windows',now-600000)}],{now:generated,generatedBy:'Mac'}),hub:{role:'hub'}});
+  const config=testConfig(folder,{platform:'windows',host:'Windows',device:{name:'PC'}});
+  await seed(folder,'usage.json',ownSnapshot('Windows',now));
+  await seed(folder,'combined.json',copy(false,now-60000));
+  const state=async at=>(await recombine(config,{now:()=>at})).devices.find(device=>device.host==='Mac');
+  assert.equal((await state(now)).state,'late');
+  // The hub's settings turn it off: the next copy it sends says Off, and the spoke follows.
+  await seed(folder,'combined.incoming.json',copy(true,now+60000));
+  const off=await state(now+120000);
+  assert.deepEqual([off.state,off.stateLabel],['off','Off']);
+  assert.equal((await state(now+180000)).state,'off','Off stays while the hub has not said otherwise');
+  // Turned back on but unreachable: the hub says so and the spoke shows the time of its last reading again.
+  await seed(folder,'combined.incoming.json',copy(false,now+240000));
+  const back=await state(now+300000);
+  assert.equal(back.state,'late');
+  assert.match(back.stateLabel,/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d\d (AM|PM)$/);
 }));
 
 test('a spoke on its own shows only itself',()=>withFolder(async folder=>{

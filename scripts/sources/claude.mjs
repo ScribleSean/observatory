@@ -5,7 +5,7 @@ import path from 'node:path';
 import {claudeRequest} from './usage.mjs';
 import {FILE_TOOLS,addWrite,retryState,retryCall,retryResult,retryRuns,shellWrites,repositoryResolver} from './activity.mjs';
 import {workKind} from '../ledger-kinds.mjs';
-import {walkFiles,eachLimited,cleanTitle,parseWithCache} from './common.mjs';
+import {walkFiles,eachLimited,cleanTitle,parseWithCache,notePrompt} from './common.mjs';
 
 const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 // Lines the adapter reads. Attachments, request copies and file history are skipped unparsed.
@@ -14,11 +14,11 @@ const KEEP=['"type":"assistant"','"type":"user"','"type":"custom-title"','"type"
 // from its first and last 64 KB without parsing it.
 const RESULT_IDS=/"tool_use_id":"([^"]{1,128})"/g;
 
-export const STATE_VERSION=1;
+export const STATE_VERSION=2;
 
 function newState(agent) {
   return {agent,title:null,first:null,last:null,req:{},stop:null,lastRole:null,cwd:null,
-    ...retryState(),writes:{},branches:[],rl:[],typed:[]};
+    ...retryState(),writes:{},branches:[],rl:[],typed:[],origin:null,task:null,prompted:false};
 }
 
 const typedPrompt=event=>{
@@ -38,6 +38,8 @@ export function claudeEvent(state,event,{resolve,home}) {
   state.first=state.first===null?at:Math.min(state.first,at);
   state.last=state.last===null?at:Math.max(state.last,at);
   if(typeof event.cwd==='string')state.cwd=event.cwd;
+  if(state.origin===null && typeof event.entrypoint==='string' && event.entrypoint)
+    state.origin=event.entrypoint.startsWith('sdk')?'headless':'interactive';
   if(event.type==='assistant' && object(event.message)) {
     if(event.error==='rate_limit')state.rl.push(at);
     const request=claudeRequest(event);
@@ -69,6 +71,9 @@ export function claudeEvent(state,event,{resolve,home}) {
     state.lastRole='user';
     const content=event.message.content;
     if(typedPrompt(event))state.typed.push(at);
+    if(event.isMeta!==true && event.isSidechain!==true && state.agent===null && state.prompted!==true)
+      notePrompt(state,typeof content==='string'?content:Array.isArray(content)
+        ?content.filter(block=>object(block) && block.type==='text' && typeof block.text==='string' && !block.text.trimStart().startsWith('<')).map(block=>block.text).join('\n'):null);
     if(Array.isArray(content))for(const block of content)
       if(object(block) && block.type==='tool_result')retryResult(state,block.tool_use_id,block.is_error===true,at);
   }
@@ -146,5 +151,7 @@ function toRecord({id,main,agents},resolve) {
     requests,agents:[...agentRows.values()],writes,branches,runs,unknownTokens:states.some(state=>state.invalid===true),
     rateLimits:main?[...main.rl]:[],typed:main?[...main.typed]:[],
     live:main?{last:main.last,stop:main.stop,lastRole:main.lastRole,pending:Object.keys(main.pend).length}:null,
-    repo:main?.cwd?resolve(main.cwd) ?? main.cwd:null};
+    // repo matches a live process by its folder and stays in memory. gitRepo is set only for a resolved git repository.
+    repo:main?.cwd?resolve(main.cwd) ?? main.cwd:null,gitRepo:main?.cwd?resolve(main.cwd) ?? null:null,
+    origin:main?.origin ?? null,task:main?.task ?? null};
 }

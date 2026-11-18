@@ -31,7 +31,7 @@ Setup writes `observatory.config.json` if there is none, set to read limits, tok
 
 ## Privacy
 
-Observatory reads records your tools already keep on your computer. It keeps totals, limit readings and times. It does not keep prompts, responses, window titles, paths or credentials. For tokens by project it keeps the project folder's name, not its path. Limits are read through the Claude Code and Codex clients you already have, with your existing sign-in. Observatory has no account, no hosted service and no telemetry. The dashboard listens on 127.0.0.1 only and accepts only GET and HEAD requests.
+Observatory reads records your tools already keep on your computer. It keeps totals, limit readings and times. It does not keep prompts, responses, window titles, paths or credentials. For tokens by project it keeps the project folder's name, not its path. For each agent session it keeps its title (or a short hash with titles off), whether it ran interactively or headless, the kind of its first prompt (never the prompt) and the folder name of the git repository it ran in, never a folder that is not a repository. Limits are read through the Claude Code and Codex clients you already have, with your existing sign-in. Observatory has no account, no hosted service and no telemetry. The dashboard listens on 127.0.0.1 only and accepts only GET and HEAD requests.
 
 ## Updating from the earlier app
 

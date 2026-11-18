@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile,access} from 'node:fs/promises';
 import path from 'node:path';
 import {glanceView,GLANCE_SCHEMA} from '../lib/glance-view.mjs';
+import {worded} from '../lib/forecast.mjs';
 import {combine} from '../lib/combine.mjs';
 import {writeGlance} from '../scripts/tick.mjs';
 import {ownSnapshot,withFolder,testConfig} from './helpers.mjs';
@@ -26,6 +27,22 @@ function ledgerRow(host,tool,engine,end,apiUsd,sessions,collectedAt) {
     {key:'current',start:iso(end-7*24*H),end:iso(end),windowKnown:true,apiUsd,sessionCount:sessions.length,sessions,other:null,days:[]}]}]};
 }
 
+// The forecast as the hub stores it (lib/forecast.mjs), worded once in Los Angeles time.
+function stored(status) {
+  const context={now,timeZone};
+  const window=(engine,name,id,remaining,resetsAt,extra={})=>({engine,name,window:id,windowId:id,durationMinutes:id==='weekly'?10080:300,remaining,resetsAt:iso(resetsAt),status:'room',
+    runoutAt:null,earliestAt:null,latestAt:null,ratePerHour:0.4,leftAtReset:20,confidence:'high',...extra});
+  const runs=status==='runs-out'?{status:'runs-out',runoutAt:'2026-11-19T01:00:00Z',earliestAt:'2026-11-18T23:00:00Z',latestAt:'2026-11-19T03:00:00Z'}:{};
+  const windows=[window('claude','Claude Code','5-hour',59,now+2.5*H),window('claude','Claude Code','weekly',36,claudeWeek,runs),
+    window('codex','Codex','5-hour',88,now+2*H),window('codex','Codex','weekly',81,codexWeek)];
+  const engines=[{...windows[1],name:'Claude',at:runs.runoutAt ?? null,measured:true},{...windows[3],name:'Codex',at:null,measured:true}];
+  return {schema:'observatory-forecast/1',asOf:iso(now),timeZone,
+    engines:engines.map(engine=>worded(engine,engine.name,context)),
+    windows:windows.map(row=>worded(row,row.engine==='claude'?'Claude':'Codex',context)),
+    scarce:{engine:'claude',name:'Claude',remaining:36,status,window:'weekly',windowId:'weekly'},
+    sentence:status==='runs-out'?'Claude may run out Wed 3–7 PM. Codex has room.':'Claude and Codex have room.',menu:'Claude 36%'};
+}
+
 // A combined snapshot as scripts/hub.mjs writes it, cut to what the glance reads.
 function fixture({age=0,status='runs-out',ledger=true,forecast=true}={}) {
   const readAt=now-age-2*60000;
@@ -41,13 +58,7 @@ function fixture({age=0,status='runs-out',ledger=true,forecast=true}={}) {
       ledgerRow('Windows','codex','codex',codexWeek,100,[session('b1','Watering plan',true,1.9),session('b2','Daily quiz',true,0.5)],now-age-90000),
     ]:undefined},
     glance:{
-      forecast:forecast?{
-        engines:[
-          {engine:'claude',name:'Claude',status,remaining:36,window:'weekly',phrase:status==='runs-out'?'may run out Wed 3–7 PM':'has room'},
-          {engine:'codex',name:'Codex',status:'room',remaining:81,window:'weekly',phrase:'has room'}],
-        scarce:{engine:'claude',name:'Claude',remaining:36,status},
-        sentence:status==='runs-out'?'Claude may run out Wed 3–7 PM. Codex has room.':'Claude and Codex have room.',
-        menu:'Claude 36%'}:{engines:[],scarce:null,sentence:'Claude has no current reading.',menu:null},
+      forecast:forecast?stored(status):{schema:'observatory-forecast/1',asOf:iso(now-age),timeZone,engines:[],windows:[],scarce:null,sentence:'Claude has no current reading.',menu:null},
       limits:[
         row('claude','Claude Code','5-hour',59,now+2.5*H),
         row('claude','Claude Code','weekly',36,claudeWeek),
@@ -68,8 +79,8 @@ test('the glance leads with the scarcer limit and shows its percent while it run
     used:'64% of the week used',resets:'Resets Thu 8:45 AM',fraction:0.64});
   // Every other window, any engine, without the headline one, a source that is not set up, or a limit the provider lacks.
   assert.deepEqual(view.limits.map(row=>[row.name,row.percent,row.resets,row.tone]),[
-    ['Claude 5-hour','41%','4:15 PM','normal'],
-    ['Codex 5-hour','12%','3:45 PM','normal'],
+    ['Claude 5-hour','41%','Tue 4:15 PM','normal'],
+    ['Codex 5-hour','12%','Tue 3:45 PM','normal'],
     ['Codex weekly','19%','Sun 1:45 PM','normal'],
   ]);
   assert.equal(view.limits[0].fraction,0.41);
@@ -85,10 +96,11 @@ test('running now lists the fastest sessions across computers as a share of each
   assert.deepEqual(running.sessions,[
     {title:'Trip ideas',machine:'Studio Mac',ratePerHour:0.6,rate:'0.6%/h'},
     {title:'Watering plan',machine:'Desk PC',ratePerHour:0.4,rate:'0.4%/h'},
-    {title:'Claude Code session',machine:'Studio Mac',ratePerHour:0.3,rate:'0.3%/h'},
+    {title:'Untitled session',machine:'Studio Mac',ratePerHour:0.3,rate:'0.3%/h'},
   ]);
   const hidden=glanceView(fixture(),{now,timeZone,settings:{titles:false}});
-  assert.deepEqual(hidden.running.sessions.map(row=>row.title),['Claude Code session','Codex session','Claude Code session']);
+  // The same names the Week page gives (lib/ledger-join.mjs sessionLabel).
+  assert.deepEqual(hidden.running.sessions.map(row=>row.title),['Untitled session','Untitled session','Untitled session']);
 });
 
 test('with room before the reset the bar shows the ring alone', () => {
@@ -102,14 +114,17 @@ test('Unknown stays Unknown: no forecast, no pace and no ledger never become zer
   combined.view.ledger[1].tools[0].periods[0].apiUsd=null;
   const view=glanceView(combined,{now,timeZone});
   assert.equal(view.headline.engine,null);
-  assert.equal(view.headline.text,'Claude has no current reading');
+  assert.equal(view.headline.text,'Claude has no current reading.');
   assert.equal(view.headline.used,'Used: Unknown');
   assert.deepEqual(view.bar,{percent:null,ring:null,showPercent:false,text:null});
   assert.equal(view.limits.length,4);
   // One session with an Unknown pace makes the total Unknown, not smaller.
   assert.equal(view.running.ratePerHour,null);
   assert.equal(view.running.summary,'4 sessions');
-  assert.deepEqual(view.running.sessions.map(row=>row.rate),['0.6%/h','0.3%/h','Unknown']);
+  // With no stored window forecast the share of the week is not known, so every pace is Unknown: nothing is worked out again here.
+  assert.deepEqual(view.running.sessions.map(row=>row.rate),['Unknown','Unknown','Unknown']);
+  const known=glanceView(fixture(),{now,timeZone});
+  assert.deepEqual(known.running.sessions.map(row=>row.rate),['0.6%/h','0.4%/h','0.3%/h']);
   const none=glanceView(fixture({ledger:false}),{now,timeZone});
   assert.equal(none.running,null);
   assert.equal(glanceView(fixture(),{now,timeZone}).collecting,false);

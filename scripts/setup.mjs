@@ -326,6 +326,7 @@ async function lingerOff() {
 
 async function checkSpokes(config,{dryRun,step,log}) {
   if(config.role==='hub') for(const spoke of config.hub.spokes) {
+    if(spoke.off) {step(`${spoke.name}: off in the settings, not reached`);continue;}
     if(dryRun) {step(`would check SSH to ${spoke.name} (${spoke.ssh})`);continue;}
     try {await sshTransport().pull(spoke);step(`${spoke.name}: reached over SSH and read its snapshot`);}
     catch(error) {log(`  Note: ${spoke.name} (${spoke.ssh}): ${error.message}. Check that "ssh ${spoke.ssh}" works without a password prompt, and that setup has run there.`);}

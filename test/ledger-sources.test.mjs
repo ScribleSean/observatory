@@ -264,3 +264,71 @@ test('a last line without a newline is read once the file has stopped changing',
     assert.equal(result.offset,8,'a last line that is not whole JSON is never taken');
   });
 });
+
+test('Claude: a headless run without a title keeps its origin and the kind of its first prompt, never the prompt',async()=>{
+  await withFolder(async home=>{
+    const repo=path.join(home,'code','garden');
+    await mkdir(path.join(repo,'.git'),{recursive:true});
+    const user=(at,content,extra={})=>({type:'user',timestamp:iso(at),cwd:repo,entrypoint:'sdk-cli',message:{role:'user',content},...extra});
+    await writeClaude(home,'-code-garden','headless',[
+      user(T,'<command-name>/clear</command-name>'),
+      user(T+1,'You are a helper',{isMeta:true}),
+      user(T+2,[{type:'text',text:'<system-reminder>ignore</system-reminder>'},{type:'text',text:'Review the watering schedule for mistakes'}]),
+      user(T+3,'Plant the new rows'),
+      claudeAssistant({id:'h1',at:T+MIN,cwd:repo}),
+    ]);
+    await writeClaude(home,'-code-garden','desktop',[
+      {...user(T,'Fix the gate'),entrypoint:'claude-desktop'},
+      claudeAssistant({id:'d1',at:T+MIN,cwd:repo}),
+    ]);
+    await writeClaude(home,'-code-garden','unknown',[
+      {type:'user',timestamp:iso(T),cwd:repo,message:{role:'user',content:[{type:'tool_result',tool_use_id:'x',content:'ok'}]}},
+      claudeAssistant({id:'u1',at:T+MIN,cwd:repo}),
+    ]);
+    const sessions=new Map(claudeOf(await read(home)).sessions.map(session=>[session.id,session]));
+    assert.equal(sessions.get('headless').title,null);
+    assert.deepEqual([sessions.get('headless').origin,sessions.get('headless').task],['headless','review']);
+    assert.deepEqual([sessions.get('desktop').origin,sessions.get('desktop').task],['interactive','build']);
+    assert.deepEqual([sessions.get('unknown').origin,sessions.get('unknown').task],[null,null]);
+    assert.ok(!JSON.stringify([...sessions.values()]).includes('watering schedule'),'no prompt text in a record');
+    assert.equal(sessions.get('headless').gitRepo,realpathSync.native(repo),'a git repository is resolved');
+  });
+});
+
+test('Claude: a session in a folder that is not a git repository has no repository',async()=>{
+  await withFolder(async home=>{
+    const folder=path.join(home,'Documents','letters');
+    await mkdir(folder,{recursive:true});
+    await writeClaude(home,'-Documents-letters','plain',[
+      {type:'user',timestamp:iso(T),cwd:folder,message:{role:'user',content:'Sort these'}},
+      claudeAssistant({id:'p1',at:T+MIN,cwd:folder}),
+    ]);
+    const session=claudeOf(await read(home)).sessions.find(item=>item.id==='plain');
+    assert.equal(session.gitRepo,null);
+  });
+});
+
+test('Codex: an exec run is headless and its first prompt is kept only as a kind',async()=>{
+  await withFolder(async home=>{
+    const repo=path.join(home,'code','cube');
+    await mkdir(path.join(repo,'.git'),{recursive:true});
+    const exec='33333333-3333-4333-8333-333333333333',chat='44444444-4444-4444-8444-444444444444';
+    await writeCodex(home,exec,[
+      {type:'session_meta',timestamp:iso(T),payload:{id:exec,cwd:repo,source:'exec',originator:'codex_exec'}},
+      {type:'response_item',timestamp:iso(T),payload:{type:'message',role:'user',content:[{type:'input_text',text:'# AGENTS.md instructions for cube'}]}},
+      {type:'event_msg',timestamp:iso(T),payload:{type:'item_completed',item:{type:'UserMessage',content:[{type:'text',text:'# AGENTS.md instructions for cube'}]}}},
+      {type:'event_msg',timestamp:iso(T),payload:{type:'item_completed',item:{type:'UserMessage',content:[{type:'text',text:'Review the scoring module for bugs'}]}}},
+      {type:'turn_context',timestamp:iso(T),payload:{model:'gpt-6-sol',cwd:repo}},
+      codexToken(T+MIN,[1000,800,50],[1000,800,50]),
+    ]);
+    await writeCodex(home,chat,[
+      {type:'session_meta',timestamp:iso(T),payload:{id:chat,cwd:repo,source:'cli',originator:'codex_cli_rs'}},
+      {type:'event_msg',timestamp:iso(T),payload:{type:'user_message',message:'Fix the timer'}},
+      codexToken(T+MIN,[500,100,20],[500,100,20]),
+    ]);
+    const sessions=new Map(codexOf(await read(home)).sessions.map(session=>[session.id,session]));
+    assert.deepEqual([sessions.get(exec).origin,sessions.get(exec).task],['headless','review']);
+    assert.deepEqual([sessions.get(chat).origin,sessions.get(chat).task],['interactive','build']);
+    assert.ok(!JSON.stringify([...sessions.values()]).includes('scoring module'));
+  });
+});

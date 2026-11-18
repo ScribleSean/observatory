@@ -2,12 +2,14 @@
 // the limit readings and the live process list. Nothing here keeps a path, command or prompt: sessions
 // leave as a hashed id, the tool's title, counts, model ids and repository folder names.
 import {createHash} from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import {rates} from './api-estimate.mjs';
 import {LEDGER_TOP} from '../lib/ledger-shape.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 import {dayKey} from './read-projects.mjs';
 import {joinCommits} from './ledger-commits.mjs';
+import {isWorkKind} from './ledger-kinds.mjs';
 import {TOOL_CATEGORIES} from './sources/activity.mjs';
 
 export const WEEK_MS=7*24*3600000;
@@ -87,6 +89,14 @@ function liveMatches(source,sessions,live) {
   return matched;
 }
 
+// The folder name of the git repository a session ran in, or null. Never a path, never the home folder, and never
+// a working folder that is not a repository: only a name the resolver found a repository for leaves this computer.
+function repoName(dir) {
+  if(typeof dir!=='string' || !path.isAbsolute(dir) || path.resolve(dir)===path.resolve(os.homedir()))return null;
+  const name=path.basename(dir);
+  return name && name!=='.' && name!=='..' && name.length<=64?name:null;
+}
+
 function sessionRow(source,session,requests,period,ctx) {
   const inPeriod=requests.filter(request=>request.at>=period.start && request.at<period.end);
   if(!inPeriod.length)return null;
@@ -156,7 +166,8 @@ function sessionRow(source,session,requests,period,ctx) {
     state=ctx.now-lastAt>IDLE_MS?'idle':ended && !agentBusy?'waiting':'working';
   }
   const recent=requests.filter(request=>request.at>=ctx.now-RATE_MS && request.at<=ctx.now);
-  return {id:ledgerId(source.id,session.id),title:session.title ?? null,startedAt:iso(inPeriod[0].at),lastActiveAt:iso(inPeriod.at(-1).at),
+  return {id:ledgerId(source.id,session.id),title:session.title ?? null,
+    origin:session.origin==='headless' || session.origin==='interactive'?session.origin:null,task:isWorkKind(session.task)?session.task:null,repo:repoName(session.gitRepo),startedAt:iso(inPeriod[0].at),lastActiveAt:iso(inPeriod.at(-1).at),
     running,state,ratePerHour:running && !session.unknownTokens?round(knownSum(recent.map(request=>request.usd))*3600000/RATE_MS):null,
     tokens,apiUsd,
     models:[...models.values()].map(model=>({model:model.model,apiUsd:session.unknownTokens?null:round(knownSum(model.usd)),outputTokens:model.outputTokens}))
