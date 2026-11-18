@@ -11,6 +11,7 @@ async function serve(folder,action) {
   const files={
     'dist/index.html':'<html>dashboard</html>',
     'dist/assets/app.js':'// app',
+    'dist/assets/font.woff2':'wOF2',
     'dist/assets/data.json':'{"no":true}',
     'data/public/local/combined.json':'{"schema":"observatory-combined/1"}',
     'data/public/local/usage.json':'{"private":true}',
@@ -36,6 +37,8 @@ async function serve(folder,action) {
 test('the dashboard page, its assets and combined.json are served',()=>withFolder(folder=>serve(folder,async request=>{
   assert.equal((await request('/')).body,'<html>dashboard</html>');
   assert.equal((await request('/assets/app.js')).status,200);
+  const font=await request('/assets/font.woff2');
+  assert.deepEqual([font.status,font.headers['content-type']],[200,'font/woff2'],'the bundled fonts are served from the same origin');
   const combined=await request('/local/combined.json');
   assert.equal(combined.status,200);
   assert.equal(JSON.parse(combined.body).schema,'observatory-combined/1');

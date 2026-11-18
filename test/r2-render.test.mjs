@@ -151,7 +151,7 @@ test('before a snapshot arrives the shell shows loading, then says when there is
 test('the dashboard entry is the round 2 app, and its copy has no em dash or semicolon',()=>{
   assert.equal(typeof R2App,'function');
   const entry=readFileSync(new URL('../app/web/dashboard.tsx',import.meta.url),'utf8');
-  assert.deepEqual([...entry.matchAll(/^import .*?['"]([^'"]+)['"]/gm)].map(match=>match[1]),['react-dom/client','../viewer/r2/App'],'the entry loads the round 2 app and no other stylesheet');
+  assert.deepEqual([...entry.matchAll(/^import .*?['"]([^'"]+)['"]/gm)].map(match=>match[1]),['../../lib/zod-config.mjs','react-dom/client','../viewer/r2/App'],'the entry sets zod first, then loads the round 2 app and no other stylesheet');
   for(const props of [{},{initialHash:'#sessions'},{initialPin:'spend-today'},{initialSearch:'?unit=month'}]) {
     const words=text(render(props)).replace(/&[a-z#0-9]+;/gi,' ');
     assert.ok(!/[—;]/.test(words),words.match(/.{0,40}[—;].{0,40}/)?.[0]);

@@ -15,6 +15,7 @@ const types={
   '.json':'application/json',
   '.svg':'image/svg+xml',
   '.ttf':'font/ttf',
+  '.woff2':'font/woff2',
 };
 const here=path.dirname(fileURLToPath(import.meta.url));
 
