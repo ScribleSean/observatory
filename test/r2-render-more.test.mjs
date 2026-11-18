@@ -173,6 +173,7 @@ test('Drift compares every computer against the hub and calls a platform differe
   assert.equal(row('Codex sessions').state, 'differs');
   assert.equal(row('Session titles').values.Linux, 'hashed away');
   assert.equal(row('Most used model').values.Mac, 'Unknown', 'no settings read is Unknown');
+  assert.equal(row('Most used model').state, 'unknown', 'a setting no computer reported is Unknown, not Same');
   const markup = clean(html(createElement(DriftBody, { vm: { frame: frame(), models: [], setup: [] }, rows, reference: 'Mac', now: NOW })), 'Drift');
   assert.ok(markup.includes('Studio is the reference') && markup.includes('Differs by design') && markup.includes('Differs'));
   assert.ok(markup.includes('Tower values are from the'), 'a stale computer is named in the footer');

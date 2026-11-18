@@ -75,7 +75,7 @@ function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; read
       {ticks.map(tick => <span key={tick.date} className={`x${tick.date === today ? ' now' : ''}`} style={{ left: `${100 * tick.left}%` }}>{weekday(tick.date)}</span>)}
       <i className="pt" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%` }} />
       <span className="tagl" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%`, transform: nowX > 150 ? 'translate(-100%,-150%)' : 'translate(8px,-150%)' }}><b>{pct(last.used)}</b> <span className="fa">now</span></span>
-      {state.projected !== null && <span className="tagl" style={{ right: 0, top: `${y(state.projected)}%`, transform: 'translateY(40%)' }}><b className="mu">{pct(state.projected)}</b> <span className="fa">at the reset</span></span>}
+      {state.projected !== null && <span className="tagl" style={{ right: 0, top: `${y(state.projected)}%`, transform: 'translateY(90%)' }}><b className="mu">{pct(state.projected)}</b> <span className="fa">at the reset</span></span>}
     </div>
   );
 }

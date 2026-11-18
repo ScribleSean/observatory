@@ -11,7 +11,7 @@ import './more.css';
 
 type Profile = { date: string; model: string; effort: string; speed: string; totalTokens?: number };
 export type SettingsRow = { host: string; status: string; profiles?: Profile[] };
-export type SetupRow = { setting: string; values: Record<string, string>; state: 'same' | 'differs' | 'design' };
+export type SetupRow = { setting: string; values: Record<string, string>; state: 'same' | 'differs' | 'design' | 'unknown' };
 export type DriftData = { vm: DriftVM; rows: SetupRow[]; reference: string | null; now: number };
 
 const SOURCE_LABELS: [string, string][] = [['claudeCode', 'Claude Code sessions'], ['claudeLimits', 'Claude Code limits'], ['codex', 'Codex sessions'], ['codexLimits', 'Codex limits'],
@@ -39,8 +39,8 @@ export function setupRows(config: ConfigEcho[], settings: SettingsRow[], hosts: 
   const reference = config.find(row => row.role === 'hub')?.host ?? hosts[0];
   const row = (setting: string, value: (host: string) => string | null, design?: (host: string) => boolean): SetupRow => {
     const values = Object.fromEntries(hosts.map(host => [host, value(host) ?? UNKNOWN]));
-    const differing = hosts.filter(host => values[host] !== values[reference]);
-    const state = differing.length === 0 ? 'same' : design && differing.every(host => design(host) || (reference && design(reference))) ? 'design' : 'differs';
+    const differing = hosts.filter(host => values[host] !== UNKNOWN && values[reference] !== UNKNOWN && values[host] !== values[reference]);
+    const state = hosts.every(host => values[host] === UNKNOWN) ? 'unknown' : differing.length === 0 ? 'same' : design && differing.every(host => design(host) || (reference && design(reference))) ? 'design' : 'differs';
     return { setting, values, state };
   };
   const onOff = (value: boolean | undefined) => value === undefined ? null : value ? 'on' : 'off';
@@ -82,7 +82,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
                 const value = row.values[device.host];
                 return <td key={device.host} className={value === UNKNOWN ? 'fa' : row.state === 'differs' && device.host !== reference && value !== row.values[reference ?? ''] ? 'acc' : undefined}>{value}</td>;
               })}
-              <td>{row.state === 'differs' ? <><span className="flagdot" style={{ marginRight: 6 }} /><span className="acc">Differs</span></> : <span className="fa">{row.state === 'design' ? 'Differs by design' : 'Same'}</span>}</td></tr>
+              <td>{row.state === 'differs' ? <><span className="flagdot" style={{ marginRight: 6 }} /><span className="acc">Differs</span></> : <span className="fa">{row.state === 'design' ? 'Differs by design' : row.state === 'unknown' ? UNKNOWN : 'Same'}</span>}</td></tr>
           ))}</tbody>
         </table></div>
       </Block>

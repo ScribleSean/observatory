@@ -181,7 +181,7 @@ export function Columns({ columns, format, hint }: { columns: Column[]; format: 
         {columns.map((column, index) => (
           <div key={column.key} className={`col${column.future ? ' empty' : ''}`} title={column.future ? undefined : `${column.full}: ${format(column.value)}`}>
             <em className={index === peak ? 'peak' : undefined}>{column.value && (index === peak || columns.length <= 12) ? format(column.value) : ''}</em>
-            {column.value === null && !column.future ? <i className="unk" style={{ height: '100%' }} /> : <i className="grey" style={{ height: `${top ? 100 * (column.value ?? 0) / top : 0}%` }} />}
+            {column.value === null && !column.future ? <i className="unk" style={{ height: '14%' }} title="Unknown" /> : <i className="grey" style={{ height: `${top ? 100 * (column.value ?? 0) / top : 0}%` }} />}
           </div>
         ))}
       </div>
