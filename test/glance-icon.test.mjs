@@ -72,6 +72,16 @@ test('both apps read the icon state from glance.json and decide nothing about pa
   // The only rule they add: once glance.json is older than a snapshot may be, the stored stale form shows.
   assert.match(swift, /if old, let stale = iconStale \{ return \(\.stale, stale\.fraction, stale\.text, stale\.tip\) \}/);
   assert.match(cs, /Old && StaleText != null \? "stale" : IconState/);
+  // Without an icon in glance.json nothing is known: the stale shape and Unknown, never Off.
+  assert.match(swift, /var icon\s*=\s*Mark\.State\.stale\s+var iconFraction: Double\?\s+var iconText\s*=\s*"Unknown"\s+var iconTip\s*=\s*"Unknown"/);
+  assert.match(cs, /public string IconState\s*=\s*"stale",\s*IconText\s*=\s*"Unknown",\s*IconTip\s*=\s*"Unknown"/);
+  // A missing snapshot time, or one well ahead of the clock, counts as old.
+  assert.match(swift, /guard let updated else \{ return true \}[\s\S]{0,120}age > Self\.deviceFresh \|\| age < -Self\.futureSlack/);
+  assert.match(cs, /if \(!Updated\.HasValue\) return true;[\s\S]{0,140}age > DeviceFreshMinutes \|\| age < -FutureSlackMinutes/);
+  assert.equal(Number(swift.match(/static let futureSlack: TimeInterval = (\d+) \* 60/)?.[1]), Number(cs.match(/FutureSlackMinutes = (\d+);/)?.[1]));
+  // No arc at all at 0%: the minimum arc is for a small share, not for none.
+  assert.match(swift, /if let fraction, fraction > 0 \{/);
+  assert.match(cs, /if \(fraction\.HasValue && fraction\.Value > 0\)/);
   // No pace, percent or wording of their own for the icon.
   const block = (text, start, end) => { const from = text.indexOf(start), to = text.indexOf(end, from); assert.ok(from >= 0 && to > from, start); return text.slice(from, to); };
   for (const [file, text] of [['Glance.swift', block(swift, 'enum Mark {', 'final class FloatingPanel')], ['Glance.cs', block(cs, 'static class Mark', 'static class Painter')]])

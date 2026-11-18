@@ -69,8 +69,9 @@ namespace Observatory
         public List<LimitRow> Limits = new List<LimitRow>();
         public List<SessionRow> Sessions = new List<SessionRow>();
         public FlagRow Flag;
-        // The tray icon, as lib/glance-view.mjs decided it (glance.json "icon"). Off until a glance.json says otherwise.
-        public string IconState = "off", IconText = "Off", IconTip = "Off", StaleText, StaleTip;
+        // The tray icon, as lib/glance-view.mjs decided it (glance.json "icon"). Without one (no glance.json, an older
+        // one, or the combined.json fallback) nothing is known: the stale shape and Unknown, never Off.
+        public string IconState = "stale", IconText = "Unknown", IconTip = "Unknown", StaleText, StaleTip;
         public double? IconFraction, StaleFraction;
         // Read only from combined.json, the fallback.
         public string Sentence, Menu;
@@ -79,7 +80,18 @@ namespace Observatory
         public bool Refreshing;
         public DateTime Now = DateTime.UtcNow;
 
-        public bool Old { get { return Updated.HasValue && (Now - Updated.Value).TotalMinutes > DeviceFreshMinutes; } }
+        // A snapshot time ahead of the clock by more than this is not trusted to be current.
+        public const double FutureSlackMinutes = 5;
+        // Older than a snapshot may be, with no time, or with a time well ahead of the clock.
+        public bool Old
+        {
+            get
+            {
+                if (!Updated.HasValue) return true;
+                double age = (Now - Updated.Value).TotalMinutes;
+                return age > DeviceFreshMinutes || age < -FutureSlackMinutes;
+            }
+        }
         public bool Empty { get { return Headline == null && Limits.Count == 0; } }
 
         // The icon to draw now: as stored, or its stored stale form once glance.json is older than a snapshot may be.
@@ -196,7 +208,7 @@ namespace Observatory
             {
                 state.IconState = shape;
                 state.IconFraction = Share(Get(icon, "fraction"));
-                state.IconText = Get(icon, "text") as string ?? "Off";
+                state.IconText = Get(icon, "text") as string ?? "Unknown";
                 state.IconTip = Get(icon, "tip") as string ?? state.IconText;
                 var stale = Get(icon, "stale") as Dictionary<string, object>;
                 state.StaleText = Get(stale, "text") as string;
@@ -353,7 +365,7 @@ namespace Observatory
             using (var track = new Pen(Alpha(ink, TrackAlpha), w)) g.DrawEllipse(track, ring);
             if (state == "off") return;
             Color tint = state == "stale" ? Alpha(ink, StaleAlpha) : accent;
-            if (fraction.HasValue)
+            if (fraction.HasValue && fraction.Value > 0)
             {
                 double share = Math.Min(1, Math.Max(MinArc, fraction.Value));
                 using (var arc = new Pen(tint, w))

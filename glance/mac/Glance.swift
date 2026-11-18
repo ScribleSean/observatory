@@ -69,11 +69,12 @@ struct PanelState: Equatable {
   var sessions: [SessionRow] = []
   var flag: FlagRow?
   var updatedText: String?
-  // The menu bar icon, as lib/glance-view.mjs decided it (glance.json "icon"). Off until a glance.json says otherwise.
-  var icon = Mark.State.off
+  // The menu bar icon, as lib/glance-view.mjs decided it (glance.json "icon"). Without one (no glance.json, an older
+  // one, or the combined.json fallback) nothing is known: the stale shape and Unknown, never Off.
+  var icon = Mark.State.stale
   var iconFraction: Double?
-  var iconText = "Off"
-  var iconTip = "Off"
+  var iconText = "Unknown"
+  var iconTip = "Unknown"
   var iconStale: StaleIcon?
   var accent = false
   // Read only from combined.json, the fallback.
@@ -90,7 +91,15 @@ struct PanelState: Equatable {
   static let readingFresh: TimeInterval = 10 * 60
   static let deviceFresh: TimeInterval = 15 * 60
 
-  var old: Bool { updated.map { now.timeIntervalSince($0) > Self.deviceFresh } ?? false }
+  // A snapshot time ahead of the clock by more than this is not trusted to be current.
+  static let futureSlack: TimeInterval = 5 * 60
+
+  // Older than a snapshot may be, with no time, or with a time well ahead of the clock.
+  var old: Bool {
+    guard let updated else { return true }
+    let age = now.timeIntervalSince(updated)
+    return age > Self.deviceFresh || age < -Self.futureSlack
+  }
 
   // The icon to draw now: as stored, or its stored stale form once glance.json is older than a snapshot may be.
   var shownIcon: (state: Mark.State, fraction: Double?, text: String, tip: String) {
@@ -158,7 +167,7 @@ struct PanelState: Equatable {
     if let icon = json["icon"] as? [String: Any], let shape = Mark.State(rawValue: icon["state"] as? String ?? "") {
       state.icon = shape
       state.iconFraction = share(icon["fraction"])
-      state.iconText = icon["text"] as? String ?? "Off"
+      state.iconText = icon["text"] as? String ?? "Unknown"
       state.iconTip = icon["tip"] as? String ?? state.iconText
       if let stale = icon["stale"] as? [String: Any], let text = stale["text"] as? String {
         state.iconStale = StaleIcon(fraction: share(stale["fraction"]), text: text, tip: stale["tip"] as? String ?? text)
@@ -476,7 +485,7 @@ enum Mark {
     track.stroke()
     if state == .off { return }
     let tint = state == .stale ? ink.withAlphaComponent(staleAlpha) : mark
-    if let fraction {
+    if let fraction, fraction > 0 {
       let share = CGFloat(min(1, max(minArc, fraction)))
       let arc = share >= 1 ? circle(g.c, g.r) : NSBezierPath()
       if share < 1 {
