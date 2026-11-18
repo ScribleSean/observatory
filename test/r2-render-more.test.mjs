@@ -120,6 +120,16 @@ test('Limits shows the weekly limit once, with the computer it was read on, and 
   assert.ok(Math.abs(known.reduce((sum, device) => sum + device.points, 0) - 60) < 1e-6 || byDevice.some(device => device.points === null), 'points add up to the percent used');
 });
 
+test('a computer turned off is left out of the points by device, and one whose history was not read is Unknown, never 0', () => {
+  const vm = limitsVM({ remaining: 40, resetsAt: new Date(weekReset).toISOString(), readOn: 'Studio', checkedAt: new Date(NOW).toISOString(), state: 'ok' });
+  const window = vm.engines[0].windows[0];
+  const off = devicePoints(view, window, NOW, TZ, ['Windows']);
+  assert.deepEqual(off.map(device => device.host), ['Mac', 'Linux']);
+  assert.ok(off.every(device => device.points !== null && device.points > 0));
+  const unread = { ...view, ledgerHistory: view.ledgerHistory.map(row => row.host === 'Linux' ? { ...row, status: 'unavailable', days: [] } : row) };
+  assert.ok(devicePoints(unread, window, NOW, TZ).every(device => device.points === null), 'one unread computer makes every share Unknown');
+});
+
 const tokensVM = (unit, selected, overrides = {}) => {
   const f = frame(unit, selected);
   return { frame: f,

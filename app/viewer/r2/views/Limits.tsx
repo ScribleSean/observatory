@@ -193,15 +193,16 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
 }
 
 /** Spend per computer since the window opened, as points of the weekly limit. Unknown for a computer with an unread day. */
-export function devicePoints(view: { ledgerHistory?: { host: string; days: { date: string; status: string; apiUsd: number | null }[] }[]; deviceNames?: Record<string, string> },
-  window: LimitWindowVM | undefined, now: number, timeZone: string): DevicePoints[] {
+export function devicePoints(view: { ledgerHistory?: { host: string; status?: string; days: { date: string; status: string; apiUsd: number | null }[] }[]; deviceNames?: Record<string, string> },
+  window: LimitWindowVM | undefined, now: number, timeZone: string, off: string[] = []): DevicePoints[] {
   if (!window) return [];
   const state = windowNow(window, now);
   if (state.used === null || state.reset === null || state.length === null) return [];
   const first = dateIn(state.reset - state.length, timeZone), last = dateIn(now, timeZone);
-  const rows = (view.ledgerHistory ?? []).map(row => {
+  // A computer turned off adds nothing and is not listed. One whose history could not be read is Unknown, never 0.
+  const rows = (view.ledgerHistory ?? []).filter(row => !off.includes(row.host) && row.status !== 'not-connected').map(row => {
     const days = row.days.filter(day => day.date >= first && day.date <= last);
-    const unknown = days.some(day => day.status !== 'ok' || day.apiUsd === null);
+    const unknown = (row.status !== undefined && row.status !== 'ok') || days.some(day => day.status !== 'ok' || day.apiUsd === null);
     // zero-ok: summed only when every day is known, else usd is null
     return { host: row.host, name: view.deviceNames?.[row.host] ?? row.host, usd: unknown ? null : days.reduce((sum, day) => sum + (day.apiUsd ?? 0), 0) };
   });
@@ -217,10 +218,10 @@ export function weeklyReadings(view: object, now: number): Reading[] {
   return (series.series[0]?.points ?? []).map((point: { t: number; r: number }) => ({ at: point.t, used: 100 - point.r }));
 }
 
-export function Limits({ snapshot, scope, now }: { snapshot: { view: Record<string, unknown> & { timezone?: string } }; scope: Scope; now: number }) {
+export function Limits({ snapshot, scope, now }: { snapshot: { view: Record<string, unknown> & { timezone?: string }; devices?: { host: string; state?: string }[] }; scope: Scope; now: number }) {
   const vm = buildLimits(snapshot, scope, { now });
   const timeZone = (vm.frame as Frame).timeZone;
   const grok = vm.engines.some(engine => engine.engine === 'grok') ? resolveBlock('GrokRequests', { scope: { range: { unit: 'month' } } }, snapshot, scope, { now }) as GrokRequestsVM | null : null;
   const weekly = weeklyOf(vm.engines.find(engine => engine.engine === 'claude'));
-  return <LimitsBody vm={vm} grok={grok} readings={weeklyReadings(snapshot.view, now)} byDevice={devicePoints(snapshot.view as never, weekly, now, timeZone)} now={now} timeZone={timeZone} />;
+  return <LimitsBody vm={vm} grok={grok} readings={weeklyReadings(snapshot.view, now)} byDevice={devicePoints(snapshot.view as never, weekly, now, timeZone, (snapshot.devices ?? []).filter(device => device.state === 'off').map(device => device.host))} now={now} timeZone={timeZone} />;
 }

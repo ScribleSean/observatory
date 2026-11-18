@@ -45,9 +45,10 @@ export function Headline({ element }: ComponentRenderProps<Props>) {
   const num = metric(snapshot, id, patchScope(scope, element.props.scope), { now });
   const { main, unit } = figure(num);
   // An Unknown sum still says what was read: "at least $642, 1 day not read on Tower". In a strip, a comparison with no
-  // earlier number is said once under the strip (Section.tsx), not repeated in every cell.
+  // earlier number is said once under the strip (Section.tsx), not repeated in every cell, and the cell stays quiet as
+  // it does beside a comparison.
   const sharedCompare = inStrip && num.previous === null && num.deltaText !== null;
-  const context = num.atLeast ? num.atLeast.text : id === 'noCommitSpend' ? num.note : compare ? (sharedCompare ? null : num.deltaText) ?? num.note : num.note;
+  const context = num.atLeast ? num.atLeast.text : id === 'noCommitSpend' ? num.note : compare ? (sharedCompare ? null : num.deltaText ?? num.note) : num.note;
   const open = openMetric === id;
   const cell = (
     <button type="button" className={open ? 'kpi on' : 'kpi'} aria-expanded={open} title={`${METRIC_LABELS[id]}. Open the breakdown.`} onClick={() => toggleMetric(id)}>

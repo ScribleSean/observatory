@@ -326,3 +326,14 @@ test('a session titled by a user alias from the settings echo shows its role and
   assert.ok(row, 'the session is listed');
   assert.deepEqual([row.name.role, row.name.display], ['Chief of staff', '[Chief of staff] Atlas']);
 });
+
+test('a computer turned off adds nothing, even when its history has a day it could not read, and is not flagged as stale', () => {
+  // The fixture's Tower could not read one day. Turned off in the hub's settings, it leaves every sum and flag.
+  const off = { ...snapshot, devices: snapshot.devices.map(device => device.host === 'Windows' ? { ...device, state: 'off', stateLabel: 'Off' } : device) };
+  const scope = at('week', windowsUnavailable, { devices: ['Mac', 'Windows', 'Linux'] });
+  assert.equal(v.metric(snapshot, 'spend', scope, { now: NOW }).value, null, 'the check bites: with Tower on, the week is Unknown');
+  const spend = v.metric(off, 'spend', scope, { now: NOW });
+  close(spend.value, ledgerSum(['Mac', 'Linux'], v.buildFrame(off, scope, { now: NOW }).period.dates, day => day.apiUsd));
+  assert.deepEqual(spend.breakdowns.device.map(part => part.key).sort(), ['Linux', 'Mac']);
+  assert.ok(!v.buildOverview(off, scope, { now: NOW }).flags.some(line => line.text.includes('Tower')));
+});
