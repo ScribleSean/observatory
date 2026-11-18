@@ -68,7 +68,7 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
             value={<span className={device.state === 'live' ? 'mu' : 'fa'}>{stateWord(device)}</span>} />;
         })}
       </Block>
-      <Block span={8} title="Session names" sub="the role is a prefix, then what the session touches"
+      <Block span={8} title="Session names" sub="the role is a tag, then what the title says"
         foot={<>{vm.roleAliases.length
           ? <>Your sessions.roles map: {vm.roleAliases.map(alias => `titles starting "${alias.prefix}" read as ${alias.role}`).join(', ')}. </>
           : null}A session with no role in its title gets one from how it ran, then from the kind of work it did most.</>}>

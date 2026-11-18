@@ -189,6 +189,12 @@ test('Drift compares every computer against the hub and calls a platform differe
   const markup = clean(html(createElement(DriftBody, { vm: { frame: frame(), models: [], setup: [] }, rows, reference: 'Mac', now: NOW })), 'Drift');
   assert.ok(markup.includes('Studio is the reference') && markup.includes('Differs by design') && markup.includes('Differs'));
   assert.ok(markup.includes('Tower values are from the'), 'a stale computer is named in the footer');
+  // One computer read: its settings were compared with nothing, so no row says Same and the count is Unknown.
+  const alone = setupRows(view.config.filter(item => item.host === 'Mac'), [], ['Mac', 'Windows', 'Linux']);
+  assert.ok(alone.every(item => item.state === 'alone' || item.state === 'unknown'));
+  const lonely = clean(html(createElement(DriftBody, { vm: { frame: frame(), models: [], setup: [] }, rows: alone, reference: 'Mac', now: NOW })), 'Drift alone');
+  assert.ok(lonely.includes('Not compared') && lonely.includes('only Studio has been read'));
+  assert.ok(!lonely.includes('every computer matches') && !lonely.includes('>Same<') && !lonely.includes('the Unknown read'));
 });
 
 test('day, month, year and all time bucket into hours, days, months and weeks with future buckets empty', () => {

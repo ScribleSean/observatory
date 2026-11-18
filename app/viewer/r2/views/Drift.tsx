@@ -11,7 +11,7 @@ import './more.css';
 
 type Profile = { date: string; model: string; effort: string; speed: string; totalTokens?: number };
 export type SettingsRow = { host: string; status: string; profiles?: Profile[] };
-export type SetupRow = { setting: string; values: Record<string, string>; state: 'same' | 'differs' | 'design' | 'unknown' };
+export type SetupRow = { setting: string; values: Record<string, string>; state: 'same' | 'differs' | 'design' | 'alone' | 'unknown' };
 export type DriftData = { vm: DriftVM; rows: SetupRow[]; reference: string | null; now: number };
 
 const SOURCE_LABELS: [string, string][] = [['claudeCode', 'Claude Code sessions'], ['claudeLimits', 'Claude Code limits'], ['codex', 'Codex sessions'], ['codexLimits', 'Codex limits'],
@@ -41,7 +41,9 @@ export function setupRows(config: ConfigEcho[], settings: SettingsRow[], hosts: 
   const row = (setting: string, value: (host: string) => string | null, design?: (host: string) => boolean): SetupRow => {
     const values = Object.fromEntries(hosts.map(host => [host, value(host) ?? UNKNOWN]));
     const differing = hosts.filter(host => values[host] !== UNKNOWN && values[reference] !== UNKNOWN && values[host] !== values[reference]);
-    const state = hosts.every(host => values[host] === UNKNOWN) ? 'unknown' : differing.length === 0 ? 'same' : design && differing.every(host => design(host) || (reference && design(reference))) ? 'design' : 'differs';
+    // "Same" needs two computers with a value. One value alone was compared with nothing.
+    const known = hosts.filter(host => values[host] !== UNKNOWN);
+    const state = known.length === 0 ? 'unknown' : known.length === 1 || values[reference] === UNKNOWN ? 'alone' : differing.length === 0 ? 'same' : design && differing.every(host => design(host) || (reference && design(reference))) ? 'design' : 'differs';
     return { setting, values, state };
   };
   const onOff = (value: boolean | undefined) => value === undefined ? null : value ? 'on' : 'off';
@@ -65,11 +67,19 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
   const refName = devices.find(device => device.host === reference)?.name ?? reference ?? UNKNOWN;
   const oldest = devices.filter(device => device.since).sort((a, b) => Date.parse(a.since!) - Date.parse(b.since!))[0];
   const flags = models.reduce((sum, model) => sum + model.flags.length, 0);
-  const stale = devices.filter(device => device.state === 'stale');
+  const off = devices.filter(device => device.off), stale = devices.filter(device => device.state === 'stale' && !device.off);
+  // A computer is compared when it gave at least one value. A setting is compared when two computers gave one.
+  const read = devices.filter(device => rows.some(row => row.values[device.host] !== UNKNOWN));
+  const unread = devices.filter(device => !read.includes(device));
+  const compared = rows.filter(row => row.state !== 'alone' && row.state !== 'unknown');
+  const names = (list: DeviceChip[]) => list.map(device => device.name).join(list.length === 2 ? ' and ' : ', ');
   const cells: Cell[] = [
-    { label: 'Settings that differ', value: String(differs.length), unit: `of ${rows.length}`, accent: differs.length > 0,
-      context: differs.length ? devices.filter(device => device.host !== reference && differs.some(row => row.values[device.host] !== row.values[reference ?? ''])).map(device => device.name).join(', ') + ` against ${refName}` : 'every computer matches' },
-    { label: 'Computers compared', value: String(devices.length), context: `${refName} is the reference` },
+    compared.length === 0
+      ? { label: 'Settings that differ', value: UNKNOWN, context: read.length === 1 ? `only ${read[0].name} has been read` : 'no two computers have been read' }
+      : { label: 'Settings that differ', value: String(differs.length), unit: `of ${compared.length}`, accent: differs.length > 0,
+        context: differs.length ? devices.filter(device => device.host !== reference && differs.some(row => row.values[device.host] !== row.values[reference ?? ''])).map(device => device.name).join(', ') + ` against ${refName}`
+          : compared.length < rows.length ? `${rows.length - compared.length} could not be compared` : 'every computer matches' },
+    { label: 'Computers compared', value: String(read.length), unit: `of ${devices.length}`, context: unread.length ? `${names(unread)} not read` : `${refName} is the reference` },
     oldest ? { label: 'Oldest read', value: clock(oldest.since, timeZone, now), context: `${oldest.name}, ${span(now - Date.parse(oldest.since!))} ago` } : { label: 'Oldest read', value: UNKNOWN, context: 'no computer read yet' },
     models.length ? { label: 'Model drift flags', value: String(flags), accent: flags > 0, context: `across ${plural(models.length, 'model')}, last 30 days` } : { label: 'Model drift flags', value: UNKNOWN, context: 'no replies read yet' },
   ];
@@ -77,7 +87,10 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
     <div className="grid more">
       <Strip cells={cells} four />
       <Block span={8} title="Setup drift" sub="is every computer running the same setup?"
-        foot={stale.length ? <><span className="dot stale" />{stale.map(device => `${device.name} values are from the ${clock(device.since, timeZone, now)} read`).join('. ')}</> : <>Values from each computer&apos;s observatory.config.json and its latest sessions</>}>
+        foot={off.length || stale.length ? <><span className="dot stale" />{[
+          ...(off.length ? [`${names(off)} ${off.length === 1 ? 'is' : 'are'} off, so ${off.length === 1 ? 'its' : 'their'} values are ${off.every(device => unread.includes(device)) ? UNKNOWN : 'from the last read'}`] : []),
+          ...stale.map(device => device.since ? `${device.name} values are from the ${clock(device.since, timeZone, now)} read` : `${device.name} has not been read`),
+        ].join('. ')}</> : <>Values from each computer&apos;s observatory.config.json and its latest sessions</>}>
         <div className="tw"><table>
           <thead><tr><th>Setting</th>{devices.map(device => <th key={device.host}>{device.name}</th>)}<th>State</th></tr></thead>
           <tbody>{rows.map(row => (
@@ -86,7 +99,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
                 const value = row.values[device.host];
                 return <td key={device.host} className={value === UNKNOWN ? 'fa' : row.state === 'differs' && device.host !== reference && value !== row.values[reference ?? ''] ? 'acc' : undefined}>{value}</td>;
               })}
-              <td>{row.state === 'differs' ? <><span className="flagdot" style={{ marginRight: 6 }} /><span className="acc">Differs</span></> : <span className="fa">{row.state === 'design' ? 'Differs by design' : row.state === 'unknown' ? UNKNOWN : 'Same'}</span>}</td></tr>
+              <td>{row.state === 'differs' ? <><span className="flagdot" style={{ marginRight: 6 }} /><span className="acc">Differs</span></> : <span className="fa">{row.state === 'design' ? 'Differs by design' : row.state === 'unknown' ? UNKNOWN : row.state === 'alone' ? 'Not compared' : 'Same'}</span>}</td></tr>
           ))}</tbody>
         </table></div>
       </Block>

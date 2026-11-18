@@ -36,6 +36,7 @@ export function hours(seconds: number | null | undefined) {
 export function share(part: number | null | undefined, whole: number | null | undefined) {
   if (!finite(part) || !finite(whole) || whole <= 0) return UNKNOWN;
   const value = 100 * part / whole;
+  if (value > 0 && value < 0.05) return '<0.1%';
   return `${value > 0 && value < 10 ? value.toFixed(1) : Math.round(value)}%`;
 }
 
