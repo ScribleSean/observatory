@@ -221,7 +221,8 @@ export function dayColumns(period: PeriodLike, values: Map<string, number | null
   for (const date of dates) groups.set(keyOf(date), [...groups.get(keyOf(date)) ?? [], date]);
   return [...groups].map(([key, list]) => {
     const past = list.filter(date => date <= today);
-    const known = past.map(date => values.has(date) ? values.get(date)! : 0);
+    // A date with no value at all was not read, so it is Unknown, never 0.
+    const known = past.map(date => values.has(date) ? values.get(date)! : null);
     const value = past.length === 0 ? 0 : known.some(item => item === null) ? null : (known as number[]).reduce((sum, item) => sum + item, 0);
     const label = period.unit === 'year' ? monthLabel(list[0]) : period.unit === 'all' ? shortDate(list[0]) : period.unit === 'month' ? String(Number(list[0].slice(8))) : weekday(list[0]).split(' ')[0];
     const full = period.unit === 'year' ? `${monthLabel(list[0])} ${list[0].slice(0, 4)}` : period.unit === 'all' ? `Week of ${shortDate(list[0])}` : weekday(list[0], true);

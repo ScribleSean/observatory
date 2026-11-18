@@ -206,6 +206,10 @@ test('day, month, year and all time bucket into hours, days, months and weeks wi
   assert.ok(dayColumns(periods.all, values, '2026-11-18').every((column, index, list) => index === 0 || column.key > list[index - 1].key));
   values.set('2026-11-17', null);
   assert.equal(dayColumns(periods.week, values, '2026-11-18')[1].value, null, 'an Unknown day makes its bucket Unknown');
+  // A date the values do not hold at all was not read, so it is Unknown too, never 0.
+  values.delete('2026-11-17');
+  assert.equal(dayColumns(periods.week, values, '2026-11-18')[1].value, null, 'a missing day is Unknown');
+  assert.equal(dayColumns(periods.month, values, '2026-11-18').find(column => column.key === '2026-11-17').value, null);
 });
 
 test('every view renders through the real view-models for every range unit, with Unknown never drawn as 0', async () => {

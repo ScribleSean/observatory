@@ -312,3 +312,19 @@ test('every runtime dependency is used by the app or the libraries', async () =>
   for (const name of Object.keys(dependencies)) assert.ok(all.includes(`'${name}`) || all.includes(`"${name}`) || all.includes(`${name}/`), `${name} is imported somewhere`);
   assert.equal(dependencies['lucide-react'], undefined);
 });
+
+test('Limits now on the Overview leads with the stored forecast, then Claude weekly, Claude 5 hour, Grok and a quiet line for what is off',()=>{
+  const html=clean(render({}));
+  const block=html.slice(html.indexOf('aria-label="Limits now"'));
+  const shown=text(block.slice(0,block.indexOf('</section>')));
+  assert.ok(block.includes(`<p class="sayline">${combined.glance.forecast.engines.find(engine=>engine.engine==='claude').headline}</p>`),'the lead is the stored forecast sentence');
+  const at=word=>shown.indexOf(word);
+  for(const word of ['Claude Code weekly','Claude Code 5 hour','Grok requests'])assert.ok(at(word)>=0,word);
+  assert.ok(at('Claude Code weekly')<at('Claude Code 5 hour') && at('Claude Code 5 hour')<at('Grok requests'));
+  assert.ok(shown.includes('Not reported'),'a window the app left out reads Not reported');
+  assert.match(shown,/Codex is off/,'a source that is off gets one quiet line');
+  assert.ok(!shown.includes('Codex 30 day'),'an off source draws no meter');
+  assert.equal((html.match(/aria-label="Limits now"/g)??[]).length,1);
+  // The Limits view keeps its own blocks, so Grok is not drawn twice there.
+  assert.ok(!text(firstDraw['#limits']).includes('Codex is off'));
+});

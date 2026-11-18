@@ -38,16 +38,27 @@ export function MoreView({ title }: { title: string }) {
 export function LimitMeter({ element }: ComponentRenderProps<MeterProps>) {
   const { snapshot, scope, now, frame } = useR2();
   const { engine: wanted, window = null } = element.props;
+  // The lead is the stored forecast's sentence (the menu bar's line), read through the view-model and never recomputed here.
   const { engine: engines, headline } = resolveBlock('LimitMeter', { engine: wanted, window: null }, snapshot, scope, { now }) as { engine: LimitsVM['engines'][number] | null; headline: string };
-  // Limits that are off for the account (the hub's stored view.sourcesOff) appear nowhere, not even as "off".
-  const grok = wanted === 'claude' && limitsOn(snapshot, 'grok') ? resolveBlock('GrokRequests', {}, snapshot, scope, { now }) as GrokRequestsVM | null : null;
-  const hidden = [grok && grok.total.value === 0 && 'Grok has no requests in this range'].filter(Boolean);
+  const overview = wanted === 'claude' && element.props.history !== true;
+  // The Overview's block also carries Codex and Grok when their limits are on and in the scope. A source that is off is
+  // named in one quiet line and never drawn as a meter.
+  const grokOn = limitsOn(snapshot, 'grok'), codexOn = limitsOn(snapshot, 'codex');
+  const grok = overview && grokOn && scope.sources.includes('grok') ? resolveBlock('GrokRequests', {}, snapshot, scope, { now }) as GrokRequestsVM | null : null;
+  const codexVm = overview && codexOn && scope.sources.includes('codex') ? (resolveBlock('LimitMeter', { engine: 'codex', window: null }, snapshot, scope, { now }) as { engine: LimitsVM['engines'][number] | null }).engine : null;
+  // An engine the app reads as off (a free plan with nothing left, unless turned on) is off here too.
+  const codex = codexVm && codexVm.windows.some(each => each.state !== 'off') ? codexVm : null;
+  const hidden = overview ? [
+    !codex && (codexOn && !codexVm ? 'Codex has no limit in this view' : 'Codex is off'),
+    !grokOn ? 'Grok is off' : !grok ? 'Grok has no requests in this range' : grok.total.value === 0 && 'Grok has no requests in this range',
+  ].filter(Boolean) : [];
   return (
     <section className="blk" aria-label="Limits now">
       <div className="bh"><h3>Limits now</h3></div>
       <p className="sayline">{headline}</p>
       {engines ? <MeterRows engine={engines} windowId={window} now={now} timeZone={frame.timeZone} /> : <div className="empty"><b>Off</b>This limit is turned off in observatory.config.json.</div>}
       {grok && grok.total.value !== 0 && <GrokRequestsRow vm={grok} label={frame.period.label} />}
+      {codex && <MeterRows engine={codex} now={now} timeZone={frame.timeZone} />}
       {hidden.length > 0 && <div className="foot">{hidden.join('. ')}.</div>}
     </section>
   );

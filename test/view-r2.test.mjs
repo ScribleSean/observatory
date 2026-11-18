@@ -224,6 +224,21 @@ test('Grok is counted in requests and never added to dollars or tokens', () => {
   // A logged day with no count is Unknown, and so is a total over it.
   const missing = snapshot.view.grokLimits.requests.days.find(day => day.count === null).date;
   assert.equal(v.metric(snapshot, 'grokRequests', at('day', missing), { now: NOW }).value, null);
+  // Over a week, the total stays Unknown and the days that were counted show as "at least".
+  const week = v.metric(snapshot, 'grokRequests', at('week', missing), { now: NOW });
+  assert.equal(week.value, null);
+  assert.match(week.atLeast.text, /^at least \d+, 1 day not read on Grok$/);
+});
+
+test('a day a computer has not been read for is Unknown in a screen time total, never 0, and the total says "at least"', () => {
+  // The Mac was last read on Nov 17, so Nov 18 is not known yet. A week holding it is Unknown.
+  const stale = structuredClone(snapshot);
+  const mac = stale.view.activityHistory.find(row => row.host === 'Mac');
+  mac.asOf = mac.checkedAt = '2026-11-17T12:00:00.000Z';
+  const week = v.buildScreenTime(stale, at('week', '2026-11-18', { devices: ['Mac'] }), { now: NOW });
+  assert.equal(week.total.value, null);
+  assert.match(week.total.atLeast.text, /^at least .+, 1 day not read on Studio$/);
+  assert.equal(v.metric(stale, 'screenTime', at('week', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).value, null);
 });
 
 test('sessions fold headless runs into named bundles, group by role and show what runs now', () => {

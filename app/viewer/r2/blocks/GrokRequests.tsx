@@ -31,7 +31,7 @@ export function GrokRequestsRow({ vm, label }: { vm: GrokRequestsVM; label: stri
       <div className="h"><span>Grok requests</span><span>{label}</span></div>
       <div className="h" style={{ marginTop: 2 }}>
         {total === null ? <b className="unk">{UNKNOWN}</b> : <b>{total.toLocaleString('en-US')}<small>{total === 1 ? 'request' : 'requests'}</small></b>}
-        <span>{vm.weekly && vm.weekly.remaining !== null ? `weekly limit ${Math.round(100 - vm.weekly.remaining)}% used` : 'weekly limit Unknown'}</span>
+        <span>{total === null && vm.total.atLeast ? vm.total.atLeast.text : vm.weekly && vm.weekly.remaining !== null ? `weekly limit ${Math.round(100 - vm.weekly.remaining)}% used` : 'weekly limit Unknown'}</span>
       </div>
       <Spark days={vm.days} />
     </div>
