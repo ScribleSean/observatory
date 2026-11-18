@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
-import {copyFileSync,mkdtempSync,mkdirSync,realpathSync,rmSync,chmodSync} from 'node:fs';
+import {writeFileSync,mkdtempSync,mkdirSync,realpathSync,rmSync,chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {normalizeRemote,sessionIdentity,cleanSessions,findCollisions,collisionLine} from '../lib/same-repo.mjs';
@@ -216,8 +216,10 @@ test('live: processes named claude and codex are found and grouped by repository
   git(lone,'init','-q','-b','main');
   const bin=path.join(root,'bin');mkdirSync(bin);
   const start=(name,cwd)=>{
+    // A small script, not a copy of sleep: some Linux images ship a multicall coreutils binary that picks
+    // its tool from its own name, so a copy named claude exits at once. A script's process name is its file name.
     const exe=path.join(bin,`${name}-${kids.length}`,name);mkdirSync(path.dirname(exe));
-    copyFileSync(execFileSync('which',['sleep']).toString().trim(),exe);chmodSync(exe,0o755);
+    writeFileSync(exe,'#!/bin/sh\nsleep 60\n');chmodSync(exe,0o755);
     const kid=spawn(exe,['60'],{cwd,stdio:'ignore'});kids.push(kid);return kid;
   };
   start('claude',main);start('codex',tree);start('claude',lone);
