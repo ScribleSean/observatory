@@ -24,6 +24,14 @@ test('Windows uses LOCALAPPDATA for its data folder',()=>{
   assert.equal(parseConfig({},win).host,'Windows');
 });
 
+test('glance.accent picks the accent menu bar icon, off by default, and nothing else is accepted under glance',()=>{
+  assert.deepEqual(parseConfig({},mac).glance,{accent:false});
+  assert.deepEqual(parseConfig({glance:{accent:true}},mac).glance,{accent:true});
+  assert.deepEqual(parseConfig({glance:{}},mac).glance,{accent:false});
+  assert.throws(()=>parseConfig({glance:{accent:'yes'}},mac),/glance.accent must be true or false/);
+  assert.throws(()=>parseConfig({glance:{color:true}},mac),/unknown setting/);
+});
+
 test('mistakes in the settings file are refused with a clear message',()=>{
   assert.throws(()=>parseConfig({source:{}},mac),/unknown setting source/);
   assert.throws(()=>parseConfig({sources:{codex:'yes'}},mac),/sources.codex must be true or false/);

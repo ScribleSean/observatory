@@ -112,7 +112,12 @@ export const STRINGS = {
     "perHour": "{sessions}, {rate}% per hour",
     "sessionRate": "{rate}%/h",
     "noneRunning": "None",
-    "updatedAt": "Updated {time}"
+    "updatedAt": "Updated {time}",
+    "iconTip": "{percent} used, {pace}",
+    "onPace": "on pace",
+    "overPace": "over pace",
+    "paceUnknown": "pace Unknown",
+    "iconStale": "Last read {time}"
   },
   "ledger": {
     "fanout": "{title} fanned out to {count} subagents and took {share} of the week. No branch merged.",

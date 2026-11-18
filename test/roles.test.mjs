@@ -126,6 +126,10 @@ test('a title that leaves only a date, a name or nothing takes the date, the nam
   // Nothing left and no day known: the repository.
   assert.equal(sessionName({ title: 'Builder:', repo: 'lantern' }).display, '[Builder] lantern');
   assert.equal(sessionName({ title: 'Chief of staff', repo: 'orchard' }).display, '[Chief of staff] orchard');
+  // No day and no repository: the role alone, never "[Chief of staff] Untitled session".
+  assert.deepEqual(pick(sessionName({ title: 'Chief of staff', origin: 'interactive', task: null, kinds: [] })), ['Chief of staff', 'title', 'Chief of staff', 'Chief of staff']);
+  assert.equal(sessionName({ title: 'Chief of staff', started: '2026-11-17' }).display, '[Chief of staff] Nov 17');
+  assert.equal(sessionNameOverDays([{ title: 'Chief of staff', origin: 'interactive', task: null, repo: null, kinds: [] }]).display, 'Chief of staff');
 });
 
 test('over several days the latest title is the object, whatever gave the role', () => {

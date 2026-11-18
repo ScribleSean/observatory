@@ -45,6 +45,13 @@ struct EngineRow: Identifiable, Equatable {
   var resets: String? = nil
 }
 
+// What the icon shows once glance.json is old: its last value and when it was read.
+struct StaleIcon: Equatable {
+  let fraction: Double?
+  let text: String
+  let tip: String
+}
+
 struct PanelState: Equatable {
   enum Notice: Equatable { case none, collecting, setupMissing, nodeMissing }
   // From glance.json (lib/glance-view.mjs), or worked out from combined.json when that file is missing.
@@ -62,6 +69,14 @@ struct PanelState: Equatable {
   var sessions: [SessionRow] = []
   var flag: FlagRow?
   var updatedText: String?
+  // The menu bar icon, as lib/glance-view.mjs decided it (glance.json "icon"). Without one (no glance.json, an older
+  // one, or the combined.json fallback) nothing is known: the stale shape and Unknown, never Off.
+  var icon = Mark.State.stale
+  var iconFraction: Double?
+  var iconText = "Unknown"
+  var iconTip = "Unknown"
+  var iconStale: StaleIcon?
+  var accent = false
   // Read only from combined.json, the fallback.
   var sentence: String?
   var menu: String?
@@ -76,7 +91,21 @@ struct PanelState: Equatable {
   static let readingFresh: TimeInterval = 10 * 60
   static let deviceFresh: TimeInterval = 15 * 60
 
-  var old: Bool { updated.map { now.timeIntervalSince($0) > Self.deviceFresh } ?? false }
+  // A snapshot time ahead of the clock by more than this is not trusted to be current.
+  static let futureSlack: TimeInterval = 5 * 60
+
+  // Older than a snapshot may be, with no time, or with a time well ahead of the clock.
+  var old: Bool {
+    guard let updated else { return true }
+    let age = now.timeIntervalSince(updated)
+    return age > Self.deviceFresh || age < -Self.futureSlack
+  }
+
+  // The icon to draw now: as stored, or its stored stale form once glance.json is older than a snapshot may be.
+  var shownIcon: (state: Mark.State, fraction: Double?, text: String, tip: String) {
+    if old, let stale = iconStale { return (.stale, stale.fraction, stale.text, stale.tip) }
+    return (icon, iconFraction, iconText, iconTip)
+  }
   var empty: Bool { headline == nil && limits.isEmpty }
 
   static func date(_ value: Any?) -> Date? {
@@ -134,6 +163,16 @@ struct PanelState: Equatable {
     }
     if let flag = json["flag"] as? [String: Any], let text = flag["text"] as? String {
       state.flag = FlagRow(count: (flag["count"] as? Int) ?? 1, subject: flag["subject"] as? String, text: text)
+    }
+    if let icon = json["icon"] as? [String: Any], let shape = Mark.State(rawValue: icon["state"] as? String ?? "") {
+      state.icon = shape
+      state.iconFraction = share(icon["fraction"])
+      state.iconText = icon["text"] as? String ?? "Unknown"
+      state.iconTip = icon["tip"] as? String ?? state.iconText
+      if let stale = icon["stale"] as? [String: Any], let text = stale["text"] as? String {
+        state.iconStale = StaleIcon(fraction: share(stale["fraction"]), text: text, tip: stale["tip"] as? String ?? text)
+      }
+      state.accent = icon["accent"] as? Bool == true
     }
     return state
   }
@@ -216,28 +255,6 @@ struct Palette {
 
   func provider(_ name: String) -> Color { name == "claude" ? claude : name == "codex" ? codex : muted }
 }
-
-enum Brand {
-  // The one telescope mark, copied from public/brand/telescope.svg by setup. The same drawing is kept here
-  // for a binary run outside its bundle, such as --render. test/repo-rules.test.mjs checks the two match.
-  static let svg = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 10 11-6 3 5-11 6z"/><path d="m16 3 4 7M5.8 12 3 13.5M12 13v3m-5 5 5-5 5 5m-5-5v6"/></svg>"##
-  static let telescope: NSImage = {
-    let image = Bundle.main.url(forResource: "telescope", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
-      ?? NSImage(data: Data(svg.utf8))
-      ?? NSImage(size: NSSize(width: 18, height: 18))
-    image.isTemplate = true
-    image.accessibilityDescription = "Observatory"
-    return image
-  }()
-
-  static func mark(size: CGFloat) -> NSImage {
-    let copy = telescope.copy() as! NSImage
-    copy.size = NSSize(width: size, height: size)
-    copy.isTemplate = true
-    return copy
-  }
-}
-
 
 final class PanelModel: ObservableObject {
   @Published var state = PanelState()
@@ -418,30 +435,144 @@ struct Push: ButtonStyle {
   }
 }
 
-// The menu bar glyph: a ring filled to the share used of the scarcer limit.
-enum Ring {
-  static func image(_ fraction: Double, size: CGFloat = 16) -> NSImage {
-    let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-      let line: CGFloat = 2.2
-      let box = rect.insetBy(dx: line / 2 + 0.5, dy: line / 2 + 0.5)
-      let track = NSBezierPath(ovalIn: box)
-      track.lineWidth = line
-      NSColor.black.withAlphaComponent(0.3).setStroke()
-      track.stroke()
-      let share = CGFloat(min(1, max(0, fraction)))
-      if share > 0 {
-        let arc = NSBezierPath()
-        arc.appendArc(withCenter: NSPoint(x: rect.midX, y: rect.midY), radius: box.width / 2, startAngle: 90, endAngle: 90 - 360 * share, clockwise: true)
-        arc.lineWidth = line
-        arc.lineCapStyle = .round
-        NSColor.black.setStroke()
-        arc.stroke()
+// The ring and dot: the mark, the app icons and the live menu bar icon, from one geometry (lib/glance-icon.mjs).
+// The ring is the share of the Claude weekly limit used, from 12 o'clock clockwise. The center is the state, decided once
+// by lib/glance-view.mjs: a dot on pace, a bar over pace, a hollow dot when stale, nothing when off.
+// test/glance-icon.test.mjs checks these numbers and formulas against lib/glance-icon.mjs and glance/windows/Glance.cs.
+enum Mark {
+  enum State: String { case onPace = "on-pace", overPace = "over-pace", stale, off }
+
+  static let trackAlpha: CGFloat = 0.28
+  static let staleAlpha: CGFloat = 0.45
+  static let textDim: CGFloat = 0.55
+  static let minArc = 0.04
+  static let gap: CGFloat = 5
+  static let fontSize: CGFloat = 13
+  static let tileRadius: CGFloat = 0.225
+  static let accentDark: UInt32 = 0xd97f57
+  static let accentLight: UInt32 = 0xb5562c
+  static let tileDark: UInt32 = 0x161715
+  static let tileLight: UInt32 = 0xefece7
+  static let menuBarSide: CGFloat = 18
+
+  static func color(_ hex: UInt32) -> NSColor {
+    NSColor(srgbRed: CGFloat(hex >> 16 & 255) / 255, green: CGFloat(hex >> 8 & 255) / 255, blue: CGFloat(hex & 255) / 255, alpha: 1)
+  }
+
+  // Glance icon of side s: padding round(s/16), diameter s - 2p, stroke round(d/7), centerline radius (d - w)/2.
+  static func glance(_ side: CGFloat) -> (p: CGFloat, d: CGFloat, w: CGFloat, r: CGFloat, c: CGFloat) {
+    let p = (side / 16).rounded(), d = side - 2 * p, w = (d / 7).rounded()
+    return (p, d, w, (d - w) / 2, side / 2)
+  }
+
+  // App icon on a full tile of side s (Windows .ico): the mark's diameter, stroke and dot radius, whole pixels up to 48.
+  static func app(_ side: CGFloat) -> (d: CGFloat, w: CGFloat, dot: CGFloat) {
+    switch side {
+    case 16: return (12, 2, 2)
+    case 24: return (16, 2, 2)
+    case 32: return (20, 3, 3)
+    case 48: return (28, 4, 4)
+    default: return (side / 2, side / 14, side / 14)
+    }
+  }
+
+  // The macOS app icon at a point size and scale, in pixels: the tile sits 100 of 1024 in from each edge, set in
+  // points and multiplied by the scale, so the icon is the same at 1x and 2x.
+  static func macIcon(points: CGFloat, scale: CGFloat) -> (inset: CGFloat, tile: CGFloat, d: CGFloat, w: CGFloat, dot: CGFloat) {
+    let small: [CGFloat]? = points == 16 ? [1, 10, 2, 2] : points == 32 ? [3, 16, 2, 2] : nil
+    let inset = small?[0] ?? (points * 100 / 1024).rounded(), tile = points - 2 * inset
+    let mark = small.map { Array($0[1...]) } ?? [tile / 2, tile / 14, tile / 14]
+    return (inset * scale, tile * scale, mark[0] * scale, mark[1] * scale, mark[2] * scale)
+  }
+
+  static func circle(_ c: CGFloat, _ r: CGFloat) -> NSBezierPath {
+    NSBezierPath(ovalIn: NSRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r))
+  }
+
+  // The glance icon in a side by side box at the origin. `ink` is the track and the stale marks, `mark` the arc and center.
+  static func drawGlance(side: CGFloat, state: State, fraction: Double?, ink: NSColor, mark: NSColor) {
+    let g = glance(side)
+    let track = circle(g.c, g.r)
+    track.lineWidth = g.w
+    ink.withAlphaComponent(trackAlpha).setStroke()
+    track.stroke()
+    if state == .off { return }
+    let tint = state == .stale ? ink.withAlphaComponent(staleAlpha) : mark
+    if let fraction, fraction > 0 {
+      let share = CGFloat(min(1, max(minArc, fraction)))
+      let arc = share >= 1 ? circle(g.c, g.r) : NSBezierPath()
+      if share < 1 {
+        arc.appendArc(withCenter: NSPoint(x: g.c, y: g.c), radius: g.r, startAngle: 90, endAngle: 90 - 360 * share, clockwise: true)
       }
+      arc.lineWidth = g.w
+      arc.lineCapStyle = .butt
+      tint.setStroke()
+      arc.stroke()
+    }
+    switch state {
+    case .onPace:
+      tint.setFill()
+      circle(g.c, g.w).fill()
+    case .overPace:
+      tint.setFill()
+      NSBezierPath(roundedRect: NSRect(x: g.c - g.w / 2, y: g.c - 1.5 * g.w, width: g.w, height: 3 * g.w), xRadius: g.w / 2, yRadius: g.w / 2).fill()
+    case .stale:
+      let hollow = circle(g.c, g.w)
+      hollow.lineWidth = g.w / 2
+      tint.setStroke()
+      hollow.stroke()
+    case .off: break
+    }
+  }
+
+  // The menu bar item: the icon at 18 and the number beside it in one style. The template variant is black with alpha
+  // only, so the system tints it for every menu bar. The accent variant picks its colors for the bar it is drawn on.
+  static func menuBar(state: State, fraction: Double?, text: String, accent: Bool) -> NSImage {
+    let side = menuBarSide
+    let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
+    let label = NSAttributedString(string: text, attributes: [.font: font])
+    let width = (side + gap + label.size().width).rounded(.up)
+    let live = state == .onPace || state == .overPace
+    let image = NSImage(size: NSSize(width: width, height: side), flipped: false) { _ in
+      let dark = NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      let ink: NSColor = accent && dark ? .white : .black
+      let tone = color(dark ? accentDark : accentLight)
+      drawGlance(side: side, state: state, fraction: fraction, ink: ink, mark: accent && live ? tone : ink)
+      let number = accent && state == .overPace ? tone : ink.withAlphaComponent(live ? 1 : textDim)
+      let size = label.size()
+      NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: number])
+        .draw(at: NSPoint(x: side + gap, y: ((side - size.height) / 2).rounded()))
       return true
     }
-    image.isTemplate = true
+    image.isTemplate = !accent
     image.accessibilityDescription = "Observatory"
     return image
+  }
+
+  // The app icon in a canvas of `canvas` pixels: a rounded tile `inset` in from each edge and the mark, light or dark.
+  static func drawApp(canvas: CGFloat, inset: CGFloat, mark: (d: CGFloat, w: CGFloat, dot: CGFloat), light: Bool) {
+    let tile = canvas - 2 * inset, c = canvas / 2
+    color(light ? tileLight : tileDark).setFill()
+    NSBezierPath(roundedRect: NSRect(x: inset, y: inset, width: tile, height: tile), xRadius: tile * tileRadius, yRadius: tile * tileRadius).fill()
+    let tone = color(light ? accentLight : accentDark)
+    let ring = circle(c, (mark.d - mark.w) / 2)
+    ring.lineWidth = mark.w
+    tone.setStroke()
+    ring.stroke()
+    tone.setFill()
+    circle(c, mark.dot).fill()
+  }
+
+  // Draws into an exact pixel grid, so 16 and 32 land on whole pixels.
+  static func png(pixels: Int, draw: () -> Void) -> Data? {
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8, samplesPerPixel: 4,
+                                     hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+    rep.size = NSSize(width: pixels, height: pixels)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    draw()
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])
   }
 }
 
@@ -495,7 +626,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     stopOnTerminate()
     let file = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/glance.json")
     if let data = try? Data(contentsOf: file) { settings = try? JSONDecoder().decode(Settings.self, from: data) }
-    item.button?.image = Brand.mark(size: 18)
+    item.button?.image = Mark.menuBar(state: .off, fraction: nil, text: "Off", accent: false)
     item.button?.toolTip = "Observatory"
     menu.addItem(withTitle: "Open dashboard", action: #selector(openFromMenu), keyEquivalent: "").target = self
     menu.addItem(withTitle: "Refresh", action: #selector(runTick), keyEquivalent: "").target = self
@@ -608,13 +739,13 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     state.refreshing = tick?.isRunning == true
     model.state = state
     let current = state.notice == .none && !state.old && !state.empty
-    item.button?.appearsDisabled = !current
-    // A ring filled to the scarcer limit. The percent used shows beside it only while that limit is forecast to run
-    // out before it resets. With no current share the telescope stands in, never an empty ring.
-    item.button?.image = current && state.ring != nil ? Ring.image(state.ring ?? 0) : Brand.mark(size: 18)
-    item.button?.title = current ? (state.barText.map { " " + $0 } ?? "") : ""
-    item.button?.imagePosition = .imageLeading
-    item.button?.toolTip = current ? state.headline ?? state.menu ?? "Observatory" : "Observatory: not updated recently"
+    // The ring and its number, as glance.json says. The state is in the icon, so the button is never greyed out.
+    let icon = state.shownIcon
+    item.button?.image = Mark.menuBar(state: icon.state, fraction: icon.fraction, text: icon.text, accent: state.accent)
+    item.button?.title = ""
+    item.button?.imagePosition = .imageOnly
+    item.button?.setAccessibilityLabel("Observatory, " + icon.tip)
+    item.button?.toolTip = icon.tip + "\n" + (current ? state.headline ?? state.menu ?? "Observatory" : "Observatory: not updated recently")
     fitPanel()
   }
 
@@ -711,7 +842,87 @@ extension ISO8601DateFormatter {
   return 0
 }
 
+// `Observatory --render-icon glance.json out.png [now-iso]` draws the menu bar item for that glance.json at 2x: the
+// template image on a light and a dark bar (tinted the way the system tints it), then the accent variant on each.
+@MainActor func renderIcon(_ arguments: [String]) -> Int32 {
+  guard arguments.count >= 3, let data = FileManager.default.contents(atPath: arguments[1]),
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+    FileHandle.standardError.write("usage: --render-icon glance.json out.png [now]\n".data(using: .utf8)!)
+    return 2
+  }
+  let now = arguments.count > 3 ? PanelState.date(arguments[3]) ?? Date() : Date()
+  let state = Glance.state(glance: json, combined: { json }, now: now) ?? PanelState(notice: .collecting)
+  let icon = state.shownIcon
+  let bars: [(accent: Bool, dark: Bool)] = [(false, false), (false, true), (true, false), (true, true)]
+  let images = bars.map { Mark.menuBar(state: icon.state, fraction: icon.fraction, text: icon.text, accent: $0.accent) }
+  let cell = NSSize(width: (images.map(\.size.width).max() ?? 18) + 16, height: 26)
+  let scale = 2
+  guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(cell.width) * scale, pixelsHigh: Int(cell.height) * 4 * scale,
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                   bytesPerRow: 0, bitsPerPixel: 0) else { return 1 }
+  rep.size = NSSize(width: cell.width, height: cell.height * 4)
+  NSGraphicsContext.saveGraphicsState()
+  NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+  for (index, bar) in bars.enumerated() {
+    let row = NSRect(x: 0, y: CGFloat(3 - index) * cell.height, width: cell.width, height: cell.height)
+    (bar.dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.93, alpha: 1)).setFill()
+    row.fill()
+    let image = images[index], box = NSRect(x: 8, y: row.minY + 4, width: image.size.width, height: image.size.height)
+    NSAppearance(named: bar.dark ? .darkAqua : .aqua)!.performAsCurrentDrawingAppearance {
+      if image.isTemplate {
+        // The system draws a template image in the bar's text color, keeping its alpha.
+        let tinted = NSImage(size: image.size, flipped: false) { rect in
+          image.draw(in: rect)
+          (bar.dark ? NSColor.white : NSColor.black).set()
+          rect.fill(using: .sourceAtop)
+          return true
+        }
+        tinted.draw(in: box)
+      } else {
+        image.draw(in: box)
+      }
+    }
+  }
+  NSGraphicsContext.restoreGraphicsState()
+  guard let png = rep.representation(using: .png, properties: [:]) else { return 1 }
+  do { try png.write(to: URL(fileURLWithPath: arguments[2])) } catch { return 1 }
+  return 0
+}
+
+// `Observatory --app-icons folder` writes full-<side>-<theme>.png (the full tile, for the Windows .ico) and
+// mac-<points>@<scale>x-<theme>.png (the macOS icon). scripts/make-icons.mjs packs them into glance/icons (`npm run icons`).
+@MainActor func appIcons(_ arguments: [String]) -> Int32 {
+  guard arguments.count >= 2 else { return 2 }
+  let folder = URL(fileURLWithPath: arguments[1])
+  func write(_ name: String, _ pixels: Int, _ draw: () -> Void) -> Bool {
+    guard let png = Mark.png(pixels: pixels, draw: draw) else { return false }
+    return (try? png.write(to: folder.appendingPathComponent(name))) != nil
+  }
+  for light in [false, true] {
+    let theme = light ? "light" : "dark"
+    for side in [16, 24, 32, 48, 64, 128, 256] {
+      let mark = Mark.app(CGFloat(side))
+      guard write("full-\(side)-\(theme).png", side, { Mark.drawApp(canvas: CGFloat(side), inset: 0, mark: mark, light: light) }) else { return 1 }
+    }
+    for points in [16, 32, 128, 256, 512] {
+      for scale in [1, 2] {
+        let g = Mark.macIcon(points: CGFloat(points), scale: CGFloat(scale))
+        guard write("mac-\(points)@\(scale)x-\(theme).png", points * scale, {
+          Mark.drawApp(canvas: CGFloat(points * scale), inset: g.inset, mark: (g.d, g.w, g.dot), light: light)
+        }) else { return 1 }
+      }
+    }
+  }
+  return 0
+}
+
 let arguments = CommandLine.arguments
+if let flag = arguments.firstIndex(of: "--render-icon") {
+  exit(MainActor.assumeIsolated { renderIcon(Array(arguments[flag...])) })
+}
+if let flag = arguments.firstIndex(of: "--app-icons") {
+  exit(MainActor.assumeIsolated { appIcons(Array(arguments[flag...])) })
+}
 if let flag = arguments.firstIndex(of: "--render") {
   exit(MainActor.assumeIsolated { render(Array(arguments[flag...])) })
 }

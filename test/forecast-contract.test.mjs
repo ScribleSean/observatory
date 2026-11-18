@@ -134,6 +134,12 @@ function agree(combined) {
     assert.deepEqual([own.forecast.phrase, own.forecast.runsOutAt, own.forecast.resetsLabel, own.forecast.headline],
       [window.phrase, window.runoutAt, window.resets, window.headline], `status ${name}`);
   }
+  // The menu bar and tray icon: the Limits meter's percent used, and over pace exactly when the stored weekly forecast
+  // runs out or is out before the reset.
+  const weeklyMeter = limits.engines.find(engine => engine.engine === 'claude').windows.find(row => row.windowId === 'seven_day');
+  assert.equal(glance.icon.fraction, Math.round(100 - weeklyMeter.remaining) / 100, 'icon ring');
+  const verdict = weeklyMeter.forecast?.status;
+  assert.equal(glance.icon.state, verdict === 'room' ? 'on-pace' : ['runs-out', 'out'].includes(verdict) ? 'over-pace' : 'stale', 'icon center');
   // The computers' state is decided once, and every surface shows the stored label.
   for (const device of combined.devices) {
     assert.equal(summary.devices.find(row => row.host === device.host).stateLabel, device.stateLabel);

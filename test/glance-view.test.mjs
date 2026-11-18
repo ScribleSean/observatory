@@ -194,6 +194,10 @@ test('the tick writes glance.json, and removes it when the glance cannot be made
     const file=path.join(folder,'public','local','glance.json');
     const written=JSON.parse(await readFile(file,'utf8'));
     assert.deepEqual(written,JSON.parse(JSON.stringify(glanceView(combined,{now,timeZone,flags:[{text:'A flag.'}]}))));
+    // glance.accent in the settings file reaches glance.json, and only the Mac reads it.
+    assert.equal(written.icon.accent,false);
+    assert.equal(await writeGlance({...config,glance:{accent:true}},combined,{now,flags:async()=>null}),'ok');
+    assert.equal(JSON.parse(await readFile(file,'utf8')).icon.accent,true);
     await writeFile(file,'{"schema":"older"}');
     assert.equal(await writeGlance(config,combined,{now,flags:async()=>{throw Error('flags broke');}}),'flags broke');
     await assert.rejects(access(file),{code:'ENOENT'});

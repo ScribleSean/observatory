@@ -1,3 +1,5 @@
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="glance/icons/png/icon-128-dark.png"><img src="glance/icons/png/icon-128-light.png" width="64" height="64" alt="The Observatory mark: a ring with a dot in the center"></picture></p>
+
 # Observatory
 
 A menu bar app and local dashboard for people who run coding agents such as Claude Code and Codex on a plan with usage limits. It shows which sessions used this week's limit, what each one shipped, and when each limit runs out at your current pace, for example "Claude runs out Wed 3–7 PM at this pace." A year of history is one click away. It runs on a Mac, a Windows PC, a Linux computer or any mix.
@@ -19,7 +21,7 @@ The dashboard has seven views under one scope bar. The scope bar picks the compu
 - **Limits** leads with the same forecast sentence as the menu bar, then each limit window once, with the computer it was read on, how much of the window is gone, past weeks and Grok requests.
 - **Tokens**, **Screen time**, **Drift** and **Settings** show tokens by model and kind, time at the screen, model settings that differ between computers, and each computer's sources. Settings only shows them: change them in `observatory.config.json` on that computer.
 
-The Ask field and the pinned questions ("Where did today's spend go?", "Will the week last?") rearrange the same blocks. Nothing in the dashboard calls a model. The menu bar and tray show the scarcer limit, what is running now and the top flag.
+The Ask field and the pinned questions ("Where did today's spend go?", "Will the week last?") rearrange the same blocks. Nothing in the dashboard calls a model. The menu bar and tray icon is a ring that fills for the share of the Claude weekly limit used. A dot in the center means it lasts until the reset at this pace, a bar means it runs out first, a hollow dot means the last read is old and an empty ring means the limit is off. On a Mac the percent used sits beside the icon, and on Windows it leads the tray tooltip. The panel behind it shows the scarcer limit, what is running now and the top flag.
 
 ## Install
 
@@ -37,7 +39,7 @@ cd observatory
 npm run setup
 ```
 
-Setup writes a settings file if there is none, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the telescope, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601. It listens on 127.0.0.1 only and accepts only GET and HEAD requests.
+Setup writes a settings file if there is none, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the ring and dot icon, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601. It listens on 127.0.0.1 only and accepts only GET and HEAD requests.
 
 - Preview the changes first with `npm run setup -- --dry-run`.
 - Update with `git pull`, then `npm run setup`.
@@ -83,7 +85,7 @@ History goes back to the first day each source has data and is kept until you de
 }
 ```
 
-A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, and `codexPath`.
+A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, `codexPath`, and `"glance": { "accent": true }` to draw the Mac menu bar icon in the accent color instead of the system's monochrome.
 
 **Engines.** `engines` sets each tile to `"auto"` (the default), `"off"`, or `"on"` (keep a free plan's own allowance on screen): `"engines": { "codex": "off" }`. With several computers, set it in each settings file: each one draws its own tiles.
 
