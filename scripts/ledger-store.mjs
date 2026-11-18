@@ -9,6 +9,7 @@
 // hold, and a collector that was off for a while fills the gap the same way.
 import {DatabaseSync} from 'node:sqlite';
 import fs from 'node:fs';
+import {rename} from 'node:fs/promises';
 import path from 'node:path';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {LEDGER_HISTORY_SCHEMA,SESSION_DAY_TOP,SESSION_DAYS,REDERIVE_DAYS,ONMAIN_RECHECK_DAYS,MAX_DAY_REPOS,MAX_SESSION_MODELS,
@@ -47,12 +48,39 @@ export const STORE_FILE='ledger.sqlite';
 const GROK_DAYS_MAX=3660;
 const RECHECK_MS=10000;
 
-export async function openLedgerStore(dataFolder) {
+// SQLITE_CORRUPT and SQLITE_NOTADB: the file is not a database this can read, now or later.
+const UNREADABLE=new Set([11,26]);
+
+function openAt(file) {
+  let db=null;
+  try {
+    db=new DatabaseSync(file);
+    db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=DELETE;');
+    db.exec(SCHEMA);
+    return db;
+  } catch(error) {
+    // A handle left open keeps the file locked on Windows, so it could not be moved aside.
+    try {db?.close();} catch {}
+    throw error;
+  }
+}
+
+/**
+ * Opens the store. A file that is not a readable database is moved aside (kept, never deleted) and a new
+ * one is made, so the history starts again instead of reading unavailable on every collection.
+ * A locked or busy file still throws, and that collection's history reads unavailable.
+ */
+export async function openLedgerStore(dataFolder,{now=Date.now}={}) {
   const folder=await privateFolder(dataFolder,'private-history');
-  const db=new DatabaseSync(path.join(folder,STORE_FILE));
-  db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=DELETE;');
-  db.exec(SCHEMA);
-  return db;
+  const file=path.join(folder,STORE_FILE);
+  try {return openAt(file);}
+  catch(error) {
+    if(!UNREADABLE.has((error?.errcode ?? 0) & 0xff))throw error;
+    const aside=`${file}.unreadable-${new Date(now()).toISOString().replace(/[:.]/g,'-')}`;
+    await rename(file,aside);
+    await rename(`${file}-journal`,`${aside}-journal`).catch(()=>{});
+    return openAt(file);
+  }
 }
 
 const meta=(db,key)=>db.prepare('SELECT value FROM ledger_meta WHERE key=?').get(key)?.value ?? null;

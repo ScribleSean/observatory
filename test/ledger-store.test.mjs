@@ -2,7 +2,7 @@
 // fictional transcripts and a throwaway git repository.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,stat,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder,testConfig} from './helpers.mjs';
 import {claudeAssistant,claudePrompt,claudeTitle,writeClaude,makeRepo,git} from './ledger-fixtures.mjs';
@@ -159,6 +159,21 @@ test('a day stored with a repository name the snapshot refuses still loads, with
     assert.equal(kept.sessions[0].repo,null);
     assert.equal(kept.apiUsd,2.5);
   } finally {db.close();}
+}));
+
+test('a store file that is not a database is moved aside and a new store is made',()=>withFolder(async folder=>{
+  (await openLedgerStore(folder)).close();
+  const file=path.join(folder,'private-history','ledger.sqlite');
+  const junk='this is not a database, it is a fictional file of text long enough to fill a page header';
+  await writeFile(file,junk);
+  const db=await openLedgerStore(folder,{now:()=>NOW});
+  try {
+    writeHistory(db,buildLedgerHistory({tools:[{source:claude,sessions:[record('a',NOW-HOUR)],dates:[TODAY]}],joined:null,timeZone:TIME_ZONE,titles:true}));
+    assert.equal(historyRow(db,{host:'Mac',now:NOW,timeZone:TIME_ZONE,titles:true}).days[0].sessionCount,1);
+  } finally {db.close();}
+  const names=await readdir(path.join(folder,'private-history'));
+  assert.ok(names.includes('ledger.sqlite.unreadable-2026-11-18T17-00-00-000Z'),names.join(', '));
+  assert.equal(await readFile(path.join(folder,'private-history','ledger.sqlite.unreadable-2026-11-18T17-00-00-000Z'),'utf8'),junk,'kept as it was');
 }));
 
 test('applyOnMain keeps Unknown values Unknown',()=>{
