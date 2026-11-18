@@ -60,9 +60,9 @@ Ask Claude: "Using the observatory tools, make a view of this week's spend by re
 
 A view is refused when it:
 
-- names a block that is not in the catalog, or an option a block does not take,
+- does not start from a Section, names a block that is not in the catalog, or an option a block does not take,
 - asks for a breakdown a metric does not support, for example commits by model,
 - has more than 40 blocks, is nested more than 4 levels deep, or is larger than 32,000 bytes,
 - carries a value that is not a query: free numbers, names and text are accepted only as a short plain-text section title.
 
-The dashboard checks each saved view again before it lists it, so a file edited by hand into something invalid is left out.
+The server, the dashboard server's `/local/views.json` route and the dashboard page all use the same check (`checkSpec` and `checkSavedView` in `lib/r2-catalog.mjs`), so each saved view is checked again before it is listed or drawn, and a file edited by hand into something invalid is left out.

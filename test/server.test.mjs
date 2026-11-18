@@ -64,7 +64,7 @@ test('the request policy matches the configured port only',()=>{
 });
 
 test('/local/views.json lists only saved views that pass the check, and stays GET and HEAD only',()=>withFolder(async folder=>{
-  const spec={root:'a',elements:{a:{type:'Flags',props:{}}}};
+  const spec={root:'page',elements:{page:{type:'Section',props:{title:null,columns:12},children:['a']},a:{type:'Flags',props:{}}}};
   const view=(id,change={})=>JSON.stringify({id,title:id,question:null,spec,savedAt:'2026-11-18T10:00:00.000Z',origin:'composed',...change});
   const dir=path.join(folder,'data/public/local/views');
   await mkdir(dir,{recursive:true});

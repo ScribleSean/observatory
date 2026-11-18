@@ -46,6 +46,8 @@ test('get_catalog lists every block, with the limits and a spec that passes',asy
   assert.deepEqual(Object.keys(catalog.blocks),[...BLOCK_TYPES]);
   assert.equal(catalog.limits.elements,40);
   assert.equal(JSON.parse(result.content[0].text).limits.savedViews,50);
+  assert.deepEqual(catalog.blocks.Breakdown.props.required,['metric','dim'],'the props are the zod schema the check uses');
+  assert.equal(catalog.blocks.Breakdown.props.additionalProperties,false);
   const saved=(await call(server,'compose_view',{id:'example',title:'Example',spec:catalog.example})).result;
   assert.equal(saved.isError,false,saved.content[0].text);
 }));
@@ -73,12 +75,12 @@ test('compose_view refuses a bad spec, an unknown block, an oversize spec and a 
     assert.match(result.content[0].text,pattern);
   };
   const unknown=spec();unknown.elements.spend.type='PieChart';
-  await refuse({id:'a',title:'A',spec:unknown},/not a block/);
+  await refuse({id:'a',title:'A',spec:unknown},/unknown block PieChart/);
   const numbers=spec();numbers.elements.spend.props.value=1234;
-  await refuse({id:'a',title:'A',spec:numbers},/not a Headline prop/);
+  await refuse({id:'a',title:'A',spec:numbers},/spend: .*value/);
   const big={root:'r',elements:{r:{type:'Section',props:{title:null,columns:1},children:[]}}};
   for(let i=0;i<41;i++) {big.elements[`e${i}`]={type:'Flags',props:{}};big.elements.r.children.push(`e${i}`);}
-  await refuse({id:'a',title:'A',spec:big},/limit is 1 to 40/);
+  await refuse({id:'a',title:'A',spec:big},/42 elements, over 40/);
   await refuse({id:'Bad Id',title:'A',spec:spec()},/id must be/);
   await refuse({id:'a',title:'A',spec:spec(),extra:true},/extra is not an argument/);
   await refuse({title:'A',spec:spec()},/id is required/);
@@ -89,10 +91,12 @@ test('compose_view refuses a bad spec, an unknown block, an oversize spec and a 
   assert.equal((await call(server,'compose_view',{id:'a',title:'B',spec:spec(),replace:true})).result.structuredContent.replaced,true);
 }));
 
-test('a catalog check passed in can refuse a spec the contract accepts',async()=>withFolder(async folder=>{
-  const server=createMcpServer({dataFolder:folder,catalogCheck:()=>({ok:false,errors:['not in the zod catalog']})});
-  const result=(await call(server,'compose_view',{id:'a',title:'A',spec:spec()})).result;
-  assert.match(result.content[0].text,/not in the zod catalog/);
+test('compose_view refuses what only the zod catalog knows: a metric split by a dimension it does not have',async()=>withFolder(async folder=>{
+  const server=createMcpServer({dataFolder:folder});
+  const wrong=spec();wrong.elements.spend={type:'Breakdown',props:{metric:'onMain',dim:'model'}};
+  const result=(await call(server,'compose_view',{id:'a',title:'A',spec:wrong})).result;
+  assert.equal(result.isError,true);
+  assert.match(result.content[0].text,/onMain does not split by model/);
   assert.deepEqual(await readdir(folder),[]);
 }));
 

@@ -7,9 +7,10 @@ import path from 'node:path';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {loadConfig} from '../lib/config.mjs';
+import {z} from 'zod';
 import {BLOCK_TYPES,DIMS,METRICS,METRIC_DIMS,SPEC_LIMITS} from '../lib/r2-blocks.mjs';
-import {BLOCK_PROPS,TITLE_MAX,QUESTION_MAX,VIEW_ID,listViews,removeView,saveView} from '../lib/saved-views.mjs';
-import {RANGE_UNITS,SOURCE_IDS} from '../lib/scope.mjs';
+import {DESCRIPTIONS,PROP_SCHEMAS} from '../lib/r2-catalog.mjs';
+import {TITLE_MAX,QUESTION_MAX,VIEW_ID,listViews,removeView,saveView} from '../lib/saved-views.mjs';
 import {ROLES} from '../lib/roles.mjs';
 
 export const PROTOCOL_VERSIONS=Object.freeze(['2025-11-25','2025-06-18','2025-03-26','2024-11-05']);
@@ -51,22 +52,16 @@ const EXAMPLE={root:'page',elements:{
   spend:{type:'Headline',props:{metric:'spend',breakdowns:['repo','model'],scope:{range:{unit:'week'}}}},
   byRepo:{type:'Breakdown',props:{metric:'spend',dim:'repo',limit:6,scope:{range:{unit:'week'}}}}}};
 
-function describeRule(rule) {
-  const part={enum:()=>({oneOf:rule.values}),flags:()=>({listOf:rule.values}),bool:()=>'true or false',
-    int:()=>`whole number ${rule.min} to ${rule.max}`,id:()=>'a short id',text:()=>`plain text, at most ${rule.max} characters`,
-    scope:()=>({devices:'optional list of Mac, Windows, Linux',range:{unit:`optional, one of ${RANGE_UNITS.join(', ')}`,anchor:'optional date YYYY-MM-DD'},sources:`optional list of ${SOURCE_IDS.join(', ')}`})}[rule.kind]();
-  return {type:part,...(rule.nullable?{nullable:true}:{}),...(rule.required?{required:true}:{}),...(rule.about?{about:rule.about}:{})};
-}
-
 export function catalogDescription() {
   return {
     note:'A spec holds queries, not data. Each block asks the dashboard for its numbers when it draws. Use only the props listed.',
     blocks:Object.fromEntries(BLOCK_TYPES.map(type=>[type,{
-      holdsChildren:Boolean(BLOCK_PROPS[type].children),
-      props:Object.fromEntries(Object.entries(BLOCK_PROPS[type].props).map(([key,rule])=>[key,describeRule(rule)]))}])),
+      about:DESCRIPTIONS[type],holdsChildren:type==='Section',
+      // The same zod schema the check uses (lib/r2-catalog.mjs), as JSON Schema, so the two cannot drift.
+      props:z.toJSONSchema(PROP_SCHEMAS[type])}])),
     metrics:METRICS,dims:DIMS,metricDims:METRIC_DIMS,roles:ROLES,
     limits:{...SPEC_LIMITS,titleCharacters:TITLE_MAX,questionCharacters:QUESTION_MAX},
-    spec:'{"root": "<element id>", "elements": {"<element id>": {"type": "<block>", "props": {...}, "children": ["<element id>"]}}}. Only Section has children. Every element must be reachable from the root, once.',
+    spec:'{"root": "<element id>", "elements": {"<element id>": {"type": "<block>", "props": {...}, "children": ["<element id>"]}}}. The root is a Section and only Section has children. Every element must be reachable from the root, once. A metric splits only by the dims metricDims lists for it.',
     example:EXAMPLE,
   };
 }
@@ -88,10 +83,9 @@ function checkArguments(tool,args) {
 /**
  * The server's brain, apart from the byte stream so tests can call it directly.
  * handle(message) returns the response object, or null for a notification.
- * @param {{dataFolder: string, catalogCheck?: (spec: object) => unknown, now?: () => number}} options
- *   catalogCheck overrides the check installed with installCatalogCheck in lib/saved-views.mjs (tests use it).
+ * @param {{dataFolder: string, now?: () => number}} options
  */
-export function createMcpServer({dataFolder,catalogCheck,now=Date.now}) {
+export function createMcpServer({dataFolder,now=Date.now}) {
   const reply=(id,result)=>({jsonrpc:'2.0',id,result});
   const failure=(id,code,message)=>({jsonrpc:'2.0',id,error:{code,message}});
 
@@ -103,12 +97,12 @@ export function createMcpServer({dataFolder,catalogCheck,now=Date.now}) {
     if(name==='compose_view') {
       if(typeof args.id!=='string' || !VIEW_ID.test(args.id))return refused('Invalid arguments for compose_view.',['id must be lowercase letters, digits and dashes, 1 to 48 characters']);
       if(args.replace!==undefined && typeof args.replace!=='boolean')return refused('Invalid arguments for compose_view.',['replace must be true or false']);
-      const saved=await saveView(dataFolder,{id:args.id,title:args.title,question:args.question??null,spec:args.spec},{replace:args.replace===true,now:now(),...(catalogCheck?{catalogCheck}:{})});
+      const saved=await saveView(dataFolder,{id:args.id,title:args.title,question:args.question??null,spec:args.spec},{replace:args.replace===true,now:now()});
       if(!saved.ok)return refused('The view was not saved.',saved.errors);
       return ok({saved:true,replaced:saved.replaced,id:saved.view.id,savedAt:saved.view.savedAt,note:'The dashboard lists it under saved views.'});
     }
     if(name==='list_views') {
-      const views=await listViews(dataFolder,catalogCheck?{catalogCheck}:{});
+      const views=await listViews(dataFolder);
       if(args?.id!==undefined) {
         const view=views.find(item=>item.id===args.id);
         return view?ok(view):refused(`No saved view with id ${args.id}.`);

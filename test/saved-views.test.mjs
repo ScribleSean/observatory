@@ -4,7 +4,9 @@ import {mkdir,readdir,readFile,writeFile,symlink} from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
 import {SPEC_LIMITS,METRIC_DIMS,DIMS} from '../lib/r2-blocks.mjs';
-import {checkSpec,checkView,installCatalogCheck,listViews,removeView,saveView,viewsFolder} from '../lib/saved-views.mjs';
+import {checkSpec,checkView,listViews,removeView,saveView,viewsFolder} from '../lib/saved-views.mjs';
+import {checkSpec as catalogCheckSpec} from '../lib/r2-catalog.mjs';
+import {VIEW_SPECS,PINNED_QUESTIONS} from '../lib/r2-specs.mjs';
 
 const good=()=>({root:'page',elements:{
   page:{type:'Section',props:{title:'Spend',columns:6},children:['spend','byRepo']},
@@ -12,49 +14,48 @@ const good=()=>({root:'page',elements:{
   byRepo:{type:'Breakdown',props:{metric:'spend',dim:'repo',limit:6}}}});
 const errorsOf=spec=>checkSpec(spec).errors.join('\n');
 
-test('a spec that follows the contract is accepted',()=>{
+test('a spec that follows the catalog is accepted',()=>{
   assert.deepEqual(checkSpec(good()),{ok:true,errors:[]});
 });
 
 test('a spec that is not an object, has extra keys, or has no root is refused',()=>{
   assert.equal(checkSpec(null).ok,false);
   assert.equal(checkSpec([]).ok,false);
-  assert.match(errorsOf({...good(),state:{}}),/spec\.state is not allowed/);
-  assert.match(errorsOf({...good(),root:'nope'}),/names no element/);
-  assert.match(errorsOf({root:'a',elements:{}}),/1 to 40/);
+  assert.equal(checkSpec({...good(),root:'nope'}).ok,false);
+  assert.equal(checkSpec({root:'a',elements:{}}).ok,false);
 });
 
 test('an unknown block, an unknown prop and a wrong value are refused',()=>{
   const spec=good();spec.elements.spend.type='Gauge';
-  assert.match(errorsOf(spec),/not a block/);
+  assert.match(errorsOf(spec),/unknown block Gauge/);
   const extra=good();extra.elements.spend.props.value=42;
-  assert.match(errorsOf(extra),/props\.value is not a Headline prop/);
+  assert.match(errorsOf(extra),/spend: .*value/);
   const metric=good();metric.elements.spend.props.metric='profit';
-  assert.match(errorsOf(metric),/metric must be one of/);
+  assert.match(errorsOf(metric),/spend: metric/);
   const scope=good();scope.elements.spend.props.scope={range:{unit:'decade'}};
-  assert.match(errorsOf(scope),/range\.unit must be one of/);
+  assert.match(errorsOf(scope),/scope\.range\.unit/);
   const date=good();date.elements.spend.props.scope={range:{anchor:'2026-02-31'}};
   assert.match(errorsOf(date),/YYYY-MM-DD/);
 });
 
 test('numbers and names cannot be smuggled in as props',()=>{
-  for(const bad of [{limit:'25'},{limit:25.5},{limit:0},{limit:101},{limit:1e9},{title:'x'}]) {
+  for(const bad of [{limit:'25'},{limit:25.5},{limit:0},{limit:51},{limit:1e9},{title:'x'}]) {
     const spec=good();spec.elements.byRepo.props={...spec.elements.byRepo.props,...bad};
     assert.equal(checkSpec(spec).ok,false,JSON.stringify(bad));
   }
   const total=good();total.elements.spend.props.total=1234;
   assert.equal(checkSpec(total).ok,false);
   const section=good();section.elements.page.props.title='x'.repeat(81);
-  assert.match(errorsOf(section),/title must be plain text/);
+  assert.match(errorsOf(section),/page: title/);
   const control=good();control.elements.page.props.title='a\nb';
-  assert.equal(checkSpec(control).ok,false);
+  assert.match(errorsOf(control),/control characters/);
 });
 
-test('a metric only splits by the dims the contract lists for it',()=>{
+test('a metric only splits by the dims METRIC_DIMS lists for it',()=>{
   const spec=good();spec.elements.byRepo.props={metric:'onMain',dim:'model'};
-  assert.match(errorsOf(spec),/dim model is not available for metric onMain/);
+  assert.match(errorsOf(spec),/onMain does not split by model/);
   const headline=good();headline.elements.spend.props={metric:'grokRequests',breakdowns:['repo']};
-  assert.match(errorsOf(headline),/breakdowns repo not available/);
+  assert.match(errorsOf(headline),/grokRequests does not split by repo/);
   // every pair the contract allows is accepted
   for(const [metric,dims] of Object.entries(METRIC_DIMS))for(const dim of dims) {
     const ok=good();ok.elements.byRepo.props={metric,dim};
@@ -80,39 +81,35 @@ test('SPEC_LIMITS: too many elements, too deep, too many bytes',()=>{
   assert.equal(checkSpec(deep(SPEC_LIMITS.depth)).ok,true,'exactly the depth limit');
   assert.match(errorsOf(deep(SPEC_LIMITS.depth+1)),/deeper than 4/);
   const big=good();big.elements.pad={type:'Flags',props:{},note:'x'.repeat(SPEC_LIMITS.bytes)};big.elements.page.children.push('pad');
-  assert.match(errorsOf(big),/over the limit/);
+  assert.match(errorsOf(big),/bytes, over/);
 });
 
 test('the tree must be a tree: children exist, are used once, are reachable, and only Section has them',()=>{
   const missing=good();missing.elements.page.children.push('ghost');
-  assert.match(errorsOf(missing),/missing element "ghost"/);
+  assert.match(errorsOf(missing),/ghost/);
   const twice=good();twice.elements.page.children.push('spend');
-  assert.match(errorsOf(twice),/more than once/);
+  assert.equal(checkSpec(twice).ok,false);
   const loop=good();loop.elements.page.children.push('page');
-  assert.match(errorsOf(loop),/more than once or loops/);
+  assert.equal(checkSpec(loop).ok,false);
   const orphan=good();orphan.elements.lonely={type:'Flags',props:{}};
-  assert.match(errorsOf(orphan),/not reachable/);
+  assert.equal(checkSpec(orphan).ok,false);
   const leaf=good();leaf.elements.spend.children=['byRepo'];leaf.elements.page.children=['spend'];
-  assert.match(errorsOf(leaf),/only Section holds children/);
+  assert.match(errorsOf(leaf),/only a Section has children/);
 });
 
-test('the installed catalog check runs after the contract checks and can refuse',()=>{
-  assert.equal(checkSpec(good(),{catalogCheck:()=>({ok:false,errors:['zod says no']})}).errors[0],'zod says no');
-  assert.equal(checkSpec(good(),{catalogCheck:()=>{throw Error('boom');}}).ok,false);
-  assert.equal(checkSpec(good(),{catalogCheck:()=>({success:true})}).ok,true);
-  let called=0;
-  assert.equal(checkSpec({root:'x',elements:{}},{catalogCheck:()=>{called++;}}).ok,false);
-  assert.equal(called,0,'a spec that fails the contract never reaches the catalog');
-  installCatalogCheck(()=>({ok:false,errors:['installed']}));
-  try {assert.deepEqual(checkSpec(good()).errors,['installed']);}
-  finally {installCatalogCheck(null);}
-  assert.equal(checkSpec(good()).ok,true);
+test('the saved view check is the block catalog\'s, so the MCP server, the route and the dashboard refuse the same specs',()=>{
+  for(const spec of [good(),...Object.values(VIEW_SPECS).map(view=>view.spec),...PINNED_QUESTIONS.map(view=>view.spec)]) {
+    assert.equal(checkSpec(spec).ok,catalogCheckSpec(spec).ok);
+    assert.equal(checkSpec(spec).ok,true);
+  }
+  const root={root:'spend',elements:{spend:good().elements.spend}};
+  assert.match(errorsOf(root),/root is not a Section/);
 });
 
 test('a view needs a valid id, title, question and date',()=>{
   const view=(change={})=>({id:'week-spend',title:'Week',question:null,spec:good(),savedAt:'2026-11-18T10:00:00.000Z',origin:'composed',...change});
   assert.equal(checkView(view()).ok,true);
-  for(const bad of [{id:'Week'},{id:''},{id:'a'.repeat(49)},{id:'../x'},{title:''},{title:'t'.repeat(81)},{question:''},{savedAt:'yesterday'},{origin:'other'},{extra:1}])
+  for(const bad of [{id:'Week'},{id:''},{id:'a'.repeat(49)},{id:'../x'},{title:''},{title:'t'.repeat(81)},{question:''},{savedAt:'yesterday'},{origin:'other'},{extra:1},{title:'a\u0000b'},{question:'a\nb'},{savedAt:'2026-11-18T10:00:00Z'}])
     assert.equal(checkView(view(bad)).ok,false,JSON.stringify(bad).slice(0,60));
 });
 

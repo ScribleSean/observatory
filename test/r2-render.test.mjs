@@ -128,7 +128,8 @@ test('saved views are drawn only when they name catalog blocks, and a missing fi
   const good={id:'my-view',title:'My view',question:'What ran?',savedAt:'2026-11-18T00:00:00.000Z',origin:'composed',spec:{root:'root',elements:{root:{type:'Section',props:{title:null,columns:12},children:['a']},a:{type:'Flags',props:{}}}}};
   const bad={...good,id:'bad',spec:{root:'root',elements:{root:{type:'Script',props:{}}}}};
   assert.deepEqual(savedViewsFrom(null),[]);
-  assert.deepEqual(savedViewsFrom({views:[good,bad,{id:'x'}]}).map(view=>view.id),['my-view']);
+  const stray={...good,id:'stray',spec:{root:'root',elements:{root:{type:'Section',props:{title:null,columns:12},children:['a']},a:{type:'Flags',props:{spend:642}}}}};
+  assert.deepEqual(savedViewsFrom({views:[good,bad,stray,{id:'x'}]}).map(view=>view.id),['my-view'],'the catalog check refuses a number carried in a stray prop');
   const html=clean(render({saved:savedViewsFrom([good]),initialPin:'my-view'}));
   assert.ok(html.includes('>My view</button>') && html.includes('Needs you'));
 });

@@ -1,7 +1,8 @@
 // The built-in views as json-render specs over the block catalog (lib/r2-blocks.mjs), until
 // lib/r2-specs.mjs lands with lane b. A spec names blocks and queries. It never holds a number.
 import type { Spec } from '@json-render/react';
-import { BLOCK_TYPES, SPEC_LIMITS } from '../../../lib/r2-blocks.mjs';
+import { SPEC_LIMITS } from '../../../lib/r2-blocks.mjs';
+import { checkSavedView } from '../../../lib/r2-catalog.mjs';
 import type { SavedView, ScopePatch } from './data';
 
 type Element = { type: string; props: Record<string, unknown>; children?: string[] };
@@ -96,20 +97,8 @@ export function withoutBlocks(body: Spec, hidden: string[]): Spec {
   return { ...body, elements } as Spec;
 }
 
-/** A light check of a saved view before it is drawn: known blocks only, within the catalog's limits. */
-export function drawable(value: unknown): value is SavedView {
-  const row = value as Partial<SavedView> | null;
-  const body = row?.spec as Partial<Spec> | undefined;
-  if (!row || typeof row.id !== 'string' || !/^[a-z0-9-]{1,48}$/.test(row.id) || typeof row.title !== 'string' || row.title.length > 80) return false;
-  if (!body || typeof body.root !== 'string' || !body.elements || typeof body.elements !== 'object' || !body.elements[body.root]) return false;
-  const elements = Object.values(body.elements);
-  if (elements.length > SPEC_LIMITS.elements || JSON.stringify(body).length > SPEC_LIMITS.bytes) return false;
-  return elements.every(element => element && (BLOCK_TYPES as readonly string[]).includes(element.type) && typeof element.props === 'object' && element.props !== null
-    && (element.children ?? []).every(key => typeof key === 'string' && key in (body.elements ?? {})));
-}
-
-/** The saved views file from GET /local/views.json: a list, or an object holding one. */
+/** The saved views file from GET /local/views.json: a list, or an object holding one. Each view passes the catalog check before it is drawn. */
 export function savedViewsFrom(body: unknown): SavedView[] {
   const list = Array.isArray(body) ? body : Array.isArray((body as { views?: unknown } | null)?.views) ? (body as { views: unknown[] }).views : [];
-  return list.filter(drawable).slice(0, SPEC_LIMITS.savedViews).map(row => ({ ...row, origin: 'composed' as const }));
+  return list.filter(row => checkSavedView(row).ok).slice(0, SPEC_LIMITS.savedViews).map(row => ({ ...row, origin: 'composed' as const }));
 }
