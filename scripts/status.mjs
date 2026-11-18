@@ -6,7 +6,6 @@ import {pathToFileURL} from 'node:url';
 import {promisify} from 'node:util';
 import {defaultDataFolder, loadConfig, localFolder} from '../lib/config.mjs';
 import {agentStatus, ENGINES, WINDOWS} from '../lib/agent-status.mjs';
-import {durationText} from './display-format.mjs';
 
 export const EXIT_BAD_ARGUMENTS = 2;
 export const EXIT_NO_READING = 3;
@@ -73,13 +72,17 @@ export function describe(status, byAge = 0) {
   const lines = [];
   for (const id of ['claude', 'codex']) {
     const engine = status.engines[id];
+    if (engine.sourceOff) continue;
     const parts = WINDOWS.map(windowId => {
       const item = engine.windows[windowId];
       // An engine reads ok with a window that has no number only when the reading marks that window absent.
+      // An old reading says its last value with when it was read, the same wording as an old forecast. Past its reset it is Unknown.
+      if (item.percentLeft === null && item.lastReading) return `${windowNames[windowId]} ${Math.round(100 - item.lastReading.percentLeft)}% used, ${item.lastReading.asOfLabel}`;
       if (item.percentLeft === null) return `${windowNames[windowId]} ${engine.status === 'ok' ? 'none' : 'Unknown'}`;
-      const reset = item.minutesToReset === null ? 'reset Unknown' : `resets in ${durationText(item.minutesToReset * 60)}`;
+      // The stored reset label, as the Week page and the tray show it. Unknown when none is stored or the reset has passed.
+      const reset = item.forecast.resetsLabel ? item.forecast.resetsLabel : 'reset Unknown';
       const burn = item.burnPerHour === null ? '' : `, ${item.burnPerHour}%/h`;
-      return `${windowNames[windowId]} ${item.percentLeft}% left, ${reset}${burn}, ${item.pace}`;
+      return `${windowNames[windowId]} ${Math.round(100 - item.percentLeft)}% used, ${reset}${burn}, ${item.pace}`;
     });
     lines.push(`${names[id]}: ${parts.join(' | ')}`);
   }
@@ -89,6 +92,7 @@ export function describe(status, byAge = 0) {
   lines.push(`Route code: ${routed(status.route.code)}`);
   lines.push(`Route review, research: ${routed(status.route.review)}`);
   const age = byAge > 0 ? `, ${byAge} by marker age only` : '';
+  // Running jobs are their own fact: they print whatever the limits settings say.
   lines.push(`Job cap: ${status.cap.total} (Claude ${status.cap.claude}, Codex ${status.cap.codex}${status.cap.codexRunning === null ? '' : `, ${status.cap.codexRunning} Codex running${age}`}).`);
   return lines.join('\n');
 }

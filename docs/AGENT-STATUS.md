@@ -41,7 +41,7 @@
 
 - `schema` changes only when a field is removed or changes meaning.
 - `current` is true when at least one window has a current reading. The exit code is 0 when it is true and 3 when it is false.
-- `percentLeft` uses the menu bar rule in `lib/glance-limits.mjs`. A reading older than 10 minutes, marked stale, or past its reset time is `null`. Unknown is never 0.
+- `percentLeft` uses the menu bar rule in `lib/glance-limits.mjs`. A reading older than 10 minutes, marked stale, or past its reset time is `null`. Unknown is never 0. A stale reading that has not reached its reset keeps its last value in `lastReading` (`percentLeft` and `asOfLabel`), the way the forecast dates an old claim. `lastReading` is `null` otherwise.
 - `resetsAt` and `minutesToReset` are `null` when the reading is not current or the reset time is unknown.
 - `burnPerHour` is percentage points used per hour on average since the window opened, from the one forecast the hub stores in `combined.json` (`glance.forecast`, made by `lib/forecast.mjs`). It is `null` when there is not enough history.
 - `forecast` on each engine and window is that stored forecast, shown as stored. `sentence` and `phrase` are the words the dashboard, menu bar and tray show, worded in the user's time zone with the day always named. `runsOutAt` is when the window runs out at its present pace, and `earliestAt` and `latestAt` are the range past forecasts support. A "may run out from" sentence names `earliestAt`. `leftAtReset` is the share expected to be left at the reset. `resetsLabel` is the label the menu bar shows, such as "Resets Fri 5 PM". The engine's `forecast` also has `headline`, the menu bar's first line, and the `window` it is about. Every field is `null` when the stored forecast does not have it.

@@ -100,7 +100,7 @@ test('pace classification boundaries', () => {
 
 test('JSON shape is stable and carries no personal data', () => {
   const status = agentStatus(today, now);
-  const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace', 'forecast'];
+  const window = ['percentLeft', 'lastReading', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace', 'forecast'];
   assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route', 'cap', 'forecast', 'devices']);
   assert.deepEqual(Object.keys(status.forecast), ['asOf', 'timeZone', 'sentence', 'stale']);
   for (const device of status.devices) assert.deepEqual(Object.keys(device), ['host', 'state', 'stateLabel', 'collectedAt']);
@@ -367,7 +367,7 @@ test('a window with no number is unknown unless the reading marks it absent', ()
   assert.equal(absent.engines.codex.status, 'ok');
   assert.equal(absent.engines.claude.status, 'ok');
   // The plain report says an absent window is none, and keeps Unknown for a gap.
-  assert.match(describe(absent), /^Codex: 5-hour none \| weekly 90% left/m);
+  assert.match(describe(absent), /^Codex: 5-hour none \| weekly 10% used/m);
   assert.match(describe(gap), /^Codex: 5-hour Unknown \| weekly/m);
 });
 
@@ -456,7 +456,7 @@ test('Pro: a 5-hour window near its limit sets Claude pace, headroom and cap', (
   assert.deepEqual([claude.windows.five_hour.percentLeft, claude.windows.five_hour.minutesToReset, claude.windows.five_hour.burnPerHour], [12, 120, 29.3]);
   assert.equal(claude.windows.weekly.pace, 'spend');
   assert.equal(status.cap.claude, 1);
-  assert.match(describe(status), /^Claude: 5-hour 12% left, resets in 2h 0m, 29.3%\/h, slow \| weekly 80% left/m);
+  assert.match(describe(status), /^Claude: 5-hour 88% used, Resets (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}(:\d\d)? (AM|PM), 29.3%\/h, slow \| weekly 20% used/m);
   // 45% left with half the window to go, cooling to 5%/h: lasts with under 20 left, so hold, with slots from the 5-hour headroom.
   const holding = agentStatus(fixture({claude: [['five_hour', 300, 45, 150 * 60000, 5], ['seven_day', 10080, 80, 96 * hour, 1]], codex: proCodex}), now);
   assert.deepEqual([holding.engines.claude.pace, holding.engines.claude.effectiveHeadroom], ['hold', 90]);
@@ -479,7 +479,7 @@ test('Pro: a reading with only a 5-hour window, weekly marked not reported, is j
   assert.equal(claude.effectiveHeadroom, 100);
   assert.equal(claude.windows.weekly.percentLeft, null);
   assert.ok(status.cap.claude > 1);
-  assert.match(describe(status), /^Claude: 5-hour 50% left.* \| weekly none$/m);
+  assert.match(describe(status), /^Claude: 5-hour 50% used.* \| weekly none$/m);
   // Both windows marked not reported leaves nothing to judge on.
   const none = fixture({claude: [['five_hour', 300, 50, 2 * hour]], claudeNotReported: ['seven_day'], codex: proCodex});
   for (const row of none.glance.limits) if (row.provider === 'claude' && row.window === '5-hour') { delete row.remaining; row.absent = 'Not reported'; }

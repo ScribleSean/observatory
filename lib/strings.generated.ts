@@ -27,7 +27,7 @@ export const STRINGS = {
     "year": "Year"
   },
   "devices": {
-    "all": "Both",
+    "all": "All",
     "mac": "Mac",
     "pc": "PC",
     "device": "Computer",
@@ -85,7 +85,6 @@ export const STRINGS = {
     "percent": "{value}%",
     "under": "<{value}",
     "usd": "${value}",
-    "resetsIn": "Resets in {span}",
     "asOf": "as of {time}",
     "separator": " · ",
     "since": "Since {date}"
@@ -171,7 +170,7 @@ export const STRINGS = {
     "off": "Off"
   },
   "overview": {
-    "bothNote": "Both computers, not deduplicated",
+    "bothNote": "All computers, not deduplicated",
     "lastSeen": "Last seen {time}"
   },
   "limitHistory": {
@@ -179,8 +178,8 @@ export const STRINGS = {
     "range": "Range",
     "fiveHour": "5-hour",
     "weekly": "weekly",
-    "chartTitle": "{provider} {window} limit left over time",
-    "left": "{value}% left",
+    "chartTitle": "{provider} {window} limit used over time",
+    "used": "{value}% used",
     "noReadings": "No readings in this range",
     "windowSpan": "{start} to {end}",
     "time": "Time",

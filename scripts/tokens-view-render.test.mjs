@@ -43,7 +43,7 @@ void test('sample Both shows one combined total over each computer, and settings
   const claude = card(html, 'Claude');
   const codex = card(html, 'Codex');
   for (const provider of [claude, codex])
-    for (const text of ['Both computers, not deduplicated', '>Mac<', '>PC<']) assert.ok(provider.includes(text), text);
+    for (const text of ['All computers, not deduplicated', '>Mac<', '>PC<']) assert.ok(provider.includes(text), text);
   const own = host => tokensView(source, { host, period: 'day', now }).codex.totals.total;
   const fresh = ({ total, cached }) => total - cached;
   // The headline leaves cache reads out.
