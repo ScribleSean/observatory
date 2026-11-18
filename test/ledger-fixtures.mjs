@@ -69,7 +69,8 @@ export async function commitFile(repo,name,at,message='Change') {
 // Claude Code lists SESSION_DAY_TOP sessions and folds 40 more into compact rows, and Codex lists 6. Each
 // session uses 3 models, 4 work kinds and 2 repositories. For the size checks only, so the numbers need
 // not add up. (Two tools that each list SESSION_DAY_TOP sessions at the widest breakdowns every day for
-// MIN_SESSION_DAYS days do not fit LEDGER_HISTORY_BUDGET.)
+// MIN_SESSION_DAYS days, about 2.4 MB, do not fit LEDGER_HISTORY_BUDGET with every session row: the oldest
+// days' session rows go, as scripts/snapshot-size.test.mjs checks.)
 export async function yearOfLedgerHistory(host,now,{days=365,tools=['claude','codex'],extraSessions=40,listed={claude:30,codex:6},models:modelCount=3,kinds:kindCount=4,repos:repoCount=2}={}) {
   const {LEDGER_HISTORY_SCHEMA,SESSION_DAY_TOP,MAX_SESSION_MODELS,MAX_SESSION_KINDS,MAX_SESSION_REPOS,MAX_DAY_REPOS}=await import('../lib/r2-shape.mjs');
   const width=(count,max)=>Math.min(count,max);
