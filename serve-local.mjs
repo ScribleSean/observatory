@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {statSync} from 'node:fs';
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -83,8 +84,25 @@ export function watchParent(parent,{intervalMs=2000,exit=()=>process.exit(0),cur
   return ()=>clearInterval(timer);
 }
 
+// A server started before an update would keep its old code in memory while it serves the new page
+// from disk, so the page would ask for data the old code does not make. Setup rebuilds the page on every
+// update, so the server notes when the page was built and exits once it is rebuilt, even to the same bytes.
+// The app starts a new server on the next Open dashboard.
+export function watchBuild(file,{intervalMs=2000,exit=()=>process.exit(0)}={}) {
+  const stamp=()=>{try {const info=statSync(file);return `${info.mtimeMs}:${info.size}`;}catch {return null;}};
+  const first=stamp();
+  const timer=setInterval(()=>{
+    if(stamp()===first)return;
+    console.log('The dashboard was rebuilt, so this server is stopping. Open the dashboard again to start the new one.');
+    exit();
+  },intervalMs);
+  timer.unref();
+  return ()=>clearInterval(timer);
+}
+
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   if(process.argv.includes('--with-parent'))watchParent(process.ppid,{intervalMs:Number(process.env.OBSERVATORY_PARENT_CHECK_MS) || 2000});
+  watchBuild(path.join(here,'dist/dashboard','index.html'));
   const config=await loadConfig();
   const port=config.dashboard.port;
   createLocalServer({dataFolder:config.dataFolder}).listen(port,'127.0.0.1',()=>console.log(`Observatory dashboard: http://127.0.0.1:${port}`))

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,utimes,writeFile} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -62,4 +62,28 @@ test('a server whose app was already gone when it started exits at once',async()
   const stop=watchParent(process.pid,{exit:()=>{exited+=10;},currentParent:()=>process.pid});
   stop();
   assert.ok(exited<10);
+});
+
+// A server started before an update keeps its old code in memory while it serves the new page from disk,
+// so the new page asks for data the old code never makes (the Week view stayed on its first-run screen).
+for(const {change,rebuild} of [{change:'a new page',rebuild:page=>writeFile(page,'<script src="/assets/new.js"></script>')},
+  {change:'the same page',rebuild:page=>utimes(page,new Date(),new Date(Date.now()+60000))}]) {
+  test(`a server exits once the dashboard is rebuilt to ${change}`,()=>withFolder(async folder=>{
+    const {watchBuild}=await import('../serve-local.mjs');
+    const page=path.join(folder,'index.html');
+    await writeFile(page,'<script src="/assets/old.js"></script>');
+    let exited=0;
+    const stop=watchBuild(page,{intervalMs:50,exit:()=>{exited++;}});
+    try {
+      await new Promise(resolve=>setTimeout(resolve,200)); // sleep-ok: several checks of an unchanged build must pass without an exit
+      assert.equal(exited,0,'an unchanged build keeps the server');
+      await rebuild(page);
+      assert.ok(await until(()=>exited>0,2000),'the server kept serving after the rebuild');
+    } finally {stop();}
+  }));
+}
+
+test('the command-line server watches the build it serves',async()=>{
+  const source=await readFile(path.join(repo,'serve-local.mjs'),'utf8');
+  assert.match(source,/watchBuild\(path\.join\(here,'dist\/dashboard','index\.html'\)/);
 });
