@@ -26,7 +26,7 @@ const snapshot = () => {
 };
 const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, ...props }));
 const count = (html, pattern) => [...html.matchAll(pattern)].length;
-const card = (html, title) => html.split('aria-label="' + title + ' limit left over time"')[1]?.split('</section>')[0] ?? assert.fail(title + ' card missing');
+const card = (html, title) => html.split('aria-label="' + title + ' limit used over time"')[1]?.split('</section>')[0] ?? assert.fail(title + ' card missing');
 
 void test("a chart's header names the engine and window only, with no number, Unknown or reset note", () => {
   assert.equal(LimitsView, NamedLimitsView);
@@ -138,10 +138,10 @@ void test('a window the provider does not report has no chart unless it has read
   const data = snapshot();
   data.quota.windows = [{ bucket: 'codex', window: 'primary', durationMinutes: 43200, remainingPercent: 70, resetsAt: iso(600) }];
   const html = render(data);
-  assert.equal(count(html, /aria-label="Codex [^"]* limit left over time"/g), 1);
-  assert.ok(!html.includes('aria-label="Codex 5-hour limit left over time"') && !html.includes('aria-label="Codex weekly limit left over time"'));
+  assert.equal(count(html, /aria-label="Codex [^"]* limit used over time"/g), 1);
+  assert.ok(!html.includes('aria-label="Codex 5-hour limit used over time"') && !html.includes('aria-label="Codex weekly limit used over time"'));
   assert.match(card(html, 'Codex 30-day'), /<span class="ob-meta">30-day<\/span>/);
   assert.doesNotMatch(card(html, 'Codex 30-day'), /70%/);
   const kept = history([{ host: 'Mac', status: 'ok', points: [-30, -20, -10].map(minutes => ({ p: 'codex', w: 'secondary', o: 'Mac', t: iso(minutes), r: 50, x: iso(200), d: 10080 })) }]);
-  assert.ok(kept.includes('aria-label="Codex weekly limit left over time"'));
+  assert.ok(kept.includes('aria-label="Codex weekly limit used over time"'));
 });

@@ -115,13 +115,13 @@ export function TokensSection({ result, projects = [], onHostChange, onPeriodCha
       <FilterGroup label={STRINGS.devices.period} value={result.period} onChange={onPeriodChange} options={periods} />
     </div>
     <div className="ob-tokens-providers">
-      <ProviderCard result={result} provider="claude" />
-      <ProviderCard result={result} provider="codex" />
+      {!result.off.includes('claude') && <ProviderCard result={result} provider="claude" />}
+      {!result.off.includes('codex') && <ProviderCard result={result} provider="codex" />}
     </div>
     <div className="ob-tokens-lower">
       {showProjects && <SessionsCard devices={projects} />}
       {showProjects && <ProjectsCard devices={projects} />}
-      <Card label={STRINGS.tokens.settingsTitle} title={STRINGS.tokens.settingsTitle}>
+      {!result.off.includes('codex') && <Card label={STRINGS.tokens.settingsTitle} title={STRINGS.tokens.settingsTitle}>
         {result.settings.map(device => <div key={device.host} className="ob-tokens-settings">
           {result.settings.length > 1 && <h4>{device.label}</h4>}
           {device.status !== 'ok' ? <p className="ob-meta">{device.status === 'no-records' ? STRINGS.tokens.noSettings : STRINGS.status.unknown}</p>
@@ -132,7 +132,7 @@ export function TokensSection({ result, projects = [], onHostChange, onPeriodCha
               </tr>)}</tbody>
             </table></div>}
         </div>)}
-      </Card>
+      </Card>}
     </div>
   </div>;
 }

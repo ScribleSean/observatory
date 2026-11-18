@@ -85,7 +85,6 @@ export const STRINGS = {
     "percent": "{value}%",
     "under": "<{value}",
     "usd": "${value}",
-    "resetsIn": "Resets in {span}",
     "asOf": "as of {time}",
     "separator": " · ",
     "since": "Since {date}"
@@ -179,8 +178,8 @@ export const STRINGS = {
     "range": "Range",
     "fiveHour": "5-hour",
     "weekly": "weekly",
-    "chartTitle": "{provider} {window} limit left over time",
-    "left": "{value}% left",
+    "chartTitle": "{provider} {window} limit used over time",
+    "used": "{value}% used",
     "noReadings": "No readings in this range",
     "windowSpan": "{start} to {end}",
     "time": "Time",

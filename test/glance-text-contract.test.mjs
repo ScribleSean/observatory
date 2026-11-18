@@ -2,7 +2,10 @@
 // (test/forecast-contract.test.mjs) keeps the forecast the same everywhere. This one keeps what surrounds it the same:
 // a source that is off appears nowhere, a computer that is off adds nothing to a sum, and the reset label and the
 // percent framing are the stored ones on every surface.
-import test from 'node:test';
+import test, { after } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import assert from 'node:assert/strict';
 import { combine } from '../lib/combine.mjs';
 import { summaryOf } from '../lib/summary.mjs';
@@ -10,7 +13,20 @@ import { weekView } from '../lib/view-week.mjs';
 import { glanceView } from '../lib/glance-view.mjs';
 import { agentStatus } from '../lib/agent-status.mjs';
 import { describe } from '../scripts/status.mjs';
+import { limitRows } from '../lib/view-limits.mjs';
+import { limitHistorySeries } from '../lib/view-limit-history.mjs';
+import { tokensView } from '../lib/view-tokens.mjs';
+import strings from '../lib/strings.json' with { type: 'json' };
 import { ownSnapshot } from './helpers.mjs';
+
+// The dashboard's own pages, drawn on the server the way the other view tests draw them.
+const root = fileURLToPath(new URL('..', import.meta.url));
+const { createServer } = await import('vite');
+const { default: react } = await import('@vitejs/plugin-react');
+const server = await createServer({ configFile: false, root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
+after(() => server.close());
+const { LimitsView } = await server.ssrLoadModule('/app/viewer/limits/LimitsView.tsx');
+const { TokensSection } = await server.ssrLoadModule('/app/viewer/tokens/tokens.tsx');
 
 const HOUR = 3600000, MINUTE = 60000;
 const now = Date.parse('2026-11-18T12:40:00Z');
@@ -125,4 +141,36 @@ test('every surface says how much of a limit is used, never how much is left', (
   assert.match(shown.statusText, /weekly 73% used/);
   assert.equal(shown.week.headline.usedText, '73% used');
   for (const line of shown.tray.filter(row => LIMIT_LINE.test(row))) assert.match(line, /: (\d+% used|Unknown|Off|none)/, line);
+});
+
+test('a coming reset is never counted down on the dashboard: the stored label is the only wording', () => {
+  assert.ok(!JSON.stringify(strings).includes('Resets in'), 'no countdown wording is left in the strings');
+  const combined = fleet();
+  const rows = limitRows(combined.view, now).filter(row => row.windowId);
+  assert.ok(rows.length >= 2);
+  for (const row of rows) assert.equal(row.note, '', `${row.name} ${row.window}`);
+});
+
+const noop = () => {};
+const tokensPage = (combined, period = 'week') => renderToStaticMarkup(createElement(TokensSection, {
+  result: tokensView(combined.view, { host: 'All', period, now }), onHostChange: noop, onPeriodChange: noop, now }));
+
+test('with Codex tokens off, the Tokens page has no Codex card, even when a computer that is off carries one', () => {
+  assert.ok(tokensPage(fleet({ codex: true })).includes('aria-label="Codex"'), 'the check bites: with Codex on, the card is drawn');
+  const combined = fleet({ codex: false });
+  assert.ok(combined.snapshots.Windows.tokens.length === 0, 'no copy of the PC tokens is kept');
+  assert.deepEqual(combined.view.tokens.map(row => row.status), ['not-connected', 'not-connected', 'not-connected'].slice(0, combined.view.tokens.length));
+  assert.ok(!tokensPage(combined).includes('Codex'), 'no Codex card or word on the page');
+  assert.ok(tokensPage(combined).includes('aria-label="Claude"'), 'Claude is still drawn');
+});
+
+test('the limit history is drawn as the percent used, in the same words as every other surface', () => {
+  const combined = fleet();
+  const data = limitHistorySeries(combined.view, { provider: 'claude', window: 'week', range: 'week', now });
+  assert.ok(data.series[0].points.length > 10);
+  for (const point of data.series[0].points) assert.equal(point.used, Math.round((100 - point.r) * 100) / 100);
+  const html = renderToStaticMarkup(createElement(LimitsView, { snapshot: combined.view, now }));
+  assert.match(html, /limit used over time/);
+  assert.doesNotMatch(html, /left over time|% left/);
+  assert.match(html, /\d+% used/);
 });
