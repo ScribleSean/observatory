@@ -4,7 +4,7 @@ import type { Frame, GrokRequestsVM, LimitWindowVM, LimitsVM } from '../../../..
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildLimits, resolveBlock } from '../../../../lib/view-r2.mjs';
 import { limitHistorySeries } from '../../../../lib/view-limit-history.mjs';
-import { LimitMeter, windowNow, type Engine } from '../blocks/LimitMeter';
+import { LimitMeter, NOT_REPORTED, windowNow, type Engine } from '../blocks/LimitMeter';
 import { GrokRequests } from '../blocks/GrokRequests';
 import { Block, BarList, Empty, StateView, Strip, Tail, UNKNOWN, addDays, clock, dateIn, dateSpan, dayClock, names, shortDate, span, weekday, type Cell } from './parts';
 import './more.css';
@@ -42,6 +42,21 @@ function pastRows(window: LimitWindowVM, timeZone: string) {
   }));
 }
 
+// A tag's height as a percent of the chart at its shortest (140px), so two tags never share a band at any width.
+const TAG = 13;
+
+/**
+ * Where the "now" and "at the reset" tags start, as percents from the chart's top. The reset tag sits above its point,
+ * or below it when the point is near the top. The now tag sits beside its point, or above or below it, whichever
+ * keeps it out of the reset tag's band.
+ */
+export function tagTops(now: number, reset: number | null) {
+  const resetTop = reset === null ? null : reset >= 1.2 * TAG ? reset - 1.1 * TAG : reset + 0.3 * TAG;
+  const clear = (top: number) => resetTop === null || top + TAG <= resetTop || top >= resetTop + TAG;
+  const nowTop = [now - 0.5 * TAG, now + 0.4 * TAG, now - 1.1 * TAG].find(clear) ?? resetTop! + TAG;
+  return { now: nowTop, reset: resetTop };
+}
+
 function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; readings: Reading[]; now: number; timeZone: string }) {
   const state = windowNow(window, now);
   if (state.reset === null || state.length === null) return <Empty title={UNKNOWN} line="The weekly window has no reset time yet." />;
@@ -49,10 +64,12 @@ function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; read
   const x = (at: number) => Math.max(0, Math.min(1000, 1000 * (at - start) / state.length!));
   const y = (used: number) => 100 - Math.max(0, Math.min(100, used));
   const points = readings.filter(reading => reading.at >= start && reading.at <= now).sort((a, b) => a.at - b.at);
-  if (state.used !== null) points.push({ at: now, used: state.used });
+  // An old reading is already the last point: nothing is drawn after it.
+  if (state.used !== null && !window.asOf) points.push({ at: now, used: state.used });
   if (points.length === 0) return <Empty title="No readings yet" line="The line starts with the first reading of this window." />;
   const path = points.map((point, index) => `${index ? 'L' : 'M'}${x(point.at).toFixed(0)},${y(point.used).toFixed(1)}`).join(' ');
   const last = points.at(-1)!, nowX = x(last.at);
+  const tags = tagTops(y(last.used), state.projected === null ? null : y(state.projected));
   const today = dateIn(now, timeZone);
   const ticks: { date: string; left: number }[] = [];
   for (let date = addDays(dateIn(start, timeZone), 1); ; date = addDays(date, 1)) {
@@ -75,8 +92,8 @@ function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; read
       <span className="y" style={{ top: 0 }}>100%</span><span className="y" style={{ top: '50%' }}>50%</span><span className="y" style={{ top: '100%' }}>0</span>
       {ticks.map(tick => <span key={tick.date} className={`x${tick.date === today ? ' now' : ''}`} style={{ left: `${100 * tick.left}%` }}>{weekday(tick.date)}</span>)}
       <i className="pt" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%` }} />
-      <span className="tagl" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%`, transform: nowX > 150 ? 'translate(-100%,-150%)' : 'translate(8px,-150%)' }}><b>{pct(last.used)}</b> <span className="fa">now</span></span>
-      {state.projected !== null && <span className="tagl" style={{ right: 0, top: `${y(state.projected)}%`, transform: 'translateY(90%)' }}><b className="mu">{pct(state.projected)}</b> <span className="fa">at the reset</span></span>}
+      <span className="tagl" style={{ left: `${nowX / 10}%`, top: `${tags.now}%`, transform: nowX > 150 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)' }}><b>{pct(last.used)}</b> <span className="fa">now</span></span>
+      {tags.reset !== null && <span className="tagl" style={{ right: 0, top: `${tags.reset}%` }}><b className="mu">{pct(state.projected!)}</b> <span className="fa">at the reset</span></span>}
     </div>
   );
 }
@@ -96,8 +113,9 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
   const grokWeek = lastWeek.some(day => day.value === null) ? null : lastWeek.reduce((sum, day) => sum + day.value!, 0);
   const cells: Cell[] = [
     state && state.used !== null
-      ? { label: 'Claude Code weekly limit', value: pct(state.used), unit: 'used', accent: state.used >= 100,
-        context: state.reset ? `resets ${dayClock(state.reset, timeZone, now)}, in ${span(state.reset - now)}` : readOn ?? '' }
+      ? { label: 'Claude Code weekly limit', value: pct(state.used), unit: 'used', accent: state.used >= 100 && !weekly?.asOf,
+        // The stored reset label, never a countdown. An old reading says when it was read.
+        context: weekly?.asOf ?? weekly?.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone, now)}` : readOn ?? '') }
       : { label: 'Claude Code weekly limit', value: claude ? UNKNOWN : 'Off', unknown: true, context: claude ? weekly?.checkedAt ? `not reported since ${shortDate(dateIn(Date.parse(weekly.checkedAt), timeZone))}` : 'no reading yet' : 'turned off in settings' },
     state && state.gone !== null && state.length
       ? { label: 'Week gone', value: pct(100 * state.gone), context: `${span(state.gone * state.length)} of 7d` }
@@ -108,12 +126,14 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
     lastFour.length
       ? { label: 'Weeks that ran out early', value: String(ranOut.length), unit: `of the last ${lastFour.length}`, context: ranOut.length ? `last in the week of ${shortDate(ranOut[0].key)}` : 'every recorded week lasted' }
       : { label: 'Weeks that ran out early', value: UNKNOWN, context: 'no past weeks recorded' },
-    five && five.used !== null
-      ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: five.reset ? `resets ${clock(five.reset, timeZone, now)}` : '' }
+    fiveHour?.state === 'absent'
+      ? { label: 'Claude Code 5 hour', value: NOT_REPORTED, unknown: true, context: '' }
+      : five && five.used !== null
+      ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: fiveHour?.asOf ?? fiveHour?.forecastResets ?? (five.reset ? `Resets ${dayClock(five.reset, timeZone, now)}` : '') }
       : { label: 'Claude Code 5 hour', value: UNKNOWN, context: fiveHour?.checkedAt ? `not in the ${clock(fiveHour.checkedAt, timeZone, now)} read` : 'not reported by the app' },
     grok
       ? { label: 'Grok requests', value: grokWeek === null ? UNKNOWN : String(grokWeek), unit: 'last 7 days',
-        context: grok.weekly && grok.weekly.remaining !== null ? `weekly limit ${Math.round(grok.weekly.remaining)}% left` : 'weekly limit Unknown' }
+        context: grok.weekly && grok.weekly.remaining !== null ? `weekly limit ${Math.round(100 - grok.weekly.remaining)}% used` : 'weekly limit Unknown' }
       : { label: 'Grok', value: 'Off', unknown: true, context: 'off, or no requests read' },
   ];
   const stale = byDevice.filter(device => device.points === null).map(device => device.name);
@@ -140,7 +160,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
                 <td className="r strong">{state?.used === null || !state ? UNKNOWN : pct(state.used)}</td></tr>
               {past.slice(0, 6).map(row => (
                 <tr key={row.key}><td className="name">{row.dates}
-                  <div className="sub">{row.used === null ? UNKNOWN : row.ranOut ? <span className="acc">Ran out before the reset</span> : `Lasted, ${pct(100 - row.used)} unused`}</div></td>
+                  <div className="sub">{row.used === null ? UNKNOWN : row.ranOut ? <span className="acc">Ran out before the reset</span> : 'Lasted to the reset'}</div></td>
                   {/* zero-ok: meter width only, the cell beside it reads Unknown */}
                   <td style={{ width: '34%' }} aria-hidden="true"><div className="meter" style={{ margin: 0 }}><i style={{ width: `${row.used ?? 0}%`, ...(row.ranOut ? { background: 'var(--accent)' } : {}) }} /></div></td>
                   <td className={`r strong${row.used === null ? ' fa' : ''}`}>{row.used === null ? UNKNOWN : pct(row.used)}</td></tr>
@@ -159,7 +179,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
         </Block>
       )}
       {grok && <GrokRequests vm={grok} timeZone={timeZone} today={today} now={now} />}
-      {claude && (fiveHour && five?.used !== null
+      {claude && (fiveHour && (five?.used !== null || fiveHour.state === 'absent')
         ? <Block title="Claude Code 5 hour"><LimitMeter engine={claude} windowId={fiveHour.windowId} now={now} timeZone={timeZone} /></Block>
         : <Block title="Claude Code 5 hour"><Empty title={UNKNOWN} line={fiveHour?.checkedAt ? `The app did not report this window in the ${clock(fiveHour.checkedAt, timeZone, now)} read. It shows here when it does.` : 'The app has not reported this window. It shows here when it does.'} /></Block>)}
       {codex && (

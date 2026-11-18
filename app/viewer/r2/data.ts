@@ -4,7 +4,7 @@ import { createContext, useContext } from 'react';
 import type { Spec } from '@json-render/react';
 import { readAt, when } from '../../../lib/forecast.mjs';
 
-export { defaultScope, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
+export { defaultScope, limitsOn, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
 export { buildFrame, buildOverview, buildSessions, buildTokens, buildScreenTime, metric, answerQuestion, resolveBlock } from '../../../lib/view-r2.mjs';
 
 export type Scope = import('../../../lib/scope.mjs').Scope;

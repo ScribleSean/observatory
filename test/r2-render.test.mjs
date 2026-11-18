@@ -26,6 +26,11 @@ const {default:R2App}=await server.ssrLoadModule('/app/viewer/r2/App.tsx');
 const now=Date.parse('2026-11-18T15:00:00Z');
 const combined=sampleR2Combined(now);
 const render=props=>renderToStaticMarkup(createElement(R2Shell,{snapshot:combined,now,loaded:true,...props}));
+// Each view but Overview loads on first open (App.tsx, blocks/more.tsx). Drawn on the server, the first draw shows the
+// loading state, so draw each once and wait for its module before the checks.
+for(const hash of ['#sessions','#limits','#tokens','#screen-time','#drift','#settings'])render({initialHash:hash});
+await Promise.all(['Sessions','Limits','Tokens','ScreenTime','Drift','Settings'].map(name=>server.ssrLoadModule(`/app/viewer/r2/views/${name}.tsx`)));
+for(let turn=0;turn<5;turn++)await new Promise(resolve=>setTimeout(resolve,0));
 const clean=html=>{assert.ok(!html.includes('NaN') && !html.includes('undefined') && !html.includes('[object'),'no broken value');return html;};
 const text=html=>html.replace(/<style[\s\S]*?<\/style>/g,'').replace(/<[^>]+>/g,' ');
 

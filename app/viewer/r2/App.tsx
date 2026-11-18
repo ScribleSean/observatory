@@ -1,18 +1,21 @@
 // The round 2 dashboard: one top bar, one scope bar, the Ask row and seven views. Every view is a
 // json-render spec over the block catalog, and every block reads its numbers through data.ts.
 // The dashboard only reads: it fetches two local JSON files and never writes.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { shiftDemoClock } from '../../../lib/demo-clock.mjs';
 import { R2Context, answerQuestion, buildFrame, defaultScope, hasHistory, patchScope, scopeFromSearch, scopeToSearch, type MetricId, type SavedView, type Scope, type Snapshot, type Ui, type ViewId } from './data';
 import { Nav, VIEWS, viewFromHash } from './Nav';
 import { ScopeBar } from './ScopeBar';
 import { AskField } from './AskField';
 import { Overview } from './views/Overview';
-import { SessionPanel, Sessions } from './views/Sessions';
 import { MoreView } from './blocks/more';
 import { OVERVIEW, PINS, blockList, savedViewsFrom, type Pin } from './specs';
 import type { Spec } from '@json-render/react';
 import './r2.css';
+
+// Sessions and its side panel load on first use, like the other views (blocks/more.tsx).
+const Sessions = lazy(() => import('./views/Sessions').then(module => ({ default: module.Sessions })));
+const SessionPanel = lazy(() => import('./views/Sessions').then(module => ({ default: module.SessionPanel })));
 
 type Theme = 'light' | 'dark' | null;
 const REFRESH_MS = 5 * 60000;
@@ -168,10 +171,10 @@ export function R2Shell({ snapshot, now, loaded, saved = [], initialHash = '', i
           </div>
           <main>
             {view === 'overview' ? <Overview pin={pin} hidden={hidden} question={question} missed={missed} onClear={() => openPin(OVERVIEW, null)} />
-              : view === 'sessions' ? <Sessions /> : <MoreView title={title} />}
+              : view === 'sessions' ? <Suspense fallback={null}><Sessions /></Suspense> : <MoreView title={title} />}
           </main>
         </div>
-        <SessionPanel />
+        <Suspense fallback={null}><SessionPanel /></Suspense>
       </R2Context>}
     </div>
   );

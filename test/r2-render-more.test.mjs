@@ -98,7 +98,7 @@ test('Limits reads Unknown, never 0, before the app reports a window', () => {
   assert.ok(markup.includes('Claude Code weekly limit') && markup.includes('Unknown'));
   assert.ok(!/>0%</.test(markup), 'no 0% for a window never read');
   assert.ok(markup.includes('not in the Nov 12, 5:00 AM read'), 'the 5 hour window says which read left it out, with its date');
-  assert.ok(markup.includes('requests per day, last 30 days') && markup.includes('64% left'), 'Grok shows requests per day and its weekly limit');
+  assert.ok(markup.includes('requests per day, last 30 days') && markup.includes('36% used'), 'Grok shows requests per day and the share of its weekly limit used');
   assert.ok(markup.includes('class="z unk"'), 'a day with no count read is drawn hollow');
   assert.ok(!markup.includes('$'), 'Grok requests are never in dollars');
 });
@@ -113,7 +113,7 @@ test('Limits shows the weekly limit once, with the computer it was read on, and 
   assert.ok(markup.includes('read on Studio'));
   assert.ok(markup.includes('89%') && markup.includes('at the reset'), 'the projection is the stored forecast: 11% left at the reset');
   assert.ok(markup.includes('Claude has room'), 'the stored forecast words, as the menu bar shows them');
-  assert.ok(markup.includes('Ran out before the reset') && markup.includes('Lasted, 6% unused'));
+  assert.ok(markup.includes('Ran out before the reset') && markup.includes('Lasted to the reset'));
   assert.ok(markup.includes('1<small>of the last 2</small>'));
   assert.equal(byDevice.length, 3);
   const known = byDevice.filter(device => device.points !== null);
@@ -210,7 +210,7 @@ test('every view renders through the real view-models for every range unit, with
   const limits = html(createElement(Limits, { snapshot: combined, scope: base, now: NOW }));
   assert.equal(limits.match(/Claude Code weekly limit/g)?.length, 1, 'the weekly limit shows once');
   assert.ok(limits.includes('read on Studio'), 'with the computer it was read on');
-  assert.ok(limits.includes('Grok') && limits.includes('64% left'));
+  assert.ok(limits.includes('Grok') && limits.includes('36% used'));
   const settings = html(createElement(Settings, { snapshot: combined, scope: base, now: NOW }));
   for (const control of ['<input', '<button', '<select']) assert.ok(!settings.includes(control), control);
   assert.ok(/\d+ sessions? · \$\d/.test(settings) && settings.includes('Lantern'), 'this week per role, with an example session');

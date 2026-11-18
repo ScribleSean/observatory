@@ -173,7 +173,8 @@ test('account limits show once each, with the computer they were read on, whatev
   const one = v.buildLimits(snapshot, at('week', '2026-11-18', { devices: ['Linux'] }), { now: NOW }).engines;
   assert.deepEqual(one, all);
   const claude = all.find(engine => engine.engine === 'claude');
-  assert.deepEqual(claude.windows.map(window => [window.label, window.remaining, window.readOn]), [['weekly', 40, 'Studio'], ['5 hour', null, 'Studio']]);
+  // The 5-hour window was left out of the latest reading, so it reads Not reported, with no number and no computer.
+  assert.deepEqual(claude.windows.map(window => [window.label, window.remaining, window.readOn, window.state]), [['weekly', 40, 'Studio', 'ok'], ['5 hour', null, null, 'absent']]);
   for (const engine of all) assert.equal(new Set(engine.windows.map(window => window.windowId)).size, engine.windows.length);
   // Codex reports a free plan with nothing left: it reads Off, with no number.
   const codex = all.find(engine => engine.engine === 'codex').windows[0];
@@ -203,7 +204,7 @@ test('the limits forecast is the one the hub stored, shown through shown() as ev
   assert.equal(v.buildLimits(none, at('week'), { now: NOW }).headline, 'Unknown');
   // The view-models only show the stored forecast: they never call the forecaster.
   const source = readFileSync(new URL('../lib/view-r2.mjs', import.meta.url), 'utf8');
-  assert.match(source, /import \{ readAt, shown, shownSentence \} from '\.\/forecast\.mjs';/);
+  assert.match(source, /import \{ lastReading, readAt, shown, shownSentence \} from '\.\/forecast\.mjs';/);
   assert.doesNotMatch(source, /windowForecast|projection\(|quota-pace|\bforecast\(/);
 });
 

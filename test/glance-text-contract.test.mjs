@@ -5,6 +5,8 @@
 // - A computer's own usage (tokens, settings, sessions, projects) is hidden only by that computer's setting.
 // - A computer that is off, or has a source off, adds nothing to the number it does not contribute to.
 // - The reset label, the percent framing and the wording of an old reading are the same on every surface.
+// The dashboard surfaces are the round 2 ones (lib/view-r2.mjs and app/viewer/r2): the Limits view, the Overview's
+// Limits now, the Sessions and Tokens views, and the sources the scope bar lists.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -19,11 +21,11 @@ import { glanceView } from '../lib/glance-view.mjs';
 import { agentStatus } from '../lib/agent-status.mjs';
 import { describe } from '../scripts/status.mjs';
 import { runHub, recombine } from '../scripts/hub.mjs';
-import { limitRows } from '../lib/view-limits.mjs';
 import { limitHistorySeries } from '../lib/view-limit-history.mjs';
-import { tokensView } from '../lib/view-tokens.mjs';
-import { historyView } from '../lib/view-history.mjs';
-import { projectsView } from '../lib/view-projects.mjs';
+import { buildLimits, buildOverview, buildSessions, buildTokens } from '../lib/view-r2.mjs';
+import { defaultScope, SOURCE_IDS } from '../lib/scope.mjs';
+import { sampleLedgerHistory } from '../lib/sample-r2.mjs';
+import { configEcho } from '../lib/config.mjs';
 import { compact } from '../lib/panel-data.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
 import { ownSnapshot, withFolder, testConfig } from './helpers.mjs';
@@ -34,8 +36,8 @@ const { createServer } = await import('vite');
 const { default: react } = await import('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
-const { LimitsView } = await server.ssrLoadModule('/app/viewer/limits/LimitsView.tsx');
-const { TokensSection } = await server.ssrLoadModule('/app/viewer/tokens/tokens.tsx');
+const { Limits } = await server.ssrLoadModule('/app/viewer/r2/views/Limits.tsx');
+const { Tokens } = await server.ssrLoadModule('/app/viewer/r2/views/Tokens.tsx');
 
 const HOUR = 3600000, MINUTE = 60000;
 // Wed Nov 18 2026, 7:40 AM in New York. Every reading below is made up.
@@ -72,7 +74,13 @@ const CODEX_QUOTA = { status: 'ok', plan: 'free', checkedAt: iso(now - MINUTE), 
 
 // This computer's own Codex usage, removed the way its own collector does when its Codex source is off.
 const withoutCodexUsage = (snapshot, host) => ({ ...snapshot, tokens: [{ host, status: 'not-connected' }], settings: [], projectTokens: [],
-  ledger: snapshot.ledger.map(row => ({ ...row, tools: row.tools.filter(tool => tool.tool !== 'codex') })) });
+  ledger: snapshot.ledger.map(row => ({ ...row, tools: row.tools.filter(tool => tool.tool !== 'codex') })),
+  ledgerHistory: snapshot.ledgerHistory.map(row => ({ ...row, days: row.days.filter(day => day.tool !== 'codex') })) });
+
+// What a round 2 collector adds to a snapshot: the daily ledger history (Claude Code and Codex) and the settings echo.
+const withRound2 = (snapshot, host, { name = host, role = 'spoke', sources = ALL_ON, at = now } = {}) => ({ ...snapshot,
+  ledgerHistory: [sampleLedgerHistory(host, at, { tools: ['claude', 'codex'], timeZone: 'America/New_York' })],
+  configEcho: configEcho({ host, device: { name }, role, sources: { ...sources, grokLimits: false } }, new Date(at).toISOString()) });
 
 /**
  * The hub's combined.json for the Mac. `others` says how each other computer reads: 'on', or 'off' (turned off in the
@@ -87,7 +95,10 @@ function fleet({ sources = CODEX_OFF, others = { Windows: 'off' }, ownCodex = []
       quota: host === 'Mac' ? base.quota : CODEX_QUOTA,
       activity: screenOff.includes(host) ? base.activity.map(row => ({ host: row.host, status: 'not-connected' })) : base.activity,
       limitHistory: [{ host, status: 'ok', points: [...parts.flatMap(part => part.points), ...codexHistory()] }] }));
-    return host === 'Mac' || ownCodex.includes(host) ? snapshot : withoutCodexUsage(snapshot, host);
+    // Every computer carries the Codex limit. The hub's echo is its own settings, another computer reads Codex only when asked.
+    const echo = host === 'Mac' ? { name: 'Studio Mac', role: 'hub', sources } : { name: 'Desk PC', sources: { ...ALL_ON, codex: ownCodex.includes(host) } };
+    const round2 = withRound2(snapshot, host, { ...echo, at });
+    return host === 'Mac' || ownCodex.includes(host) ? round2 : withoutCodexUsage(round2, host);
   };
   const devices = [{ host: 'Mac', name: 'Studio Mac', snapshot: own('Mac', now) }];
   for (const [host, state] of Object.entries(others))
@@ -101,19 +112,27 @@ function surfaces(combined) {
     week: weekView(summaryOf(clone(combined)), { now }), status, statusText: describe(status), stored: combined.glance.forecast };
 }
 
-const noop = () => {};
-const tokensPage = (view, host = 'All') => renderToStaticMarkup(createElement(TokensSection, {
-  result: tokensView(view, { host, period: 'week', now }), onHostChange: noop, onPeriodChange: noop, now }));
-const history = view => historyView(view, { range: 'month', engine: 'codex', now });
-const projects = view => projectsView(view, { host: 'All', now });
+// The round 2 dashboard, drawn on the server. Its scope is the one the dashboard opens with, so a source that is off is
+// not in it. `every` asks for every source anyway, to show that a hidden source is gone from the data, not only the bar.
+const scopeOf = (combined, at = now) => defaultScope(combined, { now: at });
+const every = (combined, at = now) => ({ ...scopeOf(combined, at), sources: [...SOURCE_IDS] });
+const limitsPage = (combined, at = now) => renderToStaticMarkup(createElement(Limits, { snapshot: combined, scope: scopeOf(combined, at), now: at }));
+const tokensPage = (combined, at = now) => renderToStaticMarkup(createElement(Tokens, { snapshot: combined, scope: every(combined, at), now: at }));
+const limitsVM = (combined, at = now) => buildLimits(combined, scopeOf(combined, at), { now: at });
+// The Overview's Limits now: the same engines and the menu bar's line.
+const limitsNow = (combined, at = now) => { const overview = buildOverview(combined, scopeOf(combined, at), { now: at }); return { limits: overview.limits, headline: overview.limitsHeadline }; };
+// Which tools each computer's sessions in the week came from: "Windows:codex".
+const sessionTools = (combined, at = now) => [...new Set(buildSessions(combined, every(combined, at), { now: at, limit: 5000 }).rows
+  .flatMap(row => row.kind === 'bundle' ? row.children : [row]).map(row => `${row.host}:${row.tool}`))].sort();
 const limitLines = surfaced => surfaced.statusText.split('\n').filter(line => /^(Claude|Codex):/.test(line));
 
 test('with the Codex limits off, Codex is on no surface, even with a computer that is on and carries a Codex limit', () => {
   const on = fleet({ sources: ALL_ON, others: { Windows: 'on' }, ownCodex: ['Windows'] });
   const hidden = fleet({ sources: CODEX_OFF, others: { Windows: 'on' } });
   const read = (combined) => { const shown = surfaces(combined);
+    const limits = limitsVM(combined);
     return { tray: shown.tray, glance: shown.glance, week: shown.week, limitsText: limitLines(shown), sentence: shown.stored.sentence, windows: shown.stored.windows, engines: shown.stored.engines,
-      history: history(combined.view), projects: projects(combined.view), tokens: tokensPage(combined.view), limitRows: limitRows(combined.view, now) }; };
+      limits: { headline: limits.headline, engines: limits.engines }, limitsPage: limitsPage(combined), limitsNow: limitsNow(combined), sources: scopeOf(combined).sources }; };
   const withCodex = read(on), without = read(hidden);
   // The check bites: every one of these names Codex when its settings are on.
   for (const [name, part] of Object.entries(withCodex).filter(([name]) => name !== 'windows')) assert.match(JSON.stringify(part), /codex/i, `${name} names Codex when it is on`);
@@ -121,9 +140,11 @@ test('with the Codex limits off, Codex is on no surface, even with a computer th
   assert.equal(hidden.snapshots.Windows.quota.status, 'ok', 'the computer that is on carries a Codex limit');
   assert.ok(hidden.snapshots.Mac.limitHistory[0].points.some(point => point.p === 'codex'), 'and a copy of the Codex history');
   for (const [name, part] of Object.entries(without)) assert.doesNotMatch(JSON.stringify(part), /codex|no plan/i, name);
-  assert.match(JSON.stringify(withCodex.projects.filter(row => row.host === 'Mac')), /Codex/);
-  assert.ok(without.projects.some(row => row.host === 'Mac'), 'the hub\'s Claude projects stay');
-  assert.ok(without.history.figures.length > 0, 'the History page still draws, so the check is not vacuous');
+  assert.ok(without.limitsPage.includes('Claude Code weekly'), 'the Limits page still draws Claude, so the check is not vacuous');
+  // Usage follows the computer that made it: with Codex on there, its sessions show, and the hub's own never do.
+  assert.ok(sessionTools(on).includes('Windows:codex'), sessionTools(on).join());
+  assert.deepEqual(sessionTools(hidden).filter(tool => tool.endsWith(':codex')), []);
+  assert.ok(sessionTools(hidden).includes('Mac:claude'), 'the hub\'s Claude sessions stay');
   // The history of a hidden engine is not in the stored view either.
   assert.equal(hidden.view.limitHistory.flatMap(row => row.points).some(point => point.p === 'codex'), false);
 });
@@ -133,13 +154,14 @@ test('whose settings win: usage is hidden by the computer that made it, and the 
   const seed = async (folder, file, value) => { const local = path.join(folder, 'public', 'local'); await mkdir(local, { recursive: true, mode: 0o700 }); await writeFile(path.join(local, file), JSON.stringify(value)); };
   const linux = JSON.parse(JSON.stringify(ownSnapshot('Windows', at)).replaceAll('"Windows"', '"Linux"'));
   assert.ok(linux.tokens.some(row => row.host === 'Linux' && row.status === 'ok'), 'the Linux computer reads Codex tokens itself');
-  await seed(hubFolder, 'usage.json', ownSnapshot('Mac', at));
+  const linuxSnapshot = withRound2(linux, 'Linux', { name: 'Ubuntu', at });
+  await seed(hubFolder, 'usage.json', withRound2(ownSnapshot('Mac', at), 'Mac', { name: 'Test Mac', role: 'hub', sources: CODEX_OFF, at }));
   const spokeOf = { name: 'Ubuntu', ssh: 'ubuntu', platform: 'linux', dataFolder: null };
   const hubConfig = testConfig(hubFolder, { role: 'hub', hub: { spokes: [spokeOf] }, sources: { ...CODEX_OFF } });
-  const fromHub = await runHub(hubConfig, { now: () => at, transport: { pull: async () => JSON.stringify(linux), push: async () => {} } });
+  const fromHub = await runHub(hubConfig, { now: () => at, transport: { pull: async () => JSON.stringify(linuxSnapshot), push: async () => {} } });
   // The spoke gets the hub's copy, its own snapshot and its own settings: Codex is on there.
   await seed(spokeFolder, 'combined.json', { ...fromHub, hub: { role: 'hub', hubWroteAt: fromHub.generatedAt } });
-  await seed(spokeFolder, 'usage.json', linux);
+  await seed(spokeFolder, 'usage.json', linuxSnapshot);
   const spokeConfig = testConfig(spokeFolder, { platform: 'linux', host: 'Linux', device: { name: 'Ubuntu' }, sources: { ...ALL_ON } });
   const fromSpoke = await recombine(spokeConfig, { now: () => at });
   for (const { where, combined } of [{ where: 'hub', combined: fromHub }, { where: 'spoke', combined: fromSpoke }]) {
@@ -147,15 +169,14 @@ test('whose settings win: usage is hidden by the computer that made it, and the 
     // The hub's limits setting is stored, so the spoke shows the same limits as the hub.
     assert.deepEqual(view.sourcesOff, ['codex', 'grok'].filter(engine => view.sourcesOff.includes(engine)), where);
     assert.ok(view.sourcesOff.includes('codex'), `${where}: the Codex limits are off`);
-    assert.doesNotMatch(JSON.stringify([combined.glance.lines, combined.glance.forecast.sentence, history(view)]), /codex/i, `${where}: no Codex limit or history`);
+    assert.doesNotMatch(JSON.stringify([combined.glance.lines, combined.glance.forecast.sentence, limitsVM(combined, at).engines, limitsPage(combined, at)]), /codex/i, `${where}: no Codex limit or history`);
     // Usage belongs to its own computer: the Linux computer's Codex tokens show, the Mac's do not.
     assert.deepEqual(view.tokens.filter(row => row.host !== 'Windows').map(row => `${row.host}:${row.status === 'ok'}`).sort(), ['Linux:true', 'Mac:false'], `${where}: tokens by computer`);
-    assert.ok(tokensPage(view).includes('aria-label="Codex"'), `${where}: the Codex card shows Linux's tokens`);
-    assert.deepEqual(tokensView(view, { host: 'All', period: 'week', now: at }).codex.byDevice.map(row => row.host), ['Linux'], `${where}: only Linux is in the Codex card`);
-    assert.ok(projectsView(view, { host: 'All', now: at }).some(row => row.host === 'Linux'), `${where}: Linux's projects show`);
+    assert.deepEqual(sessionTools(combined, at).filter(tool => tool.endsWith(':codex')), ['Linux:codex'], `${where}: only Linux's Codex sessions show`);
+    assert.ok(sessionTools(combined, at).includes('Mac:claude'), `${where}: the Mac's Claude sessions show`);
   }
-  // Both computers show the same Codex card and the same limits.
-  assert.deepEqual(tokensView(fromHub.view, { host: 'All', period: 'week', now: at }).codex, tokensView(fromSpoke.view, { host: 'All', period: 'week', now: at }).codex);
+  // Both computers show the same sessions and the same limits.
+  assert.deepEqual(sessionTools(fromHub, at), sessionTools(fromSpoke, at));
   assert.deepEqual(fromHub.glance.limits.map(row => row.provider), fromSpoke.glance.limits.map(row => row.provider));
 })));
 
@@ -197,6 +218,13 @@ test('the total adds up the computers that are on, says All, and counts each num
 test('a window the provider does not report reads Not reported and nothing else', () => {
   const combined = fleet({ fiveHour: false });
   assert.ok(combined.glance.lines.includes('  Claude Code 5-hour: Not reported'), combined.glance.lines.join('\n'));
+  const fiveHour = limitsVM(combined).engines.find(engine => engine.engine === 'claude').windows.find(window => window.windowId === 'five_hour');
+  assert.deepEqual([fiveHour?.state, fiveHour?.remaining], ['absent', null]);
+  const page = limitsPage(combined);
+  assert.match(page, /Claude Code 5 hour<\/span><b class="unk">Not reported<\/b><\/div><\/div>/, 'the Limits page says Not reported and nothing else');
+  // An unreported window cannot be the tight one, so the lead is still the engine whose windows were read.
+  assert.equal(combined.glance.forecast.scarce?.engine, 'claude');
+  assert.equal(limitsNow(combined).headline, limitsVM(combined).headline);
 });
 
 test('the reset is the stored label on every surface, never a countdown', () => {
@@ -217,7 +245,13 @@ test('the reset is the stored label on every surface, never a countdown', () => 
   assert.equal(shown.status.engines.claude.windows.weekly.forecast.resetsLabel, weekly.resets);
   assert.ok(shown.statusText.includes(weekly.resets), shown.statusText);
   assert.equal(shown.glance.headline.resets, weekly.resets);
-  for (const row of limitRows(fleet().view, now).filter(item => item.windowId)) assert.equal(row.note, '', 'the dashboard rows carry no countdown');
+  // The dashboard's limit windows carry the same stored label, and the pages never count down.
+  const combined = fleet();
+  const dashboard = limitsVM(combined).engines.find(engine => engine.engine === 'claude').windows;
+  for (const window of shown.stored.windows) assert.equal(dashboard.find(row => row.windowId === window.windowId)?.forecastResets, window.resets, window.windowId);
+  const page = limitsPage(combined);
+  assert.ok(page.includes(weekly.resets), 'the Limits page shows the stored reset label');
+  assert.doesNotMatch(page, /[Rr]esets in |, in \d/);
 });
 
 test('every surface says how much of a limit is used, never how much is left', () => {
@@ -228,6 +262,9 @@ test('every surface says how much of a limit is used, never how much is left', (
   assert.match(shown.statusText, /weekly 73% used/);
   assert.equal(shown.week.headline.usedText, '73% used');
   assert.ok(shown.tray.some(line => /^ {2}Claude Code 5-hour: 39% used · /.test(line)));
+  const page = limitsPage(fleet({ weeklyRemaining: 27 }));
+  assert.doesNotMatch(page, /% left|unused/);
+  assert.match(page, /73%<small>used<\/small>/);
 });
 
 test('an old reading is worded the same everywhere: its last value, with when it was read', () => {
@@ -241,6 +278,11 @@ test('an old reading is worded the same everywhere: its last value, with when it
   assert.deepEqual(shown.status.engines.claude.windows.weekly.lastReading, { percentLeft: 27, asOfLabel: label });
   assert.equal(shown.status.engines.claude.windows.weekly.percentLeft, null, 'pace is never judged on an old reading');
   assert.match(shown.statusText, new RegExp(`weekly 73% used, ${label}`));
+  // The Limits view and its Codex card say the same: the last value, with when it was read.
+  const combined = fleet({ age: 20 });
+  const weekly = limitsVM(combined).engines.find(engine => engine.engine === 'claude').windows.find(window => window.windowId === 'seven_day');
+  assert.deepEqual([weekly.state, weekly.remaining, weekly.asOf], ['stale', 27, label]);
+  assert.ok(limitsPage(combined).includes(label), 'the Limits page dates the old reading');
 });
 
 test('a limits source that is off leaves that engine Unknown for job slots, never none, and running jobs always print', () => {
@@ -259,19 +301,25 @@ test('a limits source that is off leaves that engine Unknown for job slots, neve
 });
 
 test('a coming reset is never counted down on the dashboard', () => {
-  const rows = limitRows(fleet().view, now).filter(row => row.windowId);
-  assert.ok(rows.length >= 2);
-  for (const row of rows) assert.equal(row.note, '', `${row.name} ${row.window}`);
+  const combined = fleet({ sources: ALL_ON });
+  const windows = limitsVM(combined).engines.flatMap(engine => engine.windows);
+  assert.ok(windows.length >= 2);
+  const text = JSON.stringify([limitsPage(combined), limitsNow(combined)]);
+  assert.doesNotMatch(text, /[Rr]esets in |, in \d+[dhm]/);
 });
 
 test('with Codex tokens off on the computer that made them, the Tokens page has no Codex card', () => {
-  assert.ok(tokensPage(fleet({ sources: ALL_ON }).view).includes('aria-label="Codex"'), 'the check bites: with Codex on, the card is drawn');
+  // The Tokens page names Codex through its model (the fixture's is gpt-6-astra) and the view-model by its tool.
+  const codexOn = fleet({ sources: ALL_ON });
+  assert.match(tokensPage(codexOn), /gpt-6-astra/, 'the check bites: with Codex on, the page shows its model');
+  assert.match(JSON.stringify(buildTokens(codexOn, every(codexOn), { now })), /codex/i);
   const combined = fleet({ sources: CODEX_OFF, others: { Windows: 'off' } });
   assert.ok(combined.view.tokens.length > 0, 'the view still lists each computer');
   assert.ok(combined.view.tokens.every(row => row.status === 'not-connected'), JSON.stringify(combined.view.tokens));
-  const page = tokensPage(combined.view);
-  assert.ok(!page.includes('Codex'), 'no Codex card or word on the page');
-  assert.ok(page.includes('aria-label="Claude"'), 'Claude is still drawn');
+  const page = tokensPage(combined);
+  assert.doesNotMatch(page, /Codex|gpt-6-astra/, 'no Codex word or model on the page');
+  assert.match(page, /Opus/, 'Claude models are still drawn');
+  assert.doesNotMatch(JSON.stringify({ ...buildTokens(combined, every(combined), { now }), frame: null }), /codex/i);
 });
 
 test('the limit history is drawn as the percent used, with the heavy end of the week near the top', () => {
@@ -282,17 +330,15 @@ test('the limit history is drawn as the percent used, with the heavy end of the 
   // The week was spent evenly from full to 27% left, so the first reading is almost unused and the last is 73% used.
   assert.ok(points[0].used < 3, `the first reading used ${points[0].used}`);
   assert.ok(points.at(-1).used > 72 && points.at(-1).used < 74, `the last reading used ${points.at(-1).used}`);
-  const html = renderToStaticMarkup(createElement(LimitsView, { snapshot: combined.view, now }));
-  assert.match(html, /limit used over time/);
+  const html = limitsPage(combined);
   assert.doesNotMatch(html, /left over time|% left/);
-  // In the drawing, y grows downward, so the line starts low (large y) and ends high (small y).
-  const drawn = [...html.matchAll(/<polyline class="ob-history-line claude[^"]*" points="([^"]+)"/g)].map(match => match[1].split(' ').map(pair => pair.split(',').map(Number)))
-    .sort((a, b) => b.length - a.length)[0];
-  assert.ok(drawn && drawn.length > 100, 'the weekly line is drawn');
-  const top = drawn.reduce((least, [, y]) => Math.min(least, y), Infinity), bottom = drawn.reduce((most, [, y]) => Math.max(most, y), -Infinity);
-  assert.ok(drawn[0][1] > drawn.at(-1)[1], 'the line rises as the week is used');
-  assert.ok(drawn[0][1] > bottom - (bottom - top) * 0.1 && drawn.at(-1)[1] < top + (bottom - top) * 0.1, 'it runs from the bottom to the top of what is drawn');
-  assert.match(html, /\d+% used/);
+  // In the Limits view's burn chart, y is 100 minus the share used, so the line starts low (large y) and ends high.
+  const path = html.match(/<path d="(M[^"]+)" fill="none" stroke="var\(--text\)"/)?.[1];
+  assert.ok(path, 'the weekly line is drawn');
+  const drawn = [...path.matchAll(/[ML](\d+),([\d.]+)/g)].map(match => [Number(match[1]), Number(match[2])]);
+  assert.ok(drawn.length > 100, `the weekly line has ${drawn.length} points`);
+  assert.ok(drawn[0][1] > 97 && drawn.at(-1)[1] > 26 && drawn.at(-1)[1] < 28, 'it runs from almost unused to 73% used');
+  assert.match(html, /\d+%<small>used<\/small>/);
 });
 
 test('a spoke with no hub copy follows its own limits settings, and turns them on when asked', () => withFolder(async folder => {
@@ -322,19 +368,16 @@ test('a project list keeps its Claude projects when Codex is turned off after it
   const kept = list.projects.flatMap(project => project.sessions);
   assert.ok(kept.length > 0 && kept.every(session => session.provider === 'claude'));
   assert.equal(kept.reduce((sum, session) => sum + session.totalTokens, 0), claudeTokens);
-  assert.doesNotMatch(JSON.stringify(projectsView(combined.view, { host: 'All', now })), /codex/i);
+  assert.doesNotMatch(JSON.stringify(combined.view.projectTokens), /codex/i);
 });
 
 test('a Mac hub with Codex off still shows the Codex card for another computer that reads Codex', () => {
   const combined = fleet({ sources: CODEX_OFF, others: { Windows: 'on' }, ownCodex: ['Windows'] });
-  const result = tokensView(combined.view, { host: 'All', period: 'week', now });
-  assert.deepEqual(result.codex.byDevice.map(row => row.host), ['Windows']);
-  assert.ok(result.codex.byDevice[0].total > 0);
-  const page = tokensPage(combined.view);
-  assert.ok(page.includes('aria-label="Codex"'), 'the Codex card is drawn');
-  assert.ok(page.includes('aria-label="Codex models"'), 'and its settings card');
+  assert.deepEqual(sessionTools(combined).filter(tool => tool.endsWith(':codex')), ['Windows:codex']);
+  assert.ok(scopeOf(combined).sources.includes('codex'), 'Codex is in the scope bar, for the computer that reads it');
+  assert.match(tokensPage(combined), /gpt-6-astra/, 'the Tokens page shows the Codex model');
   assert.ok(!combined.view.sourcesOff.includes('claude'));
   // The Mac's own Codex tokens are not in it, and the Codex limits stay hidden.
   assert.ok(combined.view.tokens.find(row => row.host === 'Mac').status === 'not-connected');
-  assert.doesNotMatch(JSON.stringify(combined.glance.lines), /Codex/);
+  assert.doesNotMatch(JSON.stringify([combined.glance.lines, limitsVM(combined).engines, limitsPage(combined)]), /Codex/);
 });

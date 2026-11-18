@@ -16,10 +16,11 @@ function Spark({ days, tall = false }: { days: GrokRequestsVM['days']; tall?: bo
   );
 }
 
-/** "64% left, resets Sat 10 AM", or Unknown until the app caches a reading. */
+/** "36% used · Resets Sat 10 AM" with the stored reset label, or Unknown until the app caches a reading. */
 export function weeklyText(weekly: GrokRequestsVM['weekly'], timeZone: string, now: number) {
   if (!weekly || weekly.remaining === null) return 'Unknown until the app caches it';
-  return `${Math.round(weekly.remaining)}% left${weekly.resetsAt ? `, resets ${dayClock(weekly.resetsAt, timeZone, now)}` : ''}`;
+  const resets = weekly.resets ?? (weekly.resetsAt ? `Resets ${dayClock(weekly.resetsAt, timeZone, now)}` : null);
+  return `${Math.round(100 - weekly.remaining)}% used${resets ? ` · ${resets}` : ''}`;
 }
 
 /** The compact row in a limits block: the period's count, a bar per day and the weekly limit. */
@@ -30,7 +31,7 @@ export function GrokRequestsRow({ vm, label }: { vm: GrokRequestsVM; label: stri
       <div className="h"><span>Grok requests</span><span>{label}</span></div>
       <div className="h" style={{ marginTop: 2 }}>
         {total === null ? <b className="unk">{UNKNOWN}</b> : <b>{total.toLocaleString('en-US')}<small>{total === 1 ? 'request' : 'requests'}</small></b>}
-        <span>{vm.weekly && vm.weekly.remaining !== null ? `weekly limit ${Math.round(vm.weekly.remaining)}% left` : 'weekly limit Unknown'}</span>
+        <span>{vm.weekly && vm.weekly.remaining !== null ? `weekly limit ${Math.round(100 - vm.weekly.remaining)}% used` : 'weekly limit Unknown'}</span>
       </div>
       <Spark days={vm.days} />
     </div>

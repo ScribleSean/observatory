@@ -7,14 +7,22 @@ import { Drawer } from './Headline';
 type Props = import('../../../../lib/r2-blocks.mjs').SectionProps;
 type HeadlineProps = { metric: MetricId; breakdowns?: Dim[]; scope?: ScopePatch };
 
-/** Days a computer could not read, and computers whose history starts inside the period. */
+const unread = (rows: { name: string; dates: string[] }[]) => rows.map(row => `${row.name} could not be read on ${row.dates.slice(0, 3).map(date => dayLabel(date)).join(', ')}${row.dates.length > 3 ? ` and ${row.dates.length - 3} more days` : ''}`);
+
+/**
+ * Days a computer could not read, computers whose history starts inside the period, and, once for the whole strip,
+ * why the comparison is Unknown. A comparison with no earlier history says nothing at all.
+ */
 function CoverageNote() {
   const { snapshot, scope, now } = useR2();
   const { coverage } = buildOverview(snapshot, scope, { now });
-  const unknown = coverage.unknownDays.map(row => `${row.name} could not be read on ${row.dates.slice(0, 3).map(date => dayLabel(date)).join(', ')}${row.dates.length > 3 ? ` and ${row.dates.length - 3} more days` : ''}`);
+  const unknown = unread(coverage.unknownDays);
   const later = coverage.startsLater.map(row => `${row.name} has history from ${dayLabel(row.before)}`);
-  if (unknown.length + later.length === 0) return null;
-  return <div className="foot"><span className="dot stale" /><span>{[...unknown.map(line => `${line}, so totals that include it are Unknown`), ...later].join('. ')}.</span></div>;
+  const compare = coverage.compare && coverage.compare.unknownDays.length
+    ? `${coverage.compare.label.charAt(0).toUpperCase()}${coverage.compare.label.slice(1)}: Unknown, because ${unread(coverage.compare.unknownDays).join(' and ')}` : null;
+  const lines = [...unknown.map(line => `${line}, so totals that include it are Unknown`), ...later, ...(compare ? [compare] : [])];
+  if (lines.length === 0) return null;
+  return <div className="foot"><span className="dot stale" /><span>{lines.join('. ')}.</span></div>;
 }
 
 /** A section of headlines draws as one strip of numbers, with the open breakdown under it. */

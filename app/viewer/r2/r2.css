@@ -163,7 +163,8 @@ button.kpi:hover{background:var(--hover)}
 .strip>.kpi:first-child .v{font-size:var(--fs-lead);letter-spacing:-1.2px;line-height:1.2}
 .kpi .v small{font-size:var(--fs-small);color:var(--faint);font-weight:400;letter-spacing:0;margin-left:5px}
 .kpi .v.unk{color:var(--faint);font-weight:500}
-.kpi .c{font-size:var(--fs-small);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A caption wraps between words, never cut mid-word. */
+.kpi .c{font-size:var(--fs-small);color:var(--faint);text-wrap:pretty;overflow-wrap:normal}
 .drawer{border-top:1px solid var(--line-soft);padding:var(--sp-3) var(--pad) var(--pad)}
 .drawer .dh{display:flex;gap:var(--sp-2);align-items:center;margin-bottom:var(--sp-2);flex-wrap:wrap}
 .drawer .dh b{font-weight:600}
@@ -198,7 +199,7 @@ button.kpi:hover{background:var(--hover)}
 .xl span.now{color:var(--text);font-weight:500}
 .lg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:var(--fs-small);color:var(--faint)}
 .lg i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;vertical-align:1px}
-.read{font-size:var(--fs-small);color:var(--faint);margin-top:var(--sp-2);min-height:1lh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.read{font-size:var(--fs-small);color:var(--faint);margin-top:var(--sp-2);min-height:1lh;text-wrap:pretty}
 
 /* limits */
 .lim{padding:var(--sp-3) var(--pad);border-top:1px solid var(--line-soft)}

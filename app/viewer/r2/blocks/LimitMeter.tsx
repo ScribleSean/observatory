@@ -33,12 +33,25 @@ export function windowNow(window: LimitWindowVM, now: number) {
 }
 
 const pct = (value: number) => `${Math.round(value)}%`;
+export const NOT_REPORTED = 'Not reported';
 
 function Row({ name, window, now, timeZone }: { name: string; window: LimitWindowVM; now: number; timeZone: string }) {
   const state = windowNow(window, now);
   const title = `${name} ${window.label}`;
+  // A window the provider left out of its latest reading reads Not reported and nothing else.
+  if (window.state === 'absent') return <div className="lim"><div className="h"><span>{title}</span><b className="unk">{NOT_REPORTED}</b></div></div>;
+  // An old reading keeps its last value with when it was read, as on every other surface. Pace is never judged on it.
+  if (window.state === 'stale' && state.used !== null && window.asOf) {
+    return (
+      <div className="lim">
+        <div className="h"><span>{title}</span><span>{window.forecastResets ?? ''}</span></div>
+        <div className="h" style={{ marginTop: 2 }}><b className="mu">{pct(state.used)}<small>used</small></b><span>{window.asOf}</span></div>
+        <div className="meter"><i style={{ width: `${state.used}%`, opacity: 0.5 }} /></div>
+      </div>
+    );
+  }
   if (state.used === null || window.state === 'stale' || window.state === 'off') {
-    const why = window.state === 'off' ? 'Turned off in observatory.config.json'
+    const why = window.state === 'off' ? window.offText ?? 'Turned off in observatory.config.json'
       : window.checkedAt ? `Not in the ${clock(window.checkedAt, timeZone, now)} read` : 'Not reported by the app yet';
     return (
       <div className="lim">
