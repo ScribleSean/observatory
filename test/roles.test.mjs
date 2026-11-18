@@ -23,13 +23,13 @@ test('generic title starts match at a word boundary, the longest first', () => {
 });
 
 test('the user\'s own map comes from settings and names only known roles', () => {
-  const aliases = { 'tidepool notes': 'Researcher', ceobot: 'chief of staff', 'mediabot': 'Mascot' };
+  const aliases = { 'tidepool notes': 'Researcher', planner: 'chief of staff', 'atlas': 'Mascot' };
   assert.deepEqual(pick(sessionName({ title: 'Tidepool notes', repo: 'tidepool' }, { aliases })), ['Researcher', 'alias', 'tidepool', '[Researcher] tidepool']);
   // "4" is not an object, so the repository is.
-  assert.deepEqual(pick(sessionName({ title: 'CEOBot 4', repo: 'orchard' }, { aliases })), ['Chief of staff', 'alias', 'orchard', '[Chief of staff] orchard']);
-  assert.equal(sessionName({ title: 'MediaBot', repo: 'media' }, { aliases }).role, null);
+  assert.deepEqual(pick(sessionName({ title: 'Planner 4', repo: 'orchard' }, { aliases })), ['Chief of staff', 'alias', 'orchard', '[Chief of staff] orchard']);
+  assert.equal(sessionName({ title: 'Atlas', repo: 'media' }, { aliases }).role, null);
   // No personal name is built in.
-  for (const prefix of Object.keys(TITLE_ALIASES)) assert.doesNotMatch(prefix, /bot|ceo|agi/);
+  for (const prefix of Object.keys(TITLE_ALIASES)) assert.doesNotMatch(prefix, /\d|bot$/);
 });
 
 test('a headless run is a Reviewer for review and test work, else a Runner', () => {

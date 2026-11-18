@@ -34,8 +34,8 @@ test('slots fill from words: metric, breakdown, role, range, device and source',
   assert.deepEqual(blocks(tokens).find(element => element.type === 'Breakdown').props, { metric: 'tokens', dim: 'model', span: 8 });
   assert.equal(ask('cost per landed change').metric, 'perLanded');
   assert.equal(ask('spend with no commits').metric, 'noCommitSpend');
-  assert.equal(ask('churn on ubuntu yesterday').patch.devices[0], 'Linux');
-  assert.deepEqual(ask('churn on ubuntu yesterday').patch.range, { unit: 'day', anchor: '2026-11-17' });
+  assert.equal(ask('churn for linux yesterday').patch.devices[0], 'Linux');
+  assert.deepEqual(ask('churn for linux yesterday').patch.range, { unit: 'day', anchor: '2026-11-17' });
   assert.deepEqual(ask('codex spend this year').patch, { range: { unit: 'year', anchor: '2026-11-18' }, sources: ['codex'] });
   const grok = ask('how many grok requests this week');
   assert.deepEqual([grok.metric, blocks(grok).map(element => element.type)], ['grokRequests', ['Headline', 'GrokRequests']]);

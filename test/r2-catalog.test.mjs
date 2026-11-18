@@ -62,7 +62,7 @@ test('oversize specs are refused', () => {
 test('the tree is a tree: a Section root, children only on Sections, no orphans, no cycles, limited depth', () => {
   const root = small();
   root.root = 'root-0';
-  refused(root, /orphan|not a Section/i);
+  refused(root, /reachable|orphan|not a Section/i);
   const child = small();
   child.elements['root-0'].children = ['root'];
   refused(child, /only a Section has children/);

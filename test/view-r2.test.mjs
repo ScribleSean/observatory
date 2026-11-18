@@ -23,7 +23,7 @@ const close = (a, b) => assert.ok(Math.abs(a - b) < 0.02, `${a} is not ${b}`);
 const NUM_KEYS = ['metric', 'unit', 'value', 'text', 'of', 'sumLabel', 'previous', 'delta', 'deltaText', 'breakdowns', 'note'];
 function assertNum(num, metric) {
   assert.deepEqual(Object.keys(num).sort(), [...NUM_KEYS].sort(), `${metric} keys`);
-  if (metric) assert.deepEqual(Object.keys(num.breakdowns).sort(), [...METRIC_DIMS[metric]].sort(), `${metric} breakdowns`);
+  if (metric) assert.deepEqual(new Set(Object.keys(num.breakdowns)), new Set(METRIC_DIMS[metric]), `${metric} breakdowns`);
   if (num.value === null) assert.ok(/Unknown|None landed/.test(num.text), `${metric} null reads Unknown, not ${num.text}`);
   for (const parts of Object.values(num.breakdowns)) for (const part of parts) {
     assert.deepEqual(Object.keys(part).sort(), ['key', 'label', 'share', 'text', 'value']);
@@ -216,7 +216,7 @@ test('sessions fold headless runs and small sessions into bundles, group by role
   assert.ok(builders.rows.every(row => row.name.role === 'Builder'));
   const running = v.buildSessions(snapshot, at('week'), { now: NOW, running: true, limit: 100 });
   assert.equal(running.rows.length, 2);
-  assert.deepEqual(running.rows.map(row => row.needsYou).sort(), [false, true]);
+  assert.deepEqual(new Set(running.rows.map(row => row.needsYou)), new Set([false, true]));
   // A past period has nothing running.
   assert.equal(v.buildSessions(snapshot, at('week', '2026-11-04'), { now: NOW, running: true }).rows.length, 0);
   const limited = v.buildSessions(snapshot, at('week'), { now: NOW, limit: 3 });
