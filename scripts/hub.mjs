@@ -119,7 +119,9 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
     const carried=newer(validatedDevice(mine,host,now(),cap),validatedDevice(incoming,host,now(),cap));
     if(carried)devices.push({...carried,off:carriedDevice(fromHub,host)?.off===true});
   }
-  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,sources:config.sources,...await titleSettings(config)});
+  // Which limits are off is the hub's setting for the whole account, so a spoke shows the list the hub stored.
+  const limitsOff=Array.isArray(fromHub?.view?.sourcesOff)?fromHub.view.sourcesOff:undefined;
+  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,sources:config.sources,limitsOff,...await titleSettings(config)});
   const hubWroteAt=[hubTime(mine),hubTime(incoming)].filter(at=>Number.isFinite(Date.parse(at)))
     .sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;
   combined.hub={role:'spoke',hubWroteAt};

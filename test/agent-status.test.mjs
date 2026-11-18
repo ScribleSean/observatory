@@ -100,7 +100,7 @@ test('pace classification boundaries', () => {
 
 test('JSON shape is stable and carries no personal data', () => {
   const status = agentStatus(today, now);
-  const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace', 'forecast'];
+  const window = ['percentLeft', 'lastReading', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace', 'forecast'];
   assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route', 'cap', 'forecast', 'devices']);
   assert.deepEqual(Object.keys(status.forecast), ['asOf', 'timeZone', 'sentence', 'stale']);
   for (const device of status.devices) assert.deepEqual(Object.keys(device), ['host', 'state', 'stateLabel', 'collectedAt']);

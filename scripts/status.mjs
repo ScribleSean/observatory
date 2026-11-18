@@ -76,6 +76,8 @@ export function describe(status, byAge = 0) {
     const parts = WINDOWS.map(windowId => {
       const item = engine.windows[windowId];
       // An engine reads ok with a window that has no number only when the reading marks that window absent.
+      // An old reading says its last value with when it was read, the same wording as an old forecast. Past its reset it is Unknown.
+      if (item.percentLeft === null && item.lastReading) return `${windowNames[windowId]} ${Math.round(100 - item.lastReading.percentLeft)}% used, ${item.lastReading.asOfLabel}`;
       if (item.percentLeft === null) return `${windowNames[windowId]} ${engine.status === 'ok' ? 'none' : 'Unknown'}`;
       // The stored reset label, as the Week page and the tray show it. Unknown when none is stored or the reset has passed.
       const reset = item.forecast.resetsLabel ? item.forecast.resetsLabel : 'reset Unknown';
@@ -90,8 +92,8 @@ export function describe(status, byAge = 0) {
   lines.push(`Route code: ${routed(status.route.code)}`);
   lines.push(`Route review, research: ${routed(status.route.review)}`);
   const age = byAge > 0 ? `, ${byAge} by marker age only` : '';
-  const codex = status.engines.codex.sourceOff ? '' : `, Codex ${status.cap.codex}${status.cap.codexRunning === null ? '' : `, ${status.cap.codexRunning} Codex running${age}`}`;
-  lines.push(`Job cap: ${status.cap.total} (Claude ${status.cap.claude}${codex}).`);
+  // Running jobs are their own fact: they print whatever the limits settings say.
+  lines.push(`Job cap: ${status.cap.total} (Claude ${status.cap.claude}, Codex ${status.cap.codex}${status.cap.codexRunning === null ? '' : `, ${status.cap.codexRunning} Codex running${age}`}).`);
   return lines.join('\n');
 }
 
