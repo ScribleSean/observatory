@@ -64,3 +64,44 @@ export async function commitFile(repo,name,at,message='Change') {
   git(repo,['commit','-qm',message],at);
   return git(repo,['rev-parse','HEAD']);
 }
+
+// A year of fictional ledger history for one computer (lib/r2-shape.mjs), heavy but realistic: every day
+// Claude Code lists SESSION_DAY_TOP sessions and folds 40 more into compact rows, and Codex lists 6. Each
+// session uses 3 models, 4 work kinds and 2 repositories. For the size checks only, so the numbers need
+// not add up. (Two tools that each list SESSION_DAY_TOP sessions at the widest breakdowns every day for
+// MIN_SESSION_DAYS days, about 2.4 MB, do not fit LEDGER_HISTORY_BUDGET with every session row: the oldest
+// days' session rows go, as scripts/snapshot-size.test.mjs checks.)
+export async function yearOfLedgerHistory(host,now,{days=365,tools=['claude','codex'],extraSessions=40,listed={claude:30,codex:6},models:modelCount=3,kinds:kindCount=4,repos:repoCount=2}={}) {
+  const {LEDGER_HISTORY_SCHEMA,SESSION_DAY_TOP,MAX_SESSION_MODELS,MAX_SESSION_KINDS,MAX_SESSION_REPOS,MAX_DAY_REPOS}=await import('../lib/r2-shape.mjs');
+  const width=(count,max)=>Math.min(count,max);
+  const hex=seed=>seed.toString(16).padStart(12,'0');
+  const models=['claude-opus-5-5','claude-sonnet-5-5','claude-haiku-5-5','claude-fable-5'];
+  const kinds=['main','build','review','search','research'];
+  const repos=['lantern','orchard','tidepool','quarry','kestrel','meadow','harbor','ember','willow','cobble','fern','slate'];
+  const tokens=seed=>({input:1000+seed,output:20000+seed,cacheRead:900000+seed,cacheWrite:30000+seed});
+  const ship=(repo,seed)=>({repo,apiUsd:12.345678+seed%7,commits:seed%9,onMain:seed%5,merges:seed%2});
+  const out=[];
+  for(let back=days-1;back>=0;back--) {
+    const date=new Date(now-back*86400000).toISOString().slice(0,10);
+    for(const tool of tools) {
+      const sessions=Array.from({length:Math.min(SESSION_DAY_TOP,listed[tool] ?? SESSION_DAY_TOP)},(_,index)=>{
+        const seed=back*1000+index;
+        return {id:hex(seed+(tool==='codex'?500000:0)),title:`Builder: Fictional project ${index}`,origin:'interactive',task:'build',repo:repos[index%repos.length],
+          firstAt:new Date(now-back*86400000-5*3600000).toISOString(),lastAt:new Date(now-back*86400000-3600000).toISOString(),apiUsd:40.123456+index,tokens:tokens(seed),
+          models:models.slice(0,width(modelCount,MAX_SESSION_MODELS)).map(model=>({model,apiUsd:10.123456,outputTokens:5000+seed%100})),
+          kinds:kinds.slice(0,width(kindCount,MAX_SESSION_KINDS)).map(kind=>({kind,apiUsd:8.123456,subagents:index%6})),
+          ship:repos.slice(0,width(repoCount,MAX_SESSION_REPOS)).map((repo,at)=>ship(repo,seed+at))};
+      });
+      out.push({date,tool,status:'ok',frozen:back>=14,apiUsd:2400.123456,sessionCount:sessions.length+extraSessions,subagents:300,tokens:tokens(back),
+        models:models.map(model=>({model,apiUsd:600.123456,outputTokens:150000})),
+        kinds:['main','build','review','search','research','design','test','write','other'].map(kind=>({kind,apiUsd:200.123456,subagents:20})),
+        origins:[{origin:'interactive',apiUsd:2000.123456,sessions:50},{origin:'headless',apiUsd:400.123456,sessions:20}],
+        repos:repos.slice(0,MAX_DAY_REPOS).map((repo,at)=>ship(repo,back+at)),
+        ship:{commits:120,onMain:80,merges:9},sessions,
+        other:{count:extraSessions,apiUsd:300.123456,subagents:40,ship:{commits:20,onMain:10,merges:1},
+          rows:Array.from({length:extraSessions},(_,index)=>[hex(back*1000+700+index),1.234567,index%3,index%2])}});
+    }
+  }
+  return {host,status:'ok',checkedAt:new Date(now).toISOString(),schema:LEDGER_HISTORY_SCHEMA,timeZone:'America/New_York',
+    firstDate:out[0].date,sessionsFrom:out[0].date,days:out};
+}

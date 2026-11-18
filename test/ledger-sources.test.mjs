@@ -332,3 +332,12 @@ test('Codex: an exec run is headless and its first prompt is kept only as a kind
     assert.ok(!JSON.stringify([...sessions.values()]).includes('scoring module'));
   });
 });
+
+test('a backfill read has a higher file cap than the usual window, so a long Codex history can finish',async()=>{
+  const asked=[];
+  const stub={...codex,folder:()=>'/fictional/codex',readSessions:async(_folder,options)=>{asked.push(options.maxFiles);return [];}};
+  const config={sources:{codex:true}};
+  await readLedgerSources({config,home:'/fictional',cache:memoryCache(),saveCache:false,since:{codex:0},sources:[stub]});
+  await readLedgerSources({config,home:'/fictional',cache:memoryCache(),saveCache:false,since:Date.parse('2026-11-01T00:00:00Z'),sources:[stub]});
+  assert.deepEqual(asked,[200000,20000]);
+});

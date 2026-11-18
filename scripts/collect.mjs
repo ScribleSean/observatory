@@ -4,7 +4,7 @@ import {copyFile,readFile,realpath} from 'node:fs/promises';
 import {constants as fsConstants} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {loadConfig} from '../lib/config.mjs';
+import {loadConfig,configEcho} from '../lib/config.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 import {privateFolder,titleSalt} from '../lib/private-folder.mjs';
 import {writeJsonAtomic,writeAtomic} from '../lib/atomic-file.mjs';
@@ -28,6 +28,10 @@ import {readSessions} from './read-sessions.mjs';
 import {openTokenStore,keepTokenDays} from './token-store.mjs';
 import {readLedgerSources} from './sources/index.mjs';
 import {buildLedger,WEEK_MS} from './ledger.mjs';
+import {joinCommits} from './ledger-commits.mjs';
+import {buildLedgerHistory,dateFloorMs} from './ledger-history.mjs';
+import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,applyTitlesSetting,writeHistory,recheckOnMain,historyRow,keepGrokDays} from './ledger-store.mjs';
+import {cleanLedgerHistory,LEDGER_HISTORY_SCHEMA} from '../lib/r2-shape.mjs';
 
 // The ledger reads at most this long in one collection. What it read stays cached, so a first run on a
 // large history finishes over a few collections instead of holding up this one.
@@ -35,6 +39,21 @@ export const LEDGER_READ_MS=150000;
 // The commit join's share of the tick (scripts/tick.mjs TICK_DEADLINE_MS): the read above, this, and
 // the hub's pulls fit inside it. Repositories not reached in time ship Unknown and are read next time.
 export const LEDGER_JOIN_MS=20000;
+// A backfill joins a month of commits once, so it gets a longer share, taken from what the read left
+// unused. Repositories it does not reach ship Unknown on those days.
+export const BACKFILL_JOIN_MS=60000;
+// Checking older commits for reaching main again (scripts/ledger-store.mjs recheckOnMain).
+export const ONMAIN_RECHECK_MS=10000;
+
+/**
+ * How long the commit join may take. The read and the join together stay within LEDGER_READ_MS plus
+ * LEDGER_JOIN_MS from when the read started, so a backfill tick ends inside the tick deadline too.
+ * @param {{started: number, now: number, backfill: boolean}} times
+ */
+export function joinMs({started,now,backfill}) {
+  if(!backfill)return LEDGER_JOIN_MS;
+  return Math.min(BACKFILL_JOIN_MS,Math.max(LEDGER_JOIN_MS,started+LEDGER_READ_MS+LEDGER_JOIN_MS-now));
+}
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
@@ -74,7 +93,7 @@ export async function tokenRoots(config,{distributions=listDistributions,findRoo
 }
 
 export function defaultReaders(config) {
-  let pending=null;
+  let pending=null,readDeadline=null;
   const roots=()=>pending??=tokenRoots(config);
   const cacheFor=tool=>async root=>realpath(await privateFolder(config.dataFolder,...(root.optional?[`private-${tool}-roots`,cacheName(root)]:[`private-${tool}`])));
   return {
@@ -93,10 +112,14 @@ export function defaultReaders(config) {
     modelDrift:async()=>readModelDriftRoots(await roots(),{cacheFor:cacheFor('drift')}),
     projects:async({claude,codex},now)=>readProjectRoots(await roots(),{claude,codex,now}),
     sessions:()=>readSessions({host:config.host,platform:config.platform}),
-    // Two weekly windows back, plus a day for a reset that moved.
-    ledger:async now=>readLedgerSources({config,home:homedir(),saveCache:false,
-      cacheFile:path.join(await privateFolder(config.dataFolder,'private-ledger'),'parse-cache.json'),
-      since:now.getTime()-2*WEEK_MS-86400000,deadline:Date.now()+LEDGER_READ_MS}),
+    // Two weekly windows back, plus a day for a reset that moved. A second call reads the ledger history's
+    // backfill or gap (`since` by tool) into the same cache, inside what is left of the same time budget.
+    ledger:async(now,{since=null,cache=null}={})=>{
+      readDeadline??=Date.now()+LEDGER_READ_MS;
+      return readLedgerSources({config,home:homedir(),saveCache:false,cache,
+        cacheFile:cache?null:path.join(await privateFolder(config.dataFolder,'private-ledger'),'parse-cache.json'),
+        since:since ?? now.getTime()-2*WEEK_MS-86400000,deadline:readDeadline});
+    },
     grokLimits:()=>readGrokUsage({appFolder:config.grok?.appFolder ?? null,requestLog:config.grok?.requestLog ?? null,timeZone:TIMEZONE}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
@@ -134,7 +157,58 @@ async function previousSnapshot(file) {
   } catch {return null;}
 }
 
-export async function buildSnapshot(config,readers,{previous=null,now=new Date(),keepDays=null}={}) {
+const unavailableHistory=(host,status,checkedAt)=>({host,status,checkedAt,schema:LEDGER_HISTORY_SCHEMA,timeZone:TIMEZONE,firstDate:null,sessionsFrom:null,days:[]});
+
+// The ledger row and the daily ledger history, from one read and one commit join. `store` is the private
+// history store (scripts/ledger-store.mjs), or null to build the ledger row only.
+async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,titles,join=joinCommits,git,started=Date.now()}) {
+  const nowMs=now.getTime(),timeZone=TIMEZONE;
+  const tools=ledgerRead.tools.map(tool=>tool.source.id);
+  let plan=null;
+  if(store)try {plan=historyPlan(store,{tools,now:nowMs,timeZone});} catch {plan=null;}
+  let extra=null;
+  if(plan && Object.keys(plan.extra).length) {
+    try {extra=await readers.ledger(now,{since:Object.fromEntries(Object.entries(plan.extra).map(([tool,entry])=>[tool,entry.since])),cache:ledgerRead.cache ?? null});}
+    catch {extra=null;}
+  }
+  // Each tool's history comes from the longer read when it worked, else from the usual window.
+  const historyTools=[],unread=[],backfilled=[],held=[];
+  for(const tool of ledgerRead.tools) {
+    const id=tool.source.id,wanted=plan?.extra[id],more=wanted?extra?.tools.find(row=>row.source.id===id):null;
+    if(more?.status==='ok') {
+      historyTools.push({source:tool.source,sessions:more.sessions,dates:datesToBuild({today:plan.today,sessions:more.sessions,from:wanted.from,timeZone}),
+        unknownBefore:gapKnownFrom({today:plan.today,sessions:more.sessions,from:wanted.from,timeZone})});
+      if(wanted.since===0)backfilled.push(id);
+    } else if(tool.status==='ok') {
+      if(plan)historyTools.push({source:tool.source,sessions:tool.sessions,dates:plan.rebuild});
+      if(wanted)held.push(id);
+    } else unread.push(id);
+  }
+  // One commit join for both: every session either read found, over the longest span either needs.
+  const sessions=new Map();
+  for(const {source,sessions:list} of [...ledgerRead.tools.filter(tool=>tool.status==='ok'),...historyTools])
+    for(const session of list)sessions.set(`${source.id}:${session.id}`,{key:`${source.id}:${session.id}`,writes:session.writes,branches:session.branches});
+  const firstDate=historyTools.flatMap(tool=>tool.dates).sort((a,b)=>a.localeCompare(b))[0];
+  const since=Math.min(nowMs-2*WEEK_MS-86400000,firstDate?dateFloorMs(firstDate):Infinity);
+  try {await ledgerRead.cache?.save?.();} catch {}
+  let joined=null;
+  try {
+    joined=await join([...sessions.values()],{since,until:nowMs,...(git?{git}:{}),cache:ledgerRead.cache ?? null,
+      deadline:Date.now()+joinMs({started,now:Date.now(),backfill:backfilled.length>0})});
+  } catch {joined=null;}
+  const {row}=await buildLedger({host,read:ledgerRead,limits,live,now:nowMs,cache:ledgerRead.cache ?? null,
+    join:async()=>{if(!joined)throw Error('Commit join failed');return joined;}});
+  if(!plan)return {row,history:null};
+  // A history that cannot be built or kept reads as unavailable. The ledger row stands either way.
+  try {
+    applyTitlesSetting(store,titles);
+    writeHistory(store,{...buildLedgerHistory({tools:historyTools,joined,timeZone,titles}),backfilled,held});
+    try {await recheckOnMain(store,{today:plan.today,deadline:Date.now()+ONMAIN_RECHECK_MS,...(git?{git}:{})});} catch {}
+    return {row,history:historyRow(store,{host,now:nowMs,timeZone,titles,unread,tools})};
+  } catch {return {row,history:null};}
+}
+
+export async function buildSnapshot(config,readers,{previous=null,now=new Date(),keepDays=null,ledgerStore=null,join,git}={}) {
   const at=now.toISOString(),host=config.host,other=OTHER[host];
   // The Mac and Windows snapshots carry a not-connected row for each other. Linux has no partner row.
   const peer=value=>other?[value(other)]:[];
@@ -161,8 +235,10 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     } catch {return {host,status:'unavailable',checkedAt:at};}
   };
   const ledgerOn=Boolean(readers.ledger) && (config.sources.claudeCode || config.sources.codex);
+  let ledgerStarted=Date.now();
   const readLedger=async()=>{
     if(!ledgerOn)return null;
+    ledgerStarted=Date.now();
     try {return await readers.ledger(now);}
     catch(error) {return {failed:true,error};}
   };
@@ -197,18 +273,21 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
   const claude=kept('claude',pick(claudeRead,unavailableClaudeTokenSource(host,at,'not-connected'),()=>unavailableClaudeTokenSource(host,at)));
   const claudeLimits=pick(limitsRead,claudeLimitsSource(null,{enabled:false}),
     ()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'}));
-  const grokLimits=pick(grokRead,grokNotConnected(),()=>({...grokNotConnected(),status:'unavailable'}));
+  let grokLimits=pick(grokRead,grokNotConnected(),()=>({...grokNotConnected(),status:'unavailable'}));
+  // Grok's request counts per day are kept for good in the history store, since its log covers two weeks.
+  if(ledgerStore && Array.isArray(grokLimits?.requests?.days))
+    try {grokLimits={...grokLimits,requests:{...grokLimits.requests,days:keepGrokDays(ledgerStore,grokLimits.requests.days)}};} catch {}
   const sessions=pick(sessionsRead,disconnected(host),unavailable);
   let ledger=disconnected(host);
+  let ledgerHistory=unavailableHistory(host,ledgerOn?'unavailable':'not-connected',ledgerOn?at:null);
   if(ledgerRead?.failed)ledger={host,status:'unavailable',collectedAt:at};
   else if(ledgerRead) {
+    const titles=config.sessions?.titles!==false;
     try {
-      // Save what was read before asking git, so a tick stopped during the join does not read it all again.
-      try {await ledgerRead.cache?.save?.();} catch {}
-      const {row}=await buildLedger({host,read:ledgerRead,limits:{claudeLimits,quota},live:sessions,now:now.getTime(),cache:ledgerRead.cache ?? null,
-        deadline:Date.now()+LEDGER_JOIN_MS});
-      const titles=config.sessions?.titles!==false;
-      ledger=cleanLedgerRow(row,{titles,salt:titles?null:await titleSalt(config.dataFolder)});
+      // What was read is saved before asking git, so a tick stopped during the join does not read it all again.
+      const built=await ledgerAndHistory({host,readers,ledgerRead,store:ledgerStore,now,limits:{claudeLimits,quota},live:sessions,titles,join,git,started:ledgerStarted});
+      ledger=cleanLedgerRow(built.row,{titles,salt:titles?null:await titleSalt(config.dataFolder)});
+      if(built.history)try {ledgerHistory=cleanLedgerHistory(built.history,{titles});} catch {}
     } catch {ledger={host,status:'unavailable',collectedAt:at};}
     try {await ledgerRead.cache?.save?.();} catch {}
   }
@@ -219,7 +298,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     tokens:[codex.tokens,...peer(disconnected)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
     quota,claudeLimits,grokLimits,providerTokenSources:[claude],projectTokens:[projectTokens],modelDrift:[modelDrift],sessions:[sessions],
-    ledger:[ledger,...peer(disconnected)]};
+    ledger:[ledger,...peer(disconnected)],ledgerHistory:[ledgerHistory],configEcho:configEcho(config,at)};
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};
@@ -237,9 +316,10 @@ export async function collect(config,{readers=defaultReaders(config),now=()=>new
     await keepOldAppSnapshot(folder);
     const previous=await previousSnapshot(path.join(folder,'usage.json'));
     const store=await openTokenStore(config.dataFolder).catch(()=>null);
+    const history=await openLedgerStore(config.dataFolder).catch(()=>null);
     let built;
-    try {built=await buildSnapshot(config,readers,{previous,now:now(),keepDays:store?(engine,days)=>keepTokenDays(store,engine,days):null});}
-    finally {store?.close();}
+    try {built=await buildSnapshot(config,readers,{previous,now:now(),keepDays:store?(engine,days)=>keepTokenDays(store,engine,days):null,ledgerStore:history});}
+    finally {store?.close();history?.close();}
     const {data,status}=built;
     data.limitHistory=[await recordLimitHistory(config,data,now())];
     const {text,bytes}=serializeSnapshot(data);

@@ -74,3 +74,18 @@ test('common desktop apps get a category instead of Other', () => {
   assert.equal(category('idea64.exe'), 'Editors');
   assert.equal(category('Hazel'), 'Other');
 });
+test('the settings echo keeps known keys only, for its own computer',async()=>{
+  const {cleanConfigEcho}=await import('./snapshot-clean.mjs');
+  const raw={host:'Mac',name:' Studio ',role:'hub',sources:{claudeCode:true,codex:'yes',secretSource:true},engines:{claude:'on',codex:'sideways'},titles:false,
+    roleAliases:{'tidepool notes':'Researcher',bad:'Wizard'},checkedAt:'2026-11-18T15:00:00.000Z',dataFolder:'/fictional/data',spokes:[{ssh:'tower'}]};
+  const echo=cleanConfigEcho(raw,'Mac');
+  assert.equal(echo.name,'Studio');
+  assert.equal(echo.sources.claudeCode,true);
+  assert.equal(echo.sources.codex,false,'only true is on');
+  assert.equal(echo.sources.secretSource,undefined);
+  assert.deepEqual(echo.engines,{claude:'on',codex:'auto',grok:'auto'});
+  assert.deepEqual(echo.roleAliases,{'tidepool notes':'Researcher'});
+  assert.ok(!JSON.stringify(echo).includes('fictional') && !JSON.stringify(echo).includes('tower'));
+  assert.throws(()=>cleanConfigEcho(raw,'Windows'),'another computer\'s echo is refused');
+  assert.throws(()=>cleanConfigEcho({...raw,role:'boss'},'Mac'));
+});

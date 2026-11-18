@@ -11,6 +11,7 @@ async function serve(folder,action) {
   const files={
     'dist/index.html':'<html>dashboard</html>',
     'dist/assets/app.js':'// app',
+    'dist/assets/font.woff2':'wOF2',
     'dist/assets/data.json':'{"no":true}',
     'data/public/local/combined.json':'{"schema":"observatory-combined/1"}',
     'data/public/local/usage.json':'{"private":true}',
@@ -36,6 +37,8 @@ async function serve(folder,action) {
 test('the dashboard page, its assets and combined.json are served',()=>withFolder(folder=>serve(folder,async request=>{
   assert.equal((await request('/')).body,'<html>dashboard</html>');
   assert.equal((await request('/assets/app.js')).status,200);
+  const font=await request('/assets/font.woff2');
+  assert.deepEqual([font.status,font.headers['content-type']],[200,'font/woff2'],'the bundled fonts are served from the same origin');
   const combined=await request('/local/combined.json');
   assert.equal(combined.status,200);
   assert.equal(JSON.parse(combined.body).schema,'observatory-combined/1');
@@ -62,3 +65,31 @@ test('the request policy matches the configured port only',()=>{
   const cross={host:'127.0.0.1:5601','sec-fetch-site':'cross-site','sec-fetch-mode':'navigate','sec-fetch-dest':'document'};
   assert.equal(allowedLocalRequest({method:'GET',url:'/local/combined.json',headers:cross},5601),false);
 });
+
+test('/local/views.json lists only saved views that pass the check, and stays GET and HEAD only',()=>withFolder(async folder=>{
+  const spec={root:'page',elements:{page:{type:'Section',props:{title:null,columns:12},children:['a']},a:{type:'Flags',props:{}}}};
+  const view=(id,change={})=>JSON.stringify({id,title:id,question:null,spec,savedAt:'2026-11-18T10:00:00.000Z',origin:'composed',...change});
+  const dir=path.join(folder,'data/public/local/views');
+  await mkdir(dir,{recursive:true});
+  await writeFile(path.join(dir,'good.json'),view('good'));
+  await writeFile(path.join(dir,'bad.json'),view('bad',{spec:{root:'a',elements:{a:{type:'Nope',props:{}}}}}));
+  await writeFile(path.join(dir,'notes.txt'),'private');
+  await serve(folder,async request=>{
+    const response=await request('/local/views.json');
+    assert.equal(response.status,200);
+    assert.equal(response.headers['content-type'],'application/json');
+    assert.equal(response.headers['cache-control'],'no-store');
+    const body=JSON.parse(response.body);
+    assert.equal(body.schema,'observatory-views/1');
+    assert.deepEqual(body.views.map(item=>item.id),['good']);
+    assert.equal((await request('/local/views.json',{method:'HEAD'})).status,200);
+    for(const method of ['POST','PUT','DELETE','PATCH'])assert.equal((await request('/local/views.json',{method})).status,405,method);
+    for(const url of ['/local/views/good.json','/local/views','/local/views.json/x','/views.json'])assert.equal((await request(url)).status,404,url);
+    assert.equal((await request('/local/views.json',{headers:{'sec-fetch-site':'cross-site','sec-fetch-mode':'cors','sec-fetch-dest':'empty'}})).status,403);
+    assert.equal((await request('/local/views.json',{headers:{host:'evil.example'}})).status,403);
+  });
+}));
+
+test('/local/views.json is an empty list when nothing was saved',()=>withFolder(folder=>serve(folder,async request=>{
+  assert.deepEqual(JSON.parse((await request('/local/views.json')).body).views,[]);
+})));

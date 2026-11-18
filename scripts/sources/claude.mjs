@@ -5,7 +5,7 @@ import path from 'node:path';
 import {claudeRequest} from './usage.mjs';
 import {FILE_TOOLS,addWrite,retryState,retryCall,retryResult,retryRuns,shellWrites,repositoryResolver} from './activity.mjs';
 import {workKind} from '../ledger-kinds.mjs';
-import {walkFiles,eachLimited,cleanTitle,parseWithCache,notePrompt} from './common.mjs';
+import {MAX_FILES,walkFiles,eachLimited,cleanTitle,parseWithCache,notePrompt} from './common.mjs';
 
 const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 // Lines the adapter reads. Attachments, request copies and file history are skipped unparsed.
@@ -99,9 +99,9 @@ const parseFile=(file,info,{cache,resolve,home,agent})=>parseWithCache(file,info
   each:(state,event)=>claudeEvent(state,event,{resolve,home}),big:bigLine});
 
 // Every session with a file written at or after `since`, with its subagents.
-export async function readClaudeSessions(folder,{since,cache,home,platform=process.platform,deadline=Infinity,concurrency=8}) {
+export async function readClaudeSessions(folder,{since,cache,home,platform=process.platform,deadline=Infinity,concurrency=8,maxFiles=MAX_FILES}) {
   const resolve=repositoryResolver(home,platform);
-  const files=await walkFiles(path.join(folder,'projects'),{since,match:name=>name.endsWith('.jsonl')});
+  const files=await walkFiles(path.join(folder,'projects'),{since,match:name=>name.endsWith('.jsonl'),maxFiles});
   const sessions=new Map();
   const sessionOf=id=>{
     let row=sessions.get(id);

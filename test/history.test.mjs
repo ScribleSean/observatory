@@ -7,7 +7,6 @@ import {collectClaudeUsage} from '../scripts/read-claude-usage.mjs';
 import {openTokenStore,keepTokenDays} from '../scripts/token-store.mjs';
 import {combine} from '../lib/combine.mjs';
 import {activityView} from '../lib/view-activity.mjs';
-import {tokensView} from '../lib/view-tokens.mjs';
 import {withFolder,testConfig} from './helpers.mjs';
 
 const DAY=86400000;
@@ -128,9 +127,6 @@ test('a year of simulated daily history keeps the data folder under 2 MB and dro
   assert.ok(screen.length>=weeks*7);
   assert.ok(bytes<2*1048576,`${bytes} bytes`);
   const combined=combine([{host:'Mac',snapshot}],{now:at(weeks-1).getTime()});
-  const all=tokensView(combined.view,{host:'Mac',period:'all',now:at(weeks-1).getTime()});
-  assert.equal(all.claude.totals.total,span*total(1300));
-  assert.equal(all.claude.since,first);
   const seconds=screen.reduce((sum,day)=>sum+day.seconds,0);
   assert.ok(seconds>=weeks*7*6*3600);
   assert.equal(activityView(combined.view,{host:'Mac',period:'all',now:at(weeks-1).getTime()}).total,seconds);

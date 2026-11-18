@@ -41,7 +41,7 @@ export function safeRef(name) {
 }
 
 // The default branch: origin/HEAD, else main, else master.
-async function defaultBranch(git,repo) {
+export async function defaultBranch(git,repo) {
   const remote=(await git(repo,['symbolic-ref','-q','refs/remotes/origin/HEAD']))?.trim();
   if(remote && safeRef(remote))return remote;
   for(const name of ['refs/heads/main','refs/heads/master'])

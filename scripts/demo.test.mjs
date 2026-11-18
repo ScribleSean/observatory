@@ -8,11 +8,9 @@ import {shiftDemoClock} from '../lib/demo-clock.mjs';
 import {combine} from '../lib/combine.mjs';
 import {ownSnapshot} from '../test/helpers.mjs';
 import {activityView} from '../lib/view-activity.mjs';
-import {tokensView} from '../lib/view-tokens.mjs';
-import {sourceGroups} from '../lib/view-sources.mjs';
 import {freshness} from '../lib/panel-data.mjs';
 
-const fictional={demo:true,devices:[{host:'Mac',name:'Studio Mac'},{host:'Windows',name:'Desk PC'}]};
+const fictional={demo:true,devices:[{host:'Mac',name:'Studio'},{host:'Windows',name:'Tower'},{host:'Linux',name:'Lab'}]};
 
 async function demoFolder({html='<script type="module" src="./assets/index-a1.js"></script>',data=fictional,extra={}}={}) {
   const dir=await mkdtemp(path.join(tmpdir(),'observatory-demo-'));
@@ -56,13 +54,11 @@ test('the demo stays recent a week after build, including across UTC midnight',(
     assert.equal(activity.anchor,today);
     assert.equal(activity.series.at(-1).date,today);
     assert.ok(activity.series.every(day=>day.value>0));
-    const tokens=tokensView(shifted.view,{host:'Mac',period:'week',now});
-    assert.equal(tokens.codex.status,'ok');
-    assert.equal(tokens.codex.days.at(-1).date,today);
-    assert.ok(tokens.codex.days.at(-1).total>0);
-    const read=sourceGroups(shifted.view,now).find(group=>group.id==='activity').rows[0].check;
-    assert.equal(now-Date.parse(read.iso),120000);
-    assert.equal(read.label,'Checked 2m ago');
+    const codex=shifted.view.tokens.find(row=>row.host==='Mac');
+    assert.equal(codex.status,'ok');
+    assert.equal(codex.days[0].date,today);
+    assert.ok(codex.days[0].totalTokens>0);
+    assert.equal(now-Date.parse(shifted.view.activity.find(row=>row.host==='Mac').checkedAt),120000);
     for (const row of [shifted.view,...Object.values(shifted.snapshots)]) {
       assert.equal(Date.parse(row.quota.windows[0].resetsAt)-now,225*60000);
       assert.equal(Date.parse(row.limitHistory[0].points[0].t),Date.parse(snapshot.collectedAt)+elapsed);
@@ -128,23 +124,5 @@ test('the demo keeps each reading on its newest day across UTC midnight',()=>{
       assert.ok(hours[reading.getUTCHours()]>0,label);
       assert.ok(hours.slice(reading.getUTCHours()+1).every(value=>value===0),label);
     }
-  }
-});
-
-test('the two-computer demo shows Codex tokens for both computers and for each in Both',()=>{
-  const built=Date.parse('2026-02-25T12:00:00Z');
-  const sources=[{host:'Mac',snapshot:ownSnapshot('Mac',built)},{host:'Windows',snapshot:ownSnapshot('Windows',built-4*60000)}];
-  const data={demo:true,...combine(sources,{now:built,generatedBy:'Mac'})};
-  const both=tokensView(data.view,{host:'All',period:'week',now:built});
-  assert.equal(both.codex.status,'ok');
-  assert.equal(both.codex.totals.total,both.codex.byDevice.reduce((total,row)=>total+row.total,0));
-  assert.deepEqual(both.codex.byDevice.map(row=>row.label),['Mac','PC']);
-  for (const row of both.codex.byDevice) {
-    const own=tokensView(data.view,{host:row.host,period:'week',now:built}).codex;
-    assert.equal(own.status,'ok');
-    assert.ok(own.totals.total>0);
-    assert.equal(row.status,'ok');
-    assert.equal(row.total,own.totals.total);
-    assert.equal(row.usd,own.estimate.usd);
   }
 });

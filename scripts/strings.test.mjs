@@ -42,18 +42,6 @@ test('format fills repeated placeholders including zero and refuses missing valu
   assert.throws(() => format('{constructor}', {}), /Missing placeholder/);
 });
 
-const unchanged = ['Now', 'Day', '7 days', '30 days', 'Unknown', 'Open dashboard', 'Refresh', 'Screen time', 'Hourly totals are not collected yet', 'Not collected yet', 'No records', 'By computer'];
-
-test('views read shared wording instead of literal labels', () => {
-  for (const path of ['app/viewer/dashboard.tsx', 'app/viewer/components/Card.tsx', 'app/viewer/components/FilterGroup.tsx', 'app/viewer/components/Meter.tsx', 'app/viewer/components/LimitRows.tsx', 'app/viewer/components/ProviderDot.tsx', 'app/viewer/components/Row.tsx', 'app/viewer/activity/ActivityView.tsx', 'app/viewer/tokens/tokens.tsx']) {
-    const source = read(path);
-    for (const value of unchanged) {
-      assert.ok(!source.includes(`'${value}'`) && !source.includes(`"${value}"`), `${path}: ${value}`);
-      assert.ok(!source.includes(`>${value}<`) && !source.includes(`>${value}{`), `${path}: JSX ${value}`);
-    }
-  }
-});
-
 test('panel formatting preserves fixed synthetic outputs', async () => {
   const { span, windowLabel, freshness } = await import('../lib/panel-data.mjs');
   const now = Date.parse('2026-10-14T12:00:00Z');

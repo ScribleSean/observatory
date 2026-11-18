@@ -30,13 +30,13 @@ export const RESUME_GAP_MS=5*60000;
 export const AUTO_RESUME_SPAN_MS=30*60000;
 const MAX_REPOS=8;
 
-const ledgerId=(tool,id)=>createHash('sha256').update(`${tool}:${id}`).digest('hex').slice(0,12);
+export const ledgerId=(tool,id)=>createHash('sha256').update(`${tool}:${id}`).digest('hex').slice(0,12);
 const iso=ms=>new Date(ms).toISOString();
 const rateOf=model=>Object.hasOwn(rates,model)?rates[model]:null;
 const priceAt=(model,values)=>{const rate=rateOf(model);return rate?values.reduce((sum,value,index)=>sum+value*rate[index],0)/1e6:null;};
 // Sums that stay Unknown when any part is.
-const knownSum=values=>values.some(value=>value===null)?null:values.reduce((a,b)=>a+b,0);
-const round=value=>value===null?null:Math.round(value*1e6)/1e6;
+export const knownSum=values=>values.some(value=>value===null)?null:values.reduce((a,b)=>a+b,0);
+export const round=value=>value===null?null:Math.round(value*1e6)/1e6;
 const byUsd=(a,b)=>(b.apiUsd ?? -1)-(a.apiUsd ?? -1);
 
 // The weekly window for a tool: from its limit reading when there is one, else the last 7 days.
@@ -54,7 +54,7 @@ export function smallModelOf(source) {
 
 // Requests with each one's price, keeping only the largest copy of each request key across sessions
 // (a fork carries its parent's requests). A tie goes to the session that started first.
-function priced(sessions) {
+export function priced(sessions) {
   const best=new Map();
   for(const session of sessions)for(const request of session.requests) {
     const total=request.values.reduce((a,b)=>a+b,0),prior=best.get(request.key);
@@ -91,7 +91,7 @@ function liveMatches(source,sessions,live) {
 
 // The folder name of the git repository a session ran in, or null. Never a path, never the home folder, and never
 // a working folder that is not a repository: only a name the resolver found a repository for leaves this computer.
-function repoName(dir) {
+export function repoName(dir) {
   if(typeof dir!=='string' || !path.isAbsolute(dir) || path.resolve(dir)===path.resolve(os.homedir()))return null;
   const name=path.basename(dir);
   return name && name!=='.' && name!=='..' && name.length<=64?name:null;

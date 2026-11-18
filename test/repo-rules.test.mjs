@@ -233,11 +233,24 @@ test('the privacy docs say session titles are kept and travel to the hub unless 
   assert.match(read('README.md'),/private cache in the data folder holds file locations/);
 });
 
+// Fictional agent names that tests and the fixture may write out plainly, matched as whole words in any case.
+// They name nobody's agents: Lantern and Orchard are fixture repositories, and Atlas is the roles example.
+// Every other "<Word>Bot" name still fails, so a real agent name cannot slip in as a fixture.
+const FICTIONAL_AGENT_NAMES=['LanternBot','OrchardBot','AtlasBot'];
+const fictional=new RegExp(`\\b(${FICTIONAL_AGENT_NAMES.join('|')})\\b`,'gi');
+// A decision signed with a name and a date, a bot-named agent, or words from one private workflow.
+const PRIVATE_WORK=/\([A-Z][a-z]+, 20\d\d-\d\d-\d\d|^\s*\/\/ [A-Z][a-z]+, 20\d\d-\d\d-\d\d:|\b[A-Z][a-z]+Bot\b|\bon ubuntu\b|\bsicko\b|\bself-clean\b|\bdata lane\b/i;
+const namesPrivateWork=line=>PRIVATE_WORK.test(line.replace(fictional,''));
+
 test('source, tests and the apps name no person and no private way of working',()=>{
   const files=[...sources(['lib','scripts','app','test'],file=>file!=='test/repo-rules.test.mjs' && file!=='test/agent-status.test.mjs'),'glance/mac/Glance.swift'];
-  // A decision signed with a name and a date, a bot-named fixture, or words from one private workflow.
-  const found=hits(files,/\([A-Z][a-z]+, 20\d\d-\d\d-\d\d|^\s*\/\/ [A-Z][a-z]+, 20\d\d-\d\d-\d\d:|\b[A-Z][a-z]+Bot\b|\bon ubuntu\b|\bsicko\b|\bself-clean\b|\bdata lane\b/i,'repo-rules: allow');
+  const found=hits(files,{test:namesPrivateWork},'repo-rules: allow');
   assert.deepEqual(found,[]);
+});
+
+test('the bot-name rule passes only the listed fictional names',()=>{
+  for (const line of ["title: 'LanternBot: job queue'","{ lanternbot: 'Runner' }","'OrchardBot: rebuild', 'AtlasBot 4: lanes'"]) assert.equal(namesPrivateWork(line),false,line);
+  for (const line of ["title: 'PlannerBot: job queue'","'NightLanternBot: tidy'","'LanternBot and QueueBot'","{ ledgerbot: 'Runner' }"]) assert.equal(namesPrivateWork(line),true,line);
 });
 
 test('both native apps show Collecting when the glance says nothing has been read yet',()=>{

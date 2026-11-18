@@ -6,6 +6,9 @@ import {workKind} from '../ledger-kinds.mjs';
 export {cleanTitle} from './pure.mjs';
 
 export const MAX_FILES=20000;
+// A backfill reads every transcript the tool still holds (since 0), so years of rollouts all count. Its cap is
+// higher, and what it parsed stays in the parse cache, so a large folder finishes over several collections.
+export const BACKFILL_MAX_FILES=200000;
 export class Deadline extends Error {constructor() {super('Ledger read ran out of time');this.reason='slow';}}
 
 // Files under root whose name matches, written at or after `since`. Links are not followed. Only those

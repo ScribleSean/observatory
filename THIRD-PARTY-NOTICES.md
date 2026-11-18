@@ -9,6 +9,11 @@ Observatory's own code is under the [MIT license](LICENSE). The pieces below com
 | Package | License |
 | --- | --- |
 | [React](https://github.com/facebook/react) and React DOM, with their scheduler | MIT |
+| [json-render](https://github.com/vercel-labs/json-render) core and React renderer, 0.22.0 | Apache-2.0 |
+| [Zod](https://github.com/colinhacks/zod) 4.6.7 | MIT |
+| [Geist and Geist Mono](https://github.com/vercel/geist-font) fonts, from the `@fontsource/geist-sans` and `@fontsource/geist-mono` packages, 5.3.0 | SIL Open Font License 1.1 |
+
+The fonts are copied into the build as woff2 files (Latin, weights 400 to 600 for Geist and 400 and 500 for Geist Mono), so the dashboard loads no font from the network. Their license text is in `node_modules/@fontsource/geist-sans/LICENSE` after `npm install`. Copyright 2023 Vercel, made in collaboration with basement.studio.
 
 ## Used only to build and test
 

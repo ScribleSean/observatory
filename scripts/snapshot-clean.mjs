@@ -3,6 +3,9 @@ import {createHmac} from 'node:crypto';
 import {LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
 import {isWorkKind} from './ledger-kinds.mjs';
 import {TOOL_CATEGORIES,cleanTitle} from './sources/pure.mjs';
+import {SOURCES,ENGINE_IDS,ENGINE_SETTINGS,MAX_ROLE_ALIASES} from '../lib/config.mjs';
+import {ROLES} from '../lib/roles.mjs';
+export {cleanLedgerHistory} from '../lib/r2-shape.mjs';
 const fields = [
   'inputTokens',
   'cacheReadTokens',
@@ -178,4 +181,21 @@ export function cleanLedgerRow(raw,{titles=true,salt=null}={}) {
   });
   need(new Set(tools.map(tool=>tool.tool)).size===tools.length);
   return {host:raw.host,status:'ok',collectedAt:raw.collectedAt,tools};
+}
+
+// One computer's settings echo (lib/r2-shape.mjs ConfigEcho), local or pulled over SSH: only the known
+// keys, so no path, SSH alias, data folder or program location can ride along. Throws on a wrong shape.
+// oxlint-disable-next-line no-control-regex -- refusing control characters is the point
+const ECHO_TEXT=/^[^\u0000-\u001f\u007f]{1,64}$/;
+export function cleanConfigEcho(raw,host) {
+  need(ledgerObject(raw) && raw.host===host && typeof raw.name==='string' && ECHO_TEXT.test(raw.name.trim()) && ['hub','spoke'].includes(raw.role) &&
+    ledgerObject(raw.sources) && ledgerObject(raw.engines) && typeof raw.titles==='boolean');
+  const aliases=raw.roleAliases ?? {};
+  need(ledgerObject(aliases) && Object.keys(aliases).length<=MAX_ROLE_ALIASES);
+  return {host,name:raw.name.trim(),role:raw.role,
+    sources:Object.fromEntries(SOURCES.map(key=>[key,raw.sources[key]===true])),
+    engines:Object.fromEntries(ENGINE_IDS.map(id=>[id,ENGINE_SETTINGS.includes(raw.engines[id])?raw.engines[id]:'auto'])),
+    titles:raw.titles,
+    roleAliases:Object.fromEntries(Object.entries(aliases).filter(([start,role])=>ECHO_TEXT.test(start) && ROLES.includes(role))),
+    checkedAt:ledgerInstant(raw.checkedAt)?raw.checkedAt:null};
 }
