@@ -47,6 +47,10 @@ test('numbers and names cannot be smuggled in as props',()=>{
   assert.equal(checkSpec(total).ok,false);
   const section=good();section.elements.page.props.title='x'.repeat(81);
   assert.match(errorsOf(section),/page: title/);
+  for(const mark of ['\u202A','\u202E','\u2066','\u2069','\u200E','\u200F','\u061C']) {
+    const bidi=good();bidi.elements.page.props.title=`Spend${mark}by repo`;
+    assert.equal(checkSpec(bidi).ok,false,`U+${mark.codePointAt(0).toString(16).toUpperCase()}`);
+  }
   const control=good();control.elements.page.props.title='a\nb';
   assert.match(errorsOf(control),/control characters/);
 });
@@ -94,7 +98,12 @@ test('the tree must be a tree: children exist, are used once, are reachable, and
   const orphan=good();orphan.elements.lonely={type:'Flags',props:{}};
   assert.equal(checkSpec(orphan).ok,false);
   const leaf=good();leaf.elements.spend.children=['byRepo'];leaf.elements.page.children=['spend'];
-  assert.match(errorsOf(leaf),/only a Section has children/);
+  assert.match(errorsOf(leaf),/only a Section has children/);  // A child or root named for something every object inherits is not an element.
+  for(const name of ['constructor','__proto__','toString','hasOwnProperty']) {
+    const inherited=good();inherited.elements.page.children.push(name);
+    assert.match(errorsOf(inherited),new RegExp(`page: child ${name} is not an element`),name);
+    assert.equal(checkSpec({...good(),root:name}).ok,false,`root ${name}`);
+  }
 });
 
 test('the saved view check is the block catalog\'s, so the MCP server, the route and the dashboard refuse the same specs',()=>{
@@ -109,7 +118,7 @@ test('the saved view check is the block catalog\'s, so the MCP server, the route
 test('a view needs a valid id, title, question and date',()=>{
   const view=(change={})=>({id:'week-spend',title:'Week',question:null,spec:good(),savedAt:'2026-11-18T10:00:00.000Z',origin:'composed',...change});
   assert.equal(checkView(view()).ok,true);
-  for(const bad of [{id:'Week'},{id:''},{id:'a'.repeat(49)},{id:'../x'},{title:''},{title:'t'.repeat(81)},{question:''},{savedAt:'yesterday'},{origin:'other'},{extra:1},{title:'a\u0000b'},{question:'a\nb'},{savedAt:'2026-11-18T10:00:00Z'}])
+  for(const bad of [{id:'Week'},{id:''},{id:'a'.repeat(49)},{id:'../x'},{title:''},{title:'t'.repeat(81)},{question:''},{savedAt:'yesterday'},{origin:'other'},{extra:1},{title:'a\u0000b'},{question:'a\nb'},{title:'Week \u202Edneps'},{title:'a\u2066b'},{title:'a\u200Fb'},{question:'a\u061Cb'},{savedAt:'2026-11-18T10:00:00Z'}])
     assert.equal(checkView(view(bad)).ok,false,JSON.stringify(bad).slice(0,60));
 });
 
