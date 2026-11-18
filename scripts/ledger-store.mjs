@@ -14,7 +14,7 @@ import {privateFolder} from '../lib/private-folder.mjs';
 import {LEDGER_HISTORY_SCHEMA,SESSION_DAY_TOP,SESSION_DAYS,REDERIVE_DAYS,ONMAIN_RECHECK_DAYS,MAX_DAY_REPOS,MAX_SESSION_MODELS,
   MAX_SESSION_KINDS,MAX_SESSION_REPOS} from '../lib/r2-shape.mjs';
 import {dayKey} from './read-projects.mjs';
-import {addDays,datesFrom,dateFloorMs} from './ledger-history.mjs';
+import {addDays,datesFrom,dateFloorMs,unavailableDay} from './ledger-history.mjs';
 import {gitRunner,defaultBranch} from './ledger-commits.mjs';
 import {knownSum,round} from './ledger.mjs';
 
@@ -92,6 +92,19 @@ export function datesToBuild({today,sessions,from,timeZone}) {
     return datesFrom(start<rebuildFrom(today)?start:rebuildFrom(today),today);
   }
   return datesFrom(from<rebuildFrom(today)?from:rebuildFrom(today),today);
+}
+
+/**
+ * When filling a gap, the first date the read can vouch for. Transcripts older than the tool keeps are
+ * deleted, so a gap date before the first request found may have had sessions that are gone: it is
+ * Unknown, not 0. Null when the read reaches back to `from`. The rebuild window is always known.
+ */
+export function gapKnownFrom({today,sessions,from,timeZone}) {
+  if(from===null)return null;
+  const first=Math.min(...sessions.flatMap(session=>session.requests.map(request=>request.at)));
+  const window=rebuildFrom(today);
+  const known=Number.isFinite(first) && dayKey(first,timeZone)<window?dayKey(first,timeZone):window;
+  return known>from?known:null;
 }
 
 /**
@@ -214,7 +227,8 @@ export function snapshotDay(day,{listSessions,titles,frozen}) {
 
 /**
  * This computer's ledgerHistory row from the store. Tools in `unread` could not be read this time, so
- * their rebuild days with no stored record read as unavailable.
+ * their rebuild days with no stored record read as unavailable. A date missing from the store after a
+ * tool's first stored day (a gap that could not be read) is unavailable too, never a known 0.
  * @param {DatabaseSync} db
  * @param {{host: string, now: number, timeZone: string, titles: boolean, unread?: string[]}} options
  */
@@ -226,11 +240,12 @@ export function historyRow(db,{host,now,timeZone,titles,unread=[]}) {
     return snapshotDay(day,{listSessions:day.date>=listFrom,titles,frozen:day.date<frozenBefore});
   });
   const have=new Set(days.map(day=>`${day.tool}\0${day.date}`));
-  for(const tool of unread)for(const date of datesFrom(frozenBefore,today)) {
+  const firsts=new Map();
+  for(const day of days)if(!firsts.has(day.tool))firsts.set(day.tool,day.date);
+  for(const tool of unread)if(!firsts.has(tool))firsts.set(tool,frozenBefore);
+  for(const [tool,first] of firsts)for(const date of datesFrom(first,today)) {
     if(have.has(`${tool}\0${date}`))continue;
-    days.push({date,tool,status:'unavailable',frozen:false,apiUsd:null,sessionCount:null,subagents:null,
-      tokens:{input:null,output:null,cacheRead:null,cacheWrite:null},models:[],kinds:[],origins:[],repos:[],
-      ship:{commits:null,onMain:null,merges:null},sessions:[],other:null});
+    days.push({...unavailableDay(tool,date),frozen:date<frozenBefore});
   }
   days.sort((a,b)=>a.date.localeCompare(b.date) || a.tool.localeCompare(b.tool));
   const firstDate=days[0]?.date ?? null;

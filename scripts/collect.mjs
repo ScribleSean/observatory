@@ -30,7 +30,7 @@ import {readLedgerSources} from './sources/index.mjs';
 import {buildLedger,WEEK_MS} from './ledger.mjs';
 import {joinCommits} from './ledger-commits.mjs';
 import {buildLedgerHistory,dateFloorMs} from './ledger-history.mjs';
-import {openLedgerStore,historyPlan,datesToBuild,writeHistory,recheckOnMain,historyRow,keepGrokDays} from './ledger-store.mjs';
+import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,writeHistory,recheckOnMain,historyRow,keepGrokDays} from './ledger-store.mjs';
 import {cleanLedgerHistory,LEDGER_HISTORY_SCHEMA} from '../lib/r2-shape.mjs';
 
 // The ledger reads at most this long in one collection. What it read stays cached, so a first run on a
@@ -166,7 +166,8 @@ async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,t
   for(const tool of ledgerRead.tools) {
     const id=tool.source.id,wanted=plan?.extra[id],more=wanted?extra?.tools.find(row=>row.source.id===id):null;
     if(more?.status==='ok') {
-      historyTools.push({source:tool.source,sessions:more.sessions,dates:datesToBuild({today:plan.today,sessions:more.sessions,from:wanted.from,timeZone})});
+      historyTools.push({source:tool.source,sessions:more.sessions,dates:datesToBuild({today:plan.today,sessions:more.sessions,from:wanted.from,timeZone}),
+        unknownBefore:gapKnownFrom({today:plan.today,sessions:more.sessions,from:wanted.from,timeZone})});
       if(wanted.since===0)backfilled.push(id);
     } else if(tool.status==='ok') {
       if(plan)historyTools.push({source:tool.source,sessions:tool.sessions,dates:plan.rebuild});

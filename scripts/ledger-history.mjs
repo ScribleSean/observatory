@@ -103,6 +103,12 @@ export function emptyDay(tool,date) {
     ship:{commits:0,onMain:0,merges:0},sessions:[],other:null};
 }
 
+// A day that could not be read: Unknown, never 0.
+export function unavailableDay(tool,date) {
+  return {date,tool,status:'unavailable',apiUsd:null,sessionCount:null,subagents:null,tokens:{input:null,output:null,cacheRead:null,cacheWrite:null},
+    models:[],kinds:[],origins:[],repos:[],ship:{commits:null,onMain:null,merges:null},sessions:[],other:null};
+}
+
 const sumOr=(values)=>knownSum(values);
 
 function dayRecord(tool,date,parts) {
@@ -156,13 +162,14 @@ function dayRecord(tool,date,parts) {
 
 /**
  * Days for each tool on the dates asked for.
- * @param {{tools: {source: object, sessions: object[], dates: string[]}[], joined: {shipped: Map, unread: Set} | null,
+ * @param {{tools: {source: object, sessions: object[], dates: string[], unknownBefore?: string | null}[], joined: {shipped: Map, unread: Set} | null,
  *   timeZone: string, titles: boolean}} input  joined null: the commit join failed, so shipped work is Unknown where anything was written.
+ *   unknownBefore: dates before it with nothing read are Unknown (their transcripts may be gone), not a known 0.
  * @returns {{days: object[], commits: {tool: string, date: string, session: string, repo: string, repoName: string, sha: string, onMain: boolean | null}[]}}
  */
 export function buildLedgerHistory({tools,joined,timeZone,titles}) {
   const days=[],commits=[];
-  for(const {source,sessions,dates} of tools) {
+  for(const {source,sessions,dates,unknownBefore=null} of tools) {
     const wanted=new Set(dates);
     const byDate=new Map(dates.map(date=>[date,[]]));
     const pricedRequests=priced(sessions);
@@ -203,7 +210,10 @@ export function buildLedgerHistory({tools,joined,timeZone,titles}) {
         }
       }
     }
-    for(const date of dates)days.push(dayRecord(source.id,date,byDate.get(date)));
+    for(const date of dates) {
+      const parts=byDate.get(date);
+      days.push(unknownBefore && date<unknownBefore && !parts.length?unavailableDay(source.id,date):dayRecord(source.id,date,parts));
+    }
   }
   return {days,commits};
 }

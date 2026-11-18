@@ -6,7 +6,7 @@ import {mkdir,stat,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder,testConfig} from './helpers.mjs';
 import {claudeAssistant,claudePrompt,claudeTitle,writeClaude,makeRepo,git} from './ledger-fixtures.mjs';
-import {openLedgerStore,historyPlan,datesToBuild,writeHistory,historyRow,recheckOnMain,keepGrokDays,applyOnMain,rebuildFrom} from '../scripts/ledger-store.mjs';
+import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,writeHistory,historyRow,recheckOnMain,keepGrokDays,applyOnMain,rebuildFrom} from '../scripts/ledger-store.mjs';
 import {buildLedgerHistory,addDays} from '../scripts/ledger-history.mjs';
 import {readLedgerSources,claude} from '../scripts/sources/index.mjs';
 import {memoryCache} from '../scripts/sources/parse-cache.mjs';
@@ -73,6 +73,40 @@ test('the snapshot row freezes old days, lists sessions for SESSION_DAYS, and re
     assert.ok(codexDays.every(day=>day.status==='unavailable' && day.apiUsd===null),'a tool that could not be read is Unknown, not 0');
   } finally {db.close();}
 }));
+
+test('a gap that could not be read is Unknown in the row, never a known 0',()=>withFolder(async folder=>{
+  const db=await openLedgerStore(folder);
+  try {
+    // A day 20 days back was kept, then the collector stopped. It came back, but the gap read failed, so only the
+    // rebuild window was written and the tool was held.
+    const old=addDays(TODAY,-20);
+    writeHistory(db,{...buildLedgerHistory({tools:[{source:claude,sessions:[record('a',Date.parse(`${old}T17:00:00Z`))],dates:[old]}],joined:{shipped:new Map(),unread:new Set()},timeZone:TIME_ZONE,titles:true}),backfilled:['claude']});
+    const rebuild=historyPlan(db,{tools:['claude'],now:NOW,timeZone:TIME_ZONE}).rebuild;
+    writeHistory(db,{...buildLedgerHistory({tools:[{source:claude,sessions:[],dates:rebuild}],joined:{shipped:new Map(),unread:new Set()},timeZone:TIME_ZONE,titles:true}),held:['claude']});
+    const days=cleanLedgerHistory(historyRow(db,{host:'Mac',now:NOW,timeZone:TIME_ZONE,titles:true}),{titles:true}).days;
+    const gap=[addDays(TODAY,-19),addDays(TODAY,-18),addDays(TODAY,-17),addDays(TODAY,-16),addDays(TODAY,-15),addDays(TODAY,-14)];
+    assert.deepEqual(days.filter(day=>day.status==='unavailable').map(day=>day.date),gap);
+    assert.ok(days.filter(day=>gap.includes(day.date)).every(day=>day.apiUsd===null && day.sessionCount===null));
+    assert.equal(days.length,21,'the kept day, six Unknown days and the 14 rebuilt');
+    assert.equal(days.find(day=>day.date===addDays(TODAY,-13)).apiUsd,0,'a rebuilt day with nothing in it is still a known 0');
+  } finally {db.close();}
+}));
+
+test('a gap longer than the transcripts kept is Unknown before the first request found',()=>{
+  const from=addDays(TODAY,-41);
+  const firstFound=Date.parse(`${addDays(TODAY,-30)}T17:00:00Z`);
+  assert.equal(gapKnownFrom({today:TODAY,sessions:[record('a',firstFound)],from,timeZone:TIME_ZONE}),addDays(TODAY,-30));
+  assert.equal(gapKnownFrom({today:TODAY,sessions:[record('b',Date.parse(`${addDays(TODAY,-45)}T17:00:00Z`))],from,timeZone:TIME_ZONE}),null,'a transcript from before the gap covers it');
+  assert.equal(gapKnownFrom({today:TODAY,sessions:[],from,timeZone:TIME_ZONE}),addDays(TODAY,-13),'nothing found: the gap up to the rebuild window is Unknown');
+  assert.equal(gapKnownFrom({today:TODAY,sessions:[],from:null,timeZone:TIME_ZONE}),null,'a backfill starts at its first request');
+  const dates=datesToBuild({today:TODAY,sessions:[record('a',firstFound)],from,timeZone:TIME_ZONE});
+  const {days}=buildLedgerHistory({tools:[{source:claude,sessions:[record('a',firstFound)],dates,unknownBefore:addDays(TODAY,-30)}],joined:{shipped:new Map(),unread:new Set()},timeZone:TIME_ZONE,titles:true});
+  assert.equal(days.length,42);
+  assert.equal(days.filter(day=>day.status==='unavailable').length,11,'days 41 to 31 back');
+  assert.equal(days.find(day=>day.date===addDays(TODAY,-31)).apiUsd,null);
+  assert.equal(days.find(day=>day.date===addDays(TODAY,-30)).sessionCount,1);
+  assert.equal(days.find(day=>day.date===addDays(TODAY,-29)).apiUsd,0,'after the first request, a quiet day is a known 0');
+});
 
 test('a merge made after the rebuild window turns old commits into commits on main',()=>withFolder(async folder=>{
   const repo=path.join(folder,'fence');
@@ -200,5 +234,29 @@ test('a collection backfills from transcripts, writes a history row the cleaner 
     assert.equal(none.data.ledgerHistory[0].status,'unavailable');
     const offAll=await buildSnapshot({...config,sources:{}},readers,{now:new Date(NOW),ledgerStore:db});
     assert.equal(offAll.data.ledgerHistory[0].status,'not-connected');
+  } finally {db.close();}
+}));
+
+test('a collection that fills a gap older than the transcripts kept marks the days before the first one found Unknown',()=>withFolder(async folder=>{
+  const home=path.join(folder,'home'),data=path.join(folder,'data');
+  await mkdir(data,{recursive:true,mode:0o700});
+  const cwd=path.join(home,'code','fence');
+  await mkdir(cwd,{recursive:true});
+  const kept=addDays(TODAY,-40),firstLeft=NOW-25*DAY;
+  await writeClaude(home,'-code-fence','left-session',[claudeTitle('Mend the fence'),claudePrompt({at:firstLeft,cwd}),claudeAssistant({id:'l1',at:firstLeft+MIN,cwd,stop:'end_turn'})]);
+  const config=testConfig(data,{sources:{claudeCode:true},sessions:{titles:true,roles:{}},engines:{claude:'auto',codex:'off',grok:'off'}});
+  const db=await openLedgerStore(data);
+  try {
+    // The collector last ran 40 days ago. Claude Code has since deleted the transcripts older than 25 days.
+    writeHistory(db,{...buildLedgerHistory({tools:[{source:claude,sessions:[record('a',Date.parse(`${kept}T17:00:00Z`))],dates:[kept]}],joined:{shipped:new Map(),unread:new Set()},timeZone:TIME_ZONE,titles:true}),backfilled:['claude']});
+    const {data:snapshot}=await buildSnapshot(config,readersFor(home,config),{now:new Date(NOW),ledgerStore:db});
+    const days=snapshot.ledgerHistory[0].days;
+    assert.equal(days.find(day=>day.date===kept).sessionCount,1);
+    const unknown=days.filter(day=>day.status==='unavailable').map(day=>day.date);
+    assert.equal(unknown.length,14,'39 to 26 days back');
+    assert.equal(unknown[0],addDays(TODAY,-39));
+    assert.equal(unknown.at(-1),addDays(TODAY,-26));
+    assert.equal(days.find(day=>day.date===dayKey(firstLeft,TIME_ZONE)).sessionCount,1);
+    assert.equal(days.find(day=>day.date===addDays(TODAY,-24)).apiUsd,0);
   } finally {db.close();}
 }));
