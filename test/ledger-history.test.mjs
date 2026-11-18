@@ -16,7 +16,7 @@ let counter=0;
 function session(overrides={}) {
   const id=overrides.id ?? `history-${++counter}`;
   return {id,title:'Prune the hedges',first:NOON,last:NOON+HOUR,requests:[opus(`${id}-1`,NOON)],agents:[],writes:[],branches:[],runs:[],
-    rateLimits:[],typed:[],unknownTokens:false,live:null,repo:'/fictional/code/hedge',origin:'interactive',task:'build',...overrides};
+    rateLimits:[],typed:[],unknownTokens:false,live:null,repo:'/fictional/code/hedge',gitRepo:'/fictional/code/hedge',origin:'interactive',task:'build',...overrides};
 }
 const noJoin={shipped:new Map(),unread:new Set()};
 const build=(sessions,{dates=['2026-11-10'],joined=noJoin,titles=true,source=claude}={})=>buildLedgerHistory({tools:[{source,sessions,dates}],joined,timeZone:TZ,titles});
@@ -59,12 +59,12 @@ test('spend splits by model, kind, origin and repository, and a request a fork c
   const shared=opus('shared',NOON);
   const {days:[day]}=build([
     session({id:'parent',first:NOON-HOUR,requests:[shared]}),
-    session({id:'fork',first:NOON,requests:[shared,opus('own',NOON+MIN)],origin:'headless',task:'review',repo:'/fictional/code/orchard'}),
-    session({origin:null,repo:null,requests:[{key:'h',at:NOON,model:'claude-haiku-5-5',values:[10,10,10,10],agent:null}]}),
+    session({id:'fork',first:NOON,requests:[shared,opus('own',NOON+MIN)],origin:'headless',task:'review',repo:'/fictional/code/orchard',gitRepo:'/fictional/code/orchard'}),
+    session({origin:null,repo:'/fictional/notes',gitRepo:null,requests:[{key:'h',at:NOON,model:'claude-haiku-5-5',values:[10,10,10,10],agent:null}]}),
   ]);
   assert.equal(day.tokens.output,2*2000+10);
   assert.deepEqual(day.origins.map(row=>[row.origin,row.sessions]).sort(),[['headless',1],['interactive',1],['unknown',1]]);
-  assert.deepEqual(day.repos.map(row=>row.repo).sort(),['hedge','orchard']);
+  assert.deepEqual(day.repos.map(row=>row.repo).sort(),['hedge','orchard'],'a working folder that is not a git repository names no repository');
   assert.deepEqual(day.models.map(row=>row.model),['claude-opus-5-5','claude-haiku-5-5']);
   const total=day.sessions.reduce((sum,row)=>sum+row.apiUsd,0);
   assert.ok(Math.abs(total-day.apiUsd)<1e-6,'the sessions add up to the day');

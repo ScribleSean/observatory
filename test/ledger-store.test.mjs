@@ -21,7 +21,7 @@ const NOW=Date.parse('2026-11-18T17:00:00Z');
 const TODAY=dayKey(NOW,TIME_ZONE);
 const opus=(key,at)=>({key,at,model:'claude-opus-5-5',values:[1000,10000,500,2000],agent:null});
 const record=(id,at,overrides={})=>({id,title:'Mend the fence',first:at,last:at,requests:[opus(`${id}-r`,at)],agents:[],writes:[],branches:[],runs:[],
-  rateLimits:[],typed:[],unknownTokens:false,live:null,repo:'/fictional/code/fence',origin:'interactive',task:'build',...overrides});
+  rateLimits:[],typed:[],unknownTokens:false,live:null,repo:'/fictional/code/fence',gitRepo:'/fictional/code/fence',origin:'interactive',task:'build',...overrides});
 
 test('the store is private and its plan backfills a new tool, rebuilds the window and fills a gap',()=>withFolder(async folder=>{
   const db=await openLedgerStore(folder);
