@@ -8,7 +8,9 @@ This file records the data model, the contract modules and how the work splits i
 
 As of Nov 18, 2026 every lane is merged on `claude/observatory-r2`: the collector (a), view-models (b), the shell with Overview and Sessions (c), Limits, Tokens, Screen time, Drift and Settings (d) and the MCP server (f), together with `main`'s stored forecast. The integration also removed the stand-in view-models, wired saved views to the block catalog's checks, made the Limits view show the stored forecast through `shown()`, bundled the fonts, kept large histories from reading as unavailable, removed the old Week and History pages, and wrote the documentation and screenshots (lane e). It is not merged into `main` and has not been run against real data.
 
-## What is missing today
+## What was missing before round 2
+
+This section and the lane sections below are the plan as written before the work, kept as a record. Some files they name were later removed: `lib/view-history.mjs`, `app/viewer/dashboard.tsx` (the entry is now `app/web/dashboard.tsx`) and `app/viewer/components/`. The built-in specs live only in `lib/r2-specs.mjs`, and the dashboard reads them from there.
 
 The ledger (`lib/ledger-shape.mjs`, `scripts/ledger.mjs`) keeps only the current and previous weekly limit windows. Month, year and all-time views of sessions, spend and shipped work have no data. Token and screen-time totals already keep daily history for good (`scripts/token-store.mjs`, `scripts/activity-history.mjs`, `lib/view-history.mjs`), so those views only need the new scope.
 
@@ -100,7 +102,7 @@ The Settings view is a read-only display of each computer's settings echo. The d
 
 A backup of Observatory history into another agent's workspace was considered and is rejected for now: history is usage data and stays on the user's computers. The future option is an opt-in backup to a private Git repository the user owns, off by default, behind a new setting. It is design only and is not part of round 2.
 
-## Lanes
+## Lanes (historical plan)
 
 Each lane works in its own worktree off `claude/observatory-r2` and touches only the files listed. Every lane runs the full suite before it hands back. Lane b lands its dependency commit first, because lanes c, d and f import its packages.
 
