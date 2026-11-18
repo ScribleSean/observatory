@@ -1,0 +1,79 @@
+/* Rules only the Limits, Tokens, Screen time, Drift and Settings views use. Tokens, the grid, blocks,
+   strips, bar lists and columns come from r2.css. */
+
+/* limit rows and meters */
+.lim{padding:var(--sp-3) var(--pad);border-top:1px solid var(--line-soft)}
+.bh+.lim{border-top:0;padding-top:var(--sp-2)}
+.lim .h{display:flex;justify-content:space-between;gap:var(--sp-2);align-items:baseline}
+.lim .h span{font-size:var(--fs-small);color:var(--muted);white-space:nowrap}
+.lim .h span.acc{color:var(--accent)}
+.lim .h b{font-size:var(--fs-num);font-weight:600;letter-spacing:-.6px;line-height:1.1}
+.lim .h b.acc{color:var(--accent)}
+.lim .h b small{font-size:var(--fs-small);font-weight:400;color:var(--faint);letter-spacing:0;margin-left:4px}
+.lim .h b.unk{font-size:var(--fs-body);color:var(--faint);font-weight:500;letter-spacing:0}
+.meter{height:6px;border-radius:3px;background:var(--track);position:relative;margin:var(--sp-2) 0 6px}
+.meter i{display:block;height:100%;border-radius:3px;background:var(--g0)}
+.meter u{position:absolute;top:-3px;width:1.5px;height:12px;background:var(--muted)}
+.lim .f{font-size:var(--fs-small);color:var(--faint);display:flex;justify-content:space-between;gap:var(--sp-2);flex-wrap:wrap}
+.blk>.lim:last-child{padding-bottom:var(--sp-3)}
+
+/* requests per day */
+.spark{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;align-items:end;height:26px;margin:var(--sp-2) 0 6px}
+.spark i{display:block;background:var(--g1);border-radius:1.5px 1.5px 0 0;min-height:1px}
+.spark i.z{background:var(--line-strong)}
+.spark i.unk{background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px var(--sp-4)}
+.kv span:nth-child(odd){color:var(--faint)}
+
+/* will the week last */
+.burn{position:relative;height:clamp(140px,28cqi,220px);margin:var(--sp-2) 0 26px 2.6em}
+.burn svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.burn .y{position:absolute;right:calc(100% + .6em);font-size:10.5px;color:var(--faint);transform:translateY(-50%)}
+.burn .x{position:absolute;bottom:-20px;font-size:10.5px;color:var(--faint);transform:translateX(-50%);white-space:nowrap}
+.burn .x.now{color:var(--text)}
+.burn .pt{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--text);border:2px solid var(--panel);transform:translate(-50%,-50%)}
+.burn .tagl{position:absolute;font-size:var(--fs-small);white-space:nowrap}
+.burn .tagl b{font-weight:600}
+td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
+
+/* a column with an Unknown value: an outline, never a bar of 0 */
+.col i.unk{background:transparent;box-shadow:inset 0 0 0 1px var(--line);border-radius:2px}
+
+/* settings rows */
+.srow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:6px var(--sp-4);padding:10px var(--pad);border-top:1px solid var(--line-soft);align-items:first baseline}
+.bh+.srow{border-top:0}
+.srow b{font-weight:500}
+.srow .st{font-size:var(--fs-small);color:var(--faint)}
+.srow .what{color:var(--muted)}
+.srow.off b,.srow.off .what{color:var(--faint)}
+.srow.two{grid-template-columns:1fr auto}
+.srow .val{text-align:right}
+.srow code,.foot code,.what code{font:var(--fs-small) var(--mono);color:var(--muted)}
+.keys{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.srow.off .keys code{color:var(--faint)}
+
+/* Each block is a size container, so its rows follow the block's width, not the window's. */
+.more>.blk{container-type:inline-size}
+@container (max-width:520px){
+  .srow{grid-template-columns:minmax(0,1fr) auto}.srow .what{grid-column:1/-1;grid-row:2}
+}
+
+/* Tables: text columns wrap, numbers stay on one line. Cells in a row share the first baseline. */
+.more td,.more th{white-space:normal;min-width:0;vertical-align:baseline}
+.more td.name{max-width:none;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.more td.r,.more th.r,.more td.num{white-space:nowrap}
+.more .bl .t{white-space:normal;overflow-wrap:anywhere}
+.more .lim .h,.more .li{align-items:first baseline}
+.more .kv{align-items:first baseline}
+.more .kv span{min-width:0;overflow-wrap:anywhere}
+
+/* spans on these views' own grids: the shell's sections set spans for their children, these views set them per block */
+.grid>.s12{grid-column:span 12}.grid>.s8{grid-column:span 8}.grid>.s6{grid-column:span 6}.grid>.s4{grid-column:span 4}
+.grid>.rows2{grid-row:span 2}.grid>.rows3{grid-row:span 3}
+@media (max-width:1100px){
+  .grid>.s8,.grid>.s6{grid-column:span 12}.grid>.s4{grid-column:span 6}
+  .grid>.rows2,.grid>.rows3{grid-row:auto}
+}
+@media (max-width:640px){
+  .grid>.s4{grid-column:span 12}
+}
