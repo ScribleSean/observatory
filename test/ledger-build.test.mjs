@@ -8,6 +8,7 @@ import {cleanLedgerRow,titleHash} from '../scripts/snapshot-clean.mjs';
 import {titleSalt} from '../lib/private-folder.mjs';
 import {weekView,weekFeed} from '../lib/view-week.mjs';
 import {stat,readFile} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {fitLedger} from '../scripts/snapshot-size.mjs';
 import {LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
@@ -302,4 +303,26 @@ test('a merged branch is one change: its merge commit and the branch count once,
   const two={...shipped,branches:[...shipped.branches,{repo,name:'feature/edge',at:NOW-175*MIN,tip:'c7'}]};
   const again=await build([session({writes:[{repo,at:NOW-3*3600000}]})],{join:async sessions=>({unread:new Set(),stats:null,shipped:new Map([[sessions[0].key,two]])})});
   assert.equal(current(again.row).sessions[0].shipped.merges,2);
+});
+
+test('a session row carries its origin, task and repository, and a tampered row is refused or cleaned',async()=>{
+  const {row}=await build([session({origin:'headless',task:'review'}),session({origin:'bogus',task:'mystery',repo:os.homedir()})]);
+  const [listed,odd]=current(row).sessions;
+  assert.deepEqual([listed.origin,listed.task,listed.repo],['headless','review','ferns']);
+  assert.deepEqual([odd.origin,odd.task,odd.repo],[null,null,null],'an unknown origin or task and the home folder are not kept');
+  assert.ok(!JSON.stringify(row).includes('/home/fern'));
+  const clean=cleanLedgerRow(row,{titles:false});
+  assert.deepEqual([current(clean).sessions[0].origin,current(clean).sessions[0].task,current(clean).sessions[0].repo],['headless','review','ferns']);
+  const old=structuredClone(row);
+  for(const entry of current(old).sessions){delete entry.origin;delete entry.task;delete entry.repo;}
+  assert.deepEqual([current(cleanLedgerRow(old)).sessions[0].origin,current(cleanLedgerRow(old)).sessions[0].task],[null,null],'a row from an older collector is accepted');
+  const bad=structuredClone(row);
+  current(bad).sessions[0].origin='bogus';
+  assert.throws(()=>cleanLedgerRow(bad));
+  const worse=structuredClone(row);
+  current(worse).sessions[0].task='mystery';
+  assert.throws(()=>cleanLedgerRow(worse));
+  const path=structuredClone(row);
+  current(path).sessions[0].repo='/etc/passwd';
+  assert.equal(current(cleanLedgerRow(path)).sessions[0].repo,null);
 });

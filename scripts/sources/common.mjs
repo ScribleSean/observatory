@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {readLines} from './jsonl.mjs';
+import {workKind} from '../ledger-kinds.mjs';
 export {cleanTitle} from './pure.mjs';
 
 export const MAX_FILES=20000;
@@ -82,4 +83,15 @@ export async function parseWithCache(file,info,{cache,fresh,keep,each,big=null,n
   const {offset}=await readLines(file,{offset:resume?.offset ?? 0,keep,final,big:big && (text=>big(state,text))},event=>each(state,event));
   cache.store(file,{...info,offset,state,mark:await markOf(file,offset)});
   return state;
+}
+
+// The WorkKind of a session's first user prompt. Only the kind is kept, the text is dropped here.
+// Text that starts with '<' (a command wrapper, an environment block) or '# AGENTS.md' is not a
+// prompt and is skipped, so the next one counts.
+export function notePrompt(state,text) {
+  if(state.prompted===true || typeof text!=='string')return;
+  const body=text.trim();
+  if(!body || body.startsWith('<') || body.startsWith('# AGENTS.md'))return;
+  state.prompted=true;
+  state.task=workKind(null,body.slice(0,4000));
 }
