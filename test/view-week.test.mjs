@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {weekView,joined,limitWindows,hasLastWeek,shippedPill,modelLabel,shareText,flagLines} from '../lib/view-week.mjs';
+import {weekView,joined,limitWindows,hasLastWeek,shippedPill,modelLabel,shareText,flagLines,sessionLabel} from '../lib/view-week.mjs';
 import {sessionView} from '../lib/view-session.mjs';
 import {sampleLedger} from '../lib/sample-ledger.mjs';
 import {limitShare,LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
@@ -349,4 +349,46 @@ test('limitShare: Unknown for a zero, negative, non-finite or impossible input, 
     for(const args of [[bad,100,50],[10,bad,50],[10,100,bad]])assert.equal(limitShare(...args),null,String(args));
   assert.equal(limitShare(150,100,40),40,'a session never takes more than the part used');
   close(limitShare(25,100,40),10);
+});
+
+test('an untitled session is named from how it ran, what it was asked and where',()=>{
+  const shipped=repos=>({estimated:true,commits:0,onMain:0,merges:0,prsOpen:null,repos});
+  const label=(origin,task,repos=[],extra={})=>sessionLabel({origin,task,shipped:shipped(repos),...extra});
+  assert.equal(label('headless','review',['cube-type']),'Review run in cube-type');
+  assert.equal(label('headless',null,['cube-type']),'Headless run in cube-type');
+  assert.equal(label('interactive','review',['cube-type']),'Review session in cube-type');
+  assert.equal(label(null,null,['cube-type']),'Session in cube-type');
+  assert.equal(label('headless',null),'Headless run');
+  assert.equal(label('headless','search'),'Search run');
+  assert.equal(label('headless','other',['cube-type']),'Headless run in cube-type','the other kind says nothing');
+  assert.equal(label('headless','review',[],{repo:'nod'}),'Review run in nod','the folder the session ran in stands in when it wrote nowhere');
+  assert.equal(label(null,null),'Untitled session');
+  assert.equal(sessionLabel({}, null),null);
+  assert.equal(sessionLabel({title:'Own title',origin:'headless',task:'review'}),'Own title');
+  assert.equal(sessionLabel({titleHash:'3f2a9c0d1e2b',origin:'headless'}),'Session 3f2a');
+});
+
+test('a review, search or research that wrote nothing is Read-only, not No change, and is left out of the wasted share',()=>{
+  const none={estimated:true,commits:0,onMain:0,merges:0,prsOpen:null,repos:[]};
+  assert.deepEqual(shippedPill(none,'review'),{tone:'none',text:'Read-only',changes:null});
+  assert.equal(shippedPill(none,'search').text,'Read-only');
+  assert.equal(shippedPill(none,'research').text,'Read-only');
+  assert.equal(shippedPill(none,'build').text,'No change');
+  assert.equal(shippedPill(none,null).text,'No change');
+  assert.equal(shippedPill({...none,repos:['ferns']},'review').text,'No change','a review that wrote somewhere did change something');
+  assert.equal(shippedPill({...none,commits:2},'review').text,'2 commits');
+  assert.equal(shippedPill({...none,commits:null},'review').text,'Unknown');
+  const make=task=>feed(summary=>{
+    const period=summary.week.ledger[0].tools[0].periods[0];
+    period.sessions=[{...period.sessions[0],task,apiUsd:50,shipped:none},{...period.sessions[1],task:null,apiUsd:50,shipped:{...none,commits:3}}];
+    period.apiUsd=100;period.other=null;
+    summary.week.ledger[0].tools.splice(1);
+    summary.week.ledger.splice(1);
+    return summary;
+  });
+  const spent=view=>view.shipped.figures.find(figure=>figure.label==='Spent on no change').value;
+  assert.equal(spent(weekView(make('build'),{now})),'50%');
+  const readOnly=weekView(make('review'),{now});
+  assert.equal(spent(readOnly),'0%');
+  assert.equal(readOnly.table.rows[0].shipped.text,'Read-only');
 });
