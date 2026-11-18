@@ -1,5 +1,5 @@
 import type { ComponentRenderProps } from '@json-render/react';
-import { UNKNOWN, bucketDates, buildOverview, buildScreenTime, buildTokens, orNull, patchScope, useR2 } from '../data';
+import { UNKNOWN, bucketDates, buildOverview, buildScreenTime, buildTokens, patchScope, useR2 } from '../data';
 import { bucketLabel, bucketName } from './SpendLandedChart';
 
 type Props = import('../../../../lib/r2-blocks.mjs').TimelineProps;
@@ -14,8 +14,8 @@ export function Timeline({ element }: ComponentRenderProps<Props>) {
   const overview = buildOverview(snapshot, inner, { now });
   const { period } = overview.frame;
   const found: Point[] | null = series === 'spend' ? overview.chart.map(point => ({ date: point.date, value: point.spend.value, text: point.spend.text }))
-    : series === 'tokens' ? orNull(() => buildTokens(snapshot, inner, { now }).days.map(day => ({ date: day.date, value: day.tokens.value, text: day.tokens.text })))
-    : series === 'screenTime' ? orNull(() => buildScreenTime(snapshot, inner, { now }).days.map(day => ({ date: day.date, value: day.seconds.value, text: day.seconds.text })))
+    : series === 'tokens' ? buildTokens(snapshot, inner, { now }).days.map(day => ({ date: day.date, value: day.tokens.value, text: day.tokens.text }))
+    : series === 'screenTime' ? buildScreenTime(snapshot, inner, { now }).days.map(day => ({ date: day.date, value: day.seconds.value, text: day.seconds.text }))
     : series === 'grokRequests' && overview.grok ? overview.grok.days.map(day => ({ date: day.date, value: day.value, text: day.value === null ? UNKNOWN : String(day.value) }))
     : null;
   const points = new Map((found ?? []).map(point => [point.date, point]));

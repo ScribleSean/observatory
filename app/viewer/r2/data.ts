@@ -1,11 +1,10 @@
-// The one seam between the round 2 blocks and the view-models. Every block reads its numbers here.
-// Each call goes to lib/scope.mjs or lib/view-r2.mjs first. While a body there is still a stub, the
-// call falls back to the stand-in built on the same documented shapes (standin.mjs).
+// The one seam between the round 2 blocks and the view-models. Every block reads its numbers here,
+// from lib/scope.mjs and the documented builders in lib/view-r2.mjs.
 import { createContext, useContext } from 'react';
 import type { Spec } from '@json-render/react';
-import * as realScope from '../../../lib/scope.mjs';
-import * as realViews from '../../../lib/view-r2.mjs';
-import * as standin from './standin.mjs';
+
+export { defaultScope, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
+export { buildFrame, buildOverview, buildSessions, buildTokens, buildScreenTime, metric, answerQuestion, resolveBlock } from '../../../lib/view-r2.mjs';
 
 export type Scope = import('../../../lib/scope.mjs').Scope;
 export type ScopePatch = import('../../../lib/scope.mjs').ScopePatch;
@@ -25,34 +24,6 @@ export type Dim = import('../../../lib/r2-blocks.mjs').Dim;
 export type SavedView = import('../../../lib/r2-blocks.mjs').SavedView;
 export type Snapshot = Record<string, unknown>;
 export type ViewId = 'overview' | 'sessions' | 'limits' | 'tokens' | 'screen-time' | 'drift' | 'settings';
-
-type Fn = (...args: never[]) => unknown;
-const isStub = (error: unknown) => error instanceof Error && error.message.includes('is not implemented yet');
-
-function orStandIn<F extends Fn>(real: F, spare: unknown): F {
-  const call = (...args: Parameters<F>) => {
-    try { return real(...args); } catch (error) { if (!isStub(error)) throw error; }
-    return (spare as F)(...args);
-  };
-  return call as unknown as F;
-}
-
-export const defaultScope = orStandIn(realScope.defaultScope, standin.defaultScope);
-export const patchScope = orStandIn(realScope.patchScope, standin.patchScope);
-export const scopeToSearch = orStandIn(realScope.scopeToSearch, standin.scopeToSearch);
-export const scopeFromSearch = orStandIn(realScope.scopeFromSearch, standin.scopeFromSearch);
-export const buildFrame = orStandIn(realViews.buildFrame, standin.buildFrame);
-export const buildOverview = orStandIn(realViews.buildOverview, standin.buildOverview);
-export const buildSessions = orStandIn(realViews.buildSessions, standin.buildSessions);
-export const metric = orStandIn(realViews.metric, standin.metric);
-export const answerQuestion = orStandIn(realViews.answerQuestion, standin.answerQuestion);
-
-/** A builder that has no stand-in: null while lane b has not written it. */
-export function orNull<T>(build: () => T): T | null {
-  try { return build(); } catch (error) { if (!isStub(error)) throw error; return null; }
-}
-export const buildTokens = realViews.buildTokens;
-export const buildScreenTime = realViews.buildScreenTime;
 
 /** True when the snapshot carries the daily ledger history round 2 reads. */
 export function hasHistory(snapshot: Snapshot | null): boolean {
