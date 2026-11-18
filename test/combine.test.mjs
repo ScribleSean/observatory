@@ -230,6 +230,12 @@ test('combine passes each computer\'s ledger history and settings echo through, 
   const again=combine([{host:'Mac',snapshot:withHistory('Mac')},carried(combined,'Windows')],{now,generatedBy:'Mac'});
   assert.deepEqual(again.view.ledgerHistory[1],combined.view.ledgerHistory[1]);
   assert.deepEqual(again.view.config[1],combined.view.config[1]);
+  // A computer that turns Codex off in its own settings adds no Codex days on the hub, even from days it kept.
+  const tools=row=>row.days.reduce((count,day)=>({...count,[day.tool]:(count[day.tool] ?? 0)+1}),{});
+  assert.deepEqual(tools(combined.view.ledgerHistory[1]),{claude:60,codex:20});
+  const codexOff=host=>ownSnapshot(host,now,snapshot=>({...withHistory(host),configEcho:{...withHistory(host).configEcho,sources:{...withHistory(host).configEcho.sources,codex:false}}}));
+  const spokeOff=combine([{host:'Mac',snapshot:withHistory('Mac')},{host:'Windows',snapshot:codexOff('Windows')}],{now,generatedBy:'Mac'});
+  assert.deepEqual(tools(spokeOff.view.ledgerHistory[1]),{claude:60});
 });
 
 test('each computer\'s state is decided once, and a computer that is Off stays Off on every computer that carries its copy',()=>{

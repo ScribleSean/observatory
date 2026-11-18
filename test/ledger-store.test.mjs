@@ -8,7 +8,7 @@ import {withFolder,testConfig} from './helpers.mjs';
 import {claudeAssistant,claudePrompt,claudeTitle,writeClaude,makeRepo,git} from './ledger-fixtures.mjs';
 import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,writeHistory,historyRow,recheckOnMain,keepGrokDays,applyOnMain,rebuildFrom} from '../scripts/ledger-store.mjs';
 import {buildLedgerHistory,addDays} from '../scripts/ledger-history.mjs';
-import {readLedgerSources,claude} from '../scripts/sources/index.mjs';
+import {readLedgerSources,claude,codex} from '../scripts/sources/index.mjs';
 import {memoryCache} from '../scripts/sources/parse-cache.mjs';
 import {buildSnapshot} from '../scripts/collect.mjs';
 import {serializeSnapshot} from '../scripts/snapshot-size.mjs';
@@ -71,6 +71,10 @@ test('the snapshot row freezes old days, lists sessions for SESSION_DAYS, and re
     const codexDays=clean.days.filter(day=>day.tool==='codex');
     assert.equal(codexDays.length,REDERIVE_DAYS);
     assert.ok(codexDays.every(day=>day.status==='unavailable' && day.apiUsd===null),'a tool that could not be read is Unknown, not 0');
+    // A tool this computer's settings turn off adds nothing, even with days kept from before.
+    const claudeOff=historyRow(db,{host:'Mac',now:NOW,timeZone:TIME_ZONE,titles:false,tools:['codex'],unread:['codex']});
+    assert.deepEqual([...new Set(claudeOff.days.map(day=>day.tool))],['codex']);
+    assert.equal(claudeOff.firstDate,rebuildFrom(TODAY));
   } finally {db.close();}
 }));
 
@@ -229,6 +233,10 @@ test('a collection backfills from transcripts, writes a history row the cleaner 
     // Titles off: none in the history.
     const off=await buildSnapshot({...config,sessions:{titles:false,roles:{}}},readers,{now:new Date(NOW+2*HOUR),ledgerStore:db});
     assert.ok(off.data.ledgerHistory[0].days.flatMap(day=>day.sessions).every(session=>session.title===null));
+    // Codex days kept from when it was on add nothing while its setting is off.
+    writeHistory(db,buildLedgerHistory({tools:[{source:codex,sessions:[],dates:[addDays(TODAY,-3)]}],joined:null,timeZone:TIME_ZONE,titles:true}));
+    const codexOff=await buildSnapshot(config,readers,{now:new Date(NOW+3*HOUR),ledgerStore:db});
+    assert.deepEqual([...new Set(codexOff.data.ledgerHistory[0].days.map(day=>day.tool))],['claude']);
     // Without a store the history reads unavailable, and with every source off, not connected.
     const none=await buildSnapshot(config,readers,{now:new Date(NOW)});
     assert.equal(none.data.ledgerHistory[0].status,'unavailable');

@@ -193,7 +193,7 @@ async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,t
   try {
     writeHistory(store,{...buildLedgerHistory({tools:historyTools,joined,timeZone,titles}),backfilled,held});
     try {await recheckOnMain(store,{today:plan.today,deadline:Date.now()+ONMAIN_RECHECK_MS,...(git?{git}:{})});} catch {}
-    return {row,history:historyRow(store,{host,now:nowMs,timeZone,titles,unread})};
+    return {row,history:historyRow(store,{host,now:nowMs,timeZone,titles,unread,tools})};
   } catch {return {row,history:null};}
 }
 

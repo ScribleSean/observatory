@@ -228,13 +228,14 @@ export function snapshotDay(day,{listSessions,titles,frozen}) {
 /**
  * This computer's ledgerHistory row from the store. Tools in `unread` could not be read this time, so
  * their rebuild days with no stored record read as unavailable. A date missing from the store after a
- * tool's first stored day (a gap that could not be read) is unavailable too, never a known 0.
+ * tool's first stored day (a gap that could not be read) is unavailable too, never a known 0. `tools`
+ * names the tools this computer's settings turn on: a tool turned off adds nothing, even with days kept.
  * @param {DatabaseSync} db
- * @param {{host: string, now: number, timeZone: string, titles: boolean, unread?: string[]}} options
+ * @param {{host: string, now: number, timeZone: string, titles: boolean, unread?: string[], tools?: string[] | null}} options
  */
-export function historyRow(db,{host,now,timeZone,titles,unread=[]}) {
+export function historyRow(db,{host,now,timeZone,titles,unread=[],tools=null}) {
   const today=dayKey(now,timeZone),frozenBefore=rebuildFrom(today),listFrom=addDays(today,-(SESSION_DAYS-1));
-  const stored=db.prepare('SELECT tool,day FROM ledger_days WHERE date<=? ORDER BY date,tool').all(today);
+  const stored=db.prepare('SELECT tool,day FROM ledger_days WHERE date<=? ORDER BY date,tool').all(today).filter(row=>!tools || tools.includes(row.tool));
   const days=stored.map(row=>{
     const day=JSON.parse(row.day);
     return snapshotDay(day,{listSessions:day.date>=listFrom,titles,frozen:day.date<frozenBefore});
