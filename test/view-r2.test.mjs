@@ -315,13 +315,13 @@ test('builders are pure: the same input gives the same output', () => {
 
 test('a session titled by a user alias from the settings echo shows its role and name in the Sessions view', () => {
   const copy = structuredClone(snapshot);
-  copy.view.config = copy.view.config.map(row => row.host === 'Mac' ? { ...row, roleAliases: { ...row.roleAliases, AtlasBot: 'Chief of staff' } } : row);
+  copy.view.config = copy.view.config.map(row => row.host === 'Mac' ? { ...row, roleAliases: { ...row.roleAliases, Atlas: 'Chief of staff' } } : row);
   const mac = copy.view.ledgerHistory.find(row => row.host === 'Mac');
   const day = [...mac.days].reverse().find(entry => entry.status === 'ok' && entry.sessions.length);
   const id = day.sessions[0].id;
-  for (const entry of mac.days) for (const session of entry.sessions) if (session.id === id) session.title = 'AtlasBot: chief of staff';
+  for (const entry of mac.days) for (const session of entry.sessions) if (session.id === id) session.title = 'Atlas: chief of staff';
   const rows = v.buildSessions(copy, at('all'), { now: NOW, limit: 500 }).rows;
   const row = rows.flatMap(each => [each, ...each.children]).find(each => each.key.endsWith(`.${id}`));
   assert.ok(row, 'the session is listed');
-  assert.deepEqual([row.name.role, row.name.display], ['Chief of staff', '[Chief of staff] AtlasBot']);
+  assert.deepEqual([row.name.role, row.name.display], ['Chief of staff', '[Chief of staff] Atlas']);
 });
