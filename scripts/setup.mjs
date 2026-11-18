@@ -282,7 +282,6 @@ export async function installMacApp(target,settings,{fs=filesystem,run=execute,s
     await fs.writeFile(plist,infoPlist());
     await run('/usr/bin/xcrun',['swiftc','-O','-swift-version','5',path.join(REPO,'glance','mac','Glance.swift'),'-o',executable],{timeout:300000});
     await fs.writeFile(path.join(staged,'Contents','Resources','glance.json'),settings);
-    await fs.copyFile(path.join(REPO,'public','brand','telescope.svg'),path.join(staged,'Contents','Resources','telescope.svg'));
     await fs.copyFile(path.join(REPO,'glance','icons','Observatory.icns'),path.join(staged,'Contents','Resources','Observatory.icns'));
     await fs.access(executable,filesystem.constants.X_OK);
     if(!(await fs.stat(executable)).isFile() || !(await fs.stat(plist)).isFile())

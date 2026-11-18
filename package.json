@@ -17,7 +17,7 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "status": "node scripts/status.mjs",
-    "icons": "xcrun swift glance/icons/make-icons.swift",
+    "icons": "node scripts/make-icons.mjs",
     "check:build": "node scripts/harness/stale-build.mjs . --url http://127.0.0.1:5601",
     "check:numbers": "node scripts/harness/numbers.mjs",
     "check:browser": "node scripts/harness/browser.mjs"

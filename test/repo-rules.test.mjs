@@ -208,9 +208,8 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   // The removed device table and per-limit rows stay removed.
   for (const gone of ['Resets in',strings.overview.lastSeen,strings.tokens.apiEstimate])
     for (const text of [swift,cs]) assert.ok(!text.includes(gone),`A panel still says "${gone}", which the forecast tiles replaced.`);
-  // The Mac app keeps a copy of the telescope for runs outside its bundle. It must be the same drawing.
-  for (const d of [...read('public/brand/telescope.svg').matchAll(/ d="([^"]+)"/g)].map(match=>match[1]))
-    assert.ok(swift.includes(` d="${d}"`),'Glance.swift Brand.svg differs from public/brand/telescope.svg.');
+  // The ring and dot replaced the telescope everywhere (test/glance-icon.test.mjs holds its geometry).
+  for (const text of [swift,cs]) assert.ok(!/telescope/i.test(text),'A glance app still draws the telescope.');
   // JavaScript and Swift round halves up. C# Math.Round rounds halves to even unless told otherwise.
   assert.deepEqual([...cs.matchAll(/Math\.Round\(([^;]*)/g)].map(match=>match[1]).filter(call=>!call.includes('MidpointRounding.AwayFromZero')),[],
     'Glance.cs rounds with Math.Round without MidpointRounding.AwayFromZero, so 2.5 minutes would show as 2m.');

@@ -69,6 +69,9 @@ namespace Observatory
         public List<LimitRow> Limits = new List<LimitRow>();
         public List<SessionRow> Sessions = new List<SessionRow>();
         public FlagRow Flag;
+        // The tray icon, as lib/glance-view.mjs decided it (glance.json "icon"). Off until a glance.json says otherwise.
+        public string IconState = "off", IconText = "Off", IconTip = "Off", StaleText, StaleTip;
+        public double? IconFraction, StaleFraction;
         // Read only from combined.json, the fallback.
         public string Sentence, Menu;
         public DateTime? Updated;
@@ -78,6 +81,11 @@ namespace Observatory
 
         public bool Old { get { return Updated.HasValue && (Now - Updated.Value).TotalMinutes > DeviceFreshMinutes; } }
         public bool Empty { get { return Headline == null && Limits.Count == 0; } }
+
+        // The icon to draw now: as stored, or its stored stale form once glance.json is older than a snapshot may be.
+        public string ShownIcon { get { return Old && StaleText != null ? "stale" : IconState; } }
+        public double? ShownFraction { get { return Old && StaleText != null ? StaleFraction : IconFraction; } }
+        public string ShownTip { get { return Old && StaleText != null ? StaleTip : IconTip; } }
 
         public static DateTime? Date(object value)
         {
@@ -181,6 +189,19 @@ namespace Observatory
             {
                 double? count = Number(Get(flag, "count"));
                 state.Flag = new FlagRow { Count = count.HasValue ? (int)count.Value : 1, Subject = Get(flag, "subject") as string, Text = flagText };
+            }
+            var icon = Get(json, "icon") as Dictionary<string, object>;
+            string shape = Get(icon, "state") as string;
+            if (Array.IndexOf(Mark.States, shape) >= 0)
+            {
+                state.IconState = shape;
+                state.IconFraction = Share(Get(icon, "fraction"));
+                state.IconText = Get(icon, "text") as string ?? "Off";
+                state.IconTip = Get(icon, "tip") as string ?? state.IconText;
+                var stale = Get(icon, "stale") as Dictionary<string, object>;
+                state.StaleText = Get(stale, "text") as string;
+                state.StaleTip = Get(stale, "tip") as string ?? state.StaleText;
+                state.StaleFraction = Share(Get(stale, "fraction"));
             }
             return state;
         }
@@ -298,40 +319,70 @@ namespace Observatory
         }
     }
 
+    // The ring and dot, from one geometry (lib/glance-icon.mjs), the same as Mark in glance/mac/Glance.swift.
+    // The ring is the share of the Claude weekly limit used, from 12 o'clock clockwise. The center is the state, decided
+    // once by lib/glance-view.mjs: a dot on pace, a bar over pace, a hollow dot when stale, nothing when off.
+    // The tray always uses the accent variant. test/glance-icon.test.mjs checks these numbers against the other two.
+    static class Mark
+    {
+        public static readonly string[] States = { "on-pace", "over-pace", "stale", "off" };
+        public const float TrackAlpha = 0.28f;
+        public const float StaleAlpha = 0.45f;
+        public const double MinArc = 0.04;
+        public const int AccentDark = 0xd97f57;
+        public const int AccentLight = 0xb5562c;
+
+        static Color Hex(int value) { return Color.FromArgb(value >> 16 & 255, value >> 8 & 255, value & 255); }
+        static Color Alpha(Color color, float alpha) { return Color.FromArgb((int)Math.Round(255 * alpha, MidpointRounding.AwayFromZero), color); }
+
+        // Glance icon of side s: padding round(s/16), diameter s - 2p, stroke round(d/7), centerline radius (d - w)/2.
+        public static float[] Geometry(int side)
+        {
+            float p = (float)Math.Round(side / 16.0, MidpointRounding.AwayFromZero), d = side - 2 * p;
+            float w = (float)Math.Round(d / 7.0, MidpointRounding.AwayFromZero);
+            return new[] { p, d, w, (d - w) / 2, side / 2f };
+        }
+
+        // The tray icon at `side` pixels (16 at 100%, 32 at 200%), for a light or dark taskbar.
+        public static void Draw(Graphics g, int side, string state, double? fraction, bool light)
+        {
+            float[] geometry = Geometry(side);
+            float w = geometry[2], r = geometry[3], c = geometry[4];
+            Color ink = light ? Color.Black : Color.White, accent = Hex(light ? AccentLight : AccentDark);
+            var ring = new RectangleF(c - r, c - r, 2 * r, 2 * r);
+            using (var track = new Pen(Alpha(ink, TrackAlpha), w)) g.DrawEllipse(track, ring);
+            if (state == "off") return;
+            Color tint = state == "stale" ? Alpha(ink, StaleAlpha) : accent;
+            if (fraction.HasValue)
+            {
+                double share = Math.Min(1, Math.Max(MinArc, fraction.Value));
+                using (var arc = new Pen(tint, w))
+                {
+                    arc.StartCap = arc.EndCap = LineCap.Flat;
+                    if (share >= 1) g.DrawEllipse(arc, ring);
+                    else g.DrawArc(arc, ring, -90, (float)(360 * share));
+                }
+            }
+            if (state == "on-pace") using (var brush = new SolidBrush(tint)) g.FillEllipse(brush, c - w, c - w, 2 * w, 2 * w);
+            else if (state == "over-pace") using (var brush = new SolidBrush(tint)) using (var bar = Rounded(new RectangleF(c - w / 2, c - 1.5f * w, w, 3 * w), w / 2)) g.FillPath(brush, bar);
+            else if (state == "stale") using (var hollow = new Pen(tint, w / 2)) g.DrawEllipse(hollow, c - w, c - w, 2 * w, 2 * w);
+        }
+
+        static GraphicsPath Rounded(RectangleF r, float radius)
+        {
+            var path = new GraphicsPath();
+            float d = 2 * radius;
+            path.AddArc(r.X, r.Y, d, d, 180, 180);
+            path.AddArc(r.X, r.Bottom - d, d, d, 0, 180);
+            path.CloseFigure();
+            return path;
+        }
+    }
+
     static class Painter
     {
         public const int Width = 360;
         const int Pad = 16, Inner = 12, Row = 26, Gap = 10, FooterHeight = 60;
-
-        public static void Telescope(Graphics g, RectangleF box, Color color, float stroke)
-        {
-            var state = g.Save();
-            g.TranslateTransform(box.X, box.Y);
-            g.ScaleTransform(box.Width / 24f, box.Height / 24f);
-            using (var pen = new Pen(color, stroke))
-            {
-                pen.StartCap = pen.EndCap = LineCap.Round;
-                pen.LineJoin = LineJoin.Round;
-                g.DrawPolygon(pen, new[] { new PointF(5, 10), new PointF(16, 4), new PointF(19, 9), new PointF(8, 15) });
-                g.DrawLine(pen, 16, 3, 20, 10);
-                g.DrawLine(pen, 5.8f, 12, 3, 13.5f);
-                g.DrawLine(pen, 12, 13, 12, 22);
-                g.DrawLines(pen, new[] { new PointF(7, 21), new PointF(12, 16), new PointF(17, 21) });
-            }
-            g.Restore(state);
-        }
-
-        // The tray icon: a ring filled to the share used of the scarcer limit.
-        public static void Ring(Graphics g, RectangleF box, Color color, double fraction, float stroke)
-        {
-            using (var track = new Pen(Color.FromArgb(80, color), stroke)) g.DrawEllipse(track, box);
-            if (fraction <= 0) return;
-            using (var arc = new Pen(color, stroke))
-            {
-                arc.StartCap = arc.EndCap = LineCap.Round;
-                g.DrawArc(arc, box, -90, (float)(360 * Math.Min(1, fraction)));
-            }
-        }
 
         static GraphicsPath Rounded(RectangleF r, float radius)
         {
@@ -848,8 +899,9 @@ namespace Observatory
             if (panel.Visible) panel.Place(false);
             bool current = state.Notice == null && !state.Old && !state.Empty;
             // The tray tip carries the forecast. Windows refuses a tip of 64 characters or more.
-            tray.Text = Tip(current ? (state.Headline ?? state.Menu ?? "Observatory") : "Observatory: not updated recently");
-            SetIcon(current, state.Ring);
+            // The same string as beside the Mac icon leads the tip ("60% used, on pace"), then the forecast.
+            tray.Text = Tip(state.ShownTip + "\n" + (current ? (state.Headline ?? state.Menu ?? "Observatory") : "Observatory: not updated recently"));
+            SetIcon(state.ShownIcon, state.ShownFraction);
         }
 
         static string Tip(string text)
@@ -867,8 +919,8 @@ namespace Observatory
             return combined == null ? null : PanelState.Parse(combined, now);
         }
 
-        // The ring alone, filled to the scarcer limit. With no current share the telescope stands in, never an empty ring.
-        void SetIcon(bool current, double? ring)
+        // The ring and its center as glance.json says, at the tray's own size, for the taskbar's theme.
+        void SetIcon(string shape, double? fraction)
         {
             bool light = false;
             try
@@ -877,13 +929,13 @@ namespace Observatory
                     light = key != null && Convert.ToInt32(key.GetValue("SystemUsesLightTheme", 0)) == 1;
             }
             catch { }
-            using (var bitmap = new Bitmap(32, 32))
+            int side = Math.Max(16, SystemInformation.SmallIconSize.Width);
+            using (var bitmap = new Bitmap(side, side))
             using (var graphics = Graphics.FromImage(bitmap))
             {
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                Color ink = light ? Color.FromArgb(28, 29, 27) : Color.White;
-                if (current && ring.HasValue) Painter.Ring(graphics, new RectangleF(4, 4, 24, 24), ink, ring.Value, 3.4f);
-                else Painter.Telescope(graphics, new RectangleF(0, 0, 32, 32), Color.FromArgb(current ? 255 : 120, ink), 1.7f);
+                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                Mark.Draw(graphics, side, shape, fraction, light);
                 var handle = bitmap.GetHicon();
                 var next = (Icon)Icon.FromHandle(handle).Clone();
                 DestroyIcon(handle);
