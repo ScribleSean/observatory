@@ -64,13 +64,21 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
   const report=[];
   for(const spoke of config.hub.spokes) {
     const host=HOST[spoke.platform];
+    // A computer the settings turn off is not reached at all. Its last copy keeps its history, and it reads Off.
+    if(spoke.off) {
+      const carried=validatedDevice(previous,host,now(),cap);
+      devices.push({...(carried??{host,name:spoke.name,snapshot:null}),name:spoke.name,off:true});
+      report.push({name:spoke.name,host,pull:'off'});
+      continue;
+    }
     try {
       const snapshot=parseSnapshot(await transport.pull(spoke),host,now(),cap);
       devices.push({host,name:spoke.name,snapshot});
       report.push({name:spoke.name,host,pull:'ok'});
     } catch(error) {
       const carried=validatedDevice(previous,host,now(),cap);
-      devices.push({...(carried??{host,name:spoke.name,snapshot:null}),name:spoke.name,error:error.message});
+      // The hub's own settings decide Off: a copy that was Off before reads late now that the computer is on again.
+      devices.push({...(carried??{host,name:spoke.name,snapshot:null}),name:spoke.name,off:false,error:error.message});
       report.push({name:spoke.name,host,pull:error.message});
     }
   }

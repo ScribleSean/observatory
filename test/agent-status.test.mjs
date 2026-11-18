@@ -27,8 +27,12 @@ function source(bucket, rows, checkedAt = now, notReported) {
 const weeklyOnly = rows => rows.some(([window]) => window === 'five_hour') ? undefined : ['five_hour'];
 
 function fixture({claude, codex, checkedAt = now, codexNotReported, claudeNotReported = weeklyOnly(claude)}) {
+  const limits = {claude: source('claude', claude, checkedAt, claudeNotReported), codex: source('codex', codex, checkedAt, codexNotReported)};
+  // The same readings in the limit history, which the one forecast reads (lib/forecast.mjs).
+  const points = Object.entries(limits).flatMap(([provider, value]) => value.history.flatMap(sample => sample.windows.map(row =>
+    ({p: provider, w: row.window, o: 'Mac', t: sample.checkedAt, r: row.remainingPercent, x: row.resetsAt, d: row.durationMinutes}))));
   const snapshot = ownSnapshot('Mac', checkedAt, value => ({...value,
-    claudeLimits: source('claude', claude, checkedAt, claudeNotReported), quota: source('codex', codex, checkedAt, codexNotReported)}));
+    claudeLimits: limits.claude, quota: limits.codex, limitHistory: [{host: 'Mac', status: 'ok', points}]}));
   return combine([{host: 'Mac', snapshot}], {now: checkedAt});
 }
 
@@ -44,7 +48,8 @@ test('Codex at 0% on its 5-hour window routes every task to Claude', () => {
   assert.equal(status.engines.codex.headroom, 0);
   assert.equal(status.engines.codex.windows.five_hour.pace, 'out');
   assert.equal(status.engines.claude.headroom, 70);
-  assert.equal(status.engines.claude.windows.five_hour.burnPerHour, 10);
+  // The forecast's average pace since the window opened an hour ago: 9 points used.
+  assert.equal(status.engines.claude.windows.five_hour.burnPerHour, 9);
   for (const task of ['code', 'review', 'research']) {
     assert.equal(status.route[task].engine, 'claude');
     assert.match(status.route[task].reason, /codex is out for 60 min/);
@@ -54,7 +59,7 @@ test('Codex at 0% on its 5-hour window routes every task to Claude', () => {
 test('the engine with more effective headroom wins, and an engine out of allowance is never picked', () => {
   const both = fixture({
     claude: [['five_hour', 300, 30, hour], ['seven_day', 10080, 90, 48 * hour]],
-    codex: [['primary', 300, 80, hour], ['secondary', 10080, 40, 100 * hour]],
+    codex: [['primary', 300, 80, hour], ['secondary', 10080, 70, 100 * hour]],
   });
   assert.equal(agentStatus(both, now).route.code.engine, 'codex');
   const none = fixture({
@@ -95,22 +100,31 @@ test('pace classification boundaries', () => {
 
 test('JSON shape is stable and carries no personal data', () => {
   const status = agentStatus(today, now);
-  const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace'];
-  assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route', 'cap']);
+  const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace', 'forecast'];
+  assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route', 'cap', 'forecast', 'devices']);
+  assert.deepEqual(Object.keys(status.forecast), ['asOf', 'timeZone', 'sentence']);
+  for (const device of status.devices) assert.deepEqual(Object.keys(device), ['host', 'state', 'stateLabel', 'collectedAt']);
   assert.deepEqual(Object.keys(status.cap), ['total', 'claude', 'codex', 'codexRunning', 'reason']);
   assert.deepEqual(Object.keys(status.nextReturn.codex), ['resetsAt', 'minutesToReset']);
   assert.equal(status.schema, 1);
   assert.equal(status.generatedAt, iso(now));
   assert.deepEqual(Object.keys(status.engines), ['claude', 'codex']);
   for (const engine of ['claude', 'codex']) {
-    assert.deepEqual(Object.keys(status.engines[engine]), ['status', 'headroom', 'effectiveHeadroom', 'pace', 'windows']);
+    assert.deepEqual(Object.keys(status.engines[engine]), ['status', 'headroom', 'effectiveHeadroom', 'pace', 'windows', 'forecast']);
+    assert.deepEqual(Object.keys(status.engines[engine].forecast), ['status', 'phrase', 'sentence', 'runsOutAt', 'earliestAt', 'latestAt', 'leftAtReset', 'resetsLabel', 'headline', 'window']);
     assert.deepEqual(Object.keys(status.engines[engine].windows), ['five_hour', 'weekly']);
-    for (const item of Object.values(status.engines[engine].windows)) assert.deepEqual(Object.keys(item), window);
+    for (const item of Object.values(status.engines[engine].windows)) {
+      assert.deepEqual(Object.keys(item), window);
+      assert.deepEqual(Object.keys(item.forecast), ['status', 'phrase', 'sentence', 'runsOutAt', 'earliestAt', 'latestAt', 'leftAtReset', 'resetsLabel']);
+    }
   }
   assert.deepEqual(Object.keys(status.route), ['code', 'review', 'research']);
   for (const hint of Object.values(status.route)) assert.deepEqual(Object.keys(hint), ['engine', 'reason']);
-  const text = JSON.stringify(status);
+  // Computers are named by their host id only (Mac, Windows or Linux), never by the name the user gave them.
+  assert.deepEqual(status.devices.map(device => device.host), ['Mac']);
+  const text = JSON.stringify({...status, devices: []});
   for (const secret of ['Test Mac', 'Mac', 'Windows', '/', '\\']) assert.equal(text.includes(secret), false, secret);
+  assert.equal(JSON.stringify(status.devices).includes('Test Mac'), false);
 });
 
 test('nextReturn gives the reset of the window at 0, the later one when both are at 0', () => {
@@ -128,9 +142,10 @@ test('nextReturn gives the reset of the window at 0, the later one when both are
 });
 
 // Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, a burst of 1.1%/h.
+// Codex has spent 2 points of a 5-hour window 20 minutes in, and is under budget on its week.
 const ultra = fixture({
   claude: [['seven_day', 10080, 96, 151 * hour, 1.1]],
-  codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 3.2]],
+  codex: [['primary', 300, 98, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 3.2]],
 });
 
 test('with no 5-hour window, the weekly window decides and Claude is no longer unknown', () => {
@@ -163,7 +178,7 @@ test('review and research prefer Claude when it has as much effective headroom; 
   // Claude behind its budget loses review to a Codex with more room.
   const tight = fixture({
     claude: [['seven_day', 10080, 20, 151 * hour]],
-    codex: [['primary', 300, 90, 280 * 60000], ['secondary', 10080, 74, 98 * hour]],
+    codex: [['primary', 300, 98, 280 * 60000], ['secondary', 10080, 74, 98 * hour]],
   });
   assert.equal(agentStatus(tight, now).route.review.engine, 'codex');
 });
@@ -218,17 +233,21 @@ test('straight-line pace and time-adjusted headroom', () => {
   assert.equal(effectiveHeadroom(0.4, 300, 300), 1);
 });
 
-test('ties go to Claude for review and research; code needs Codex at 20% effective or more', () => {
+test('ties go to Claude for review and research; code needs a Codex that lasts', () => {
   const tie = fixture({claude: [['seven_day', 10080, 50, 84 * hour]], codex: [['primary', 300, 50, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
   const status = agentStatus(tie, now);
   assert.equal(status.engines.claude.effectiveHeadroom, status.engines.codex.effectiveHeadroom);
   assert.equal(status.route.review.engine, 'claude');
   assert.equal(status.route.research.engine, 'claude');
   assert.equal(status.route.code.engine, 'codex');
-  const edge = left => fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, left, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
-  assert.equal(agentStatus(edge(10), now).engines.codex.effectiveHeadroom, SPEND_MARGIN);
-  assert.equal(agentStatus(edge(10), now).route.code.engine, 'codex');
-  assert.equal(agentStatus(edge(9), now).route.code.engine, 'claude');
+  // Code needs a Codex that lasts. A 5-hour window at 10% with half of it to go is at the 20% effective margin,
+  // and the stored forecast says it runs out before the reset, so Codex reads low and code goes to Claude.
+  const edge = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 10, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
+  const low = agentStatus(edge, now);
+  assert.equal(low.engines.codex.effectiveHeadroom, SPEND_MARGIN);
+  assert.equal(low.engines.codex.pace, 'slow');
+  assert.equal(low.route.code.engine, 'claude');
+  assert.match(low.route.code.reason, /codex is low/);
   // With Claude out, a busy or low Codex still gets the work.
   const claudeOut = fixture({claude: [['seven_day', 10080, 0, 151 * hour]], codex: [['primary', 300, 5, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
   const out = agentStatus(claudeOut, now, {codexRunning: 99});
@@ -236,17 +255,21 @@ test('ties go to Claude for review and research; code needs Codex at 20% effecti
 });
 
 test('a holding engine gets slots in proportion to its effective headroom, at least 1', () => {
-  // Codex 5-hour 30% left with half the window to go, burning 5%/h: over budget, ends near the margin.
-  const hold = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 30, 150 * 60000, 5], ['secondary', 10080, 90, 84 * hour]]});
-  const status = agentStatus(hold, now, {codexRunning: 3});
-  assert.equal(status.engines.codex.pace, 'hold');
-  assert.equal(status.engines.codex.effectiveHeadroom, 60);
-  assert.equal(status.cap.codex, Math.ceil(MAX_SLOTS.codex * 0.6));
-  assert.equal(status.cap.codexRunning, 3);
-  assert.equal(status.route.code.engine, 'claude');
-  assert.match(status.route.code.reason, /all 3 Codex slots busy/);
-  assert.match(status.cap.reason, /codex pace hold, 60% effective gives 3/);
-  assert.equal(agentStatus(hold, now).cap.codexRunning, null);
+  // Codex 5-hour 45% left with half the window to go, its burst cooling to 5%/h: the stored forecast says it lasts,
+  // but with under 20 points left at the reset.
+  const hold = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 45, 150 * 60000, 5], ['secondary', 10080, 90, 84 * hour]]});
+  const status = agentStatus(hold, now);
+  const codex = status.engines.codex;
+  assert.equal(codex.pace, 'hold');
+  assert.equal(codex.windows.five_hour.forecast.status, 'room');
+  assert.ok(codex.windows.five_hour.forecast.leftAtReset < SPEND_MARGIN);
+  assert.equal(codex.effectiveHeadroom, 90);
+  assert.equal(status.cap.codex, Math.ceil(MAX_SLOTS.codex * 0.9));
+  assert.match(status.cap.reason, new RegExp(`codex pace hold, 90% effective gives ${status.cap.codex}`));
+  const busy = agentStatus(hold, now, {codexRunning: status.cap.codex});
+  assert.equal(busy.route.code.engine, 'claude');
+  assert.match(busy.route.code.reason, new RegExp(`all ${status.cap.codex} Codex slots busy`));
+  assert.equal(status.cap.codexRunning, null);
   const thin = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 2, 150 * 60000, 0.1], ['secondary', 10080, 90, 84 * hour]]});
   assert.equal(agentStatus(thin, now).cap.codex, 1);
 });
@@ -426,18 +449,18 @@ const numbersOnly = value => JSON.stringify(value, (key, item) => {
 });
 
 test('Pro: a 5-hour window near its limit sets Claude pace, headroom and cap', () => {
-  // 12% left with 2 h to go at 20%/h runs out first; the weekly window has plenty.
+  // 12% left with 2 h to go, 88 points spent in 3 h: runs out first. The weekly window has plenty.
   const status = agentStatus(fixture({claude: [['five_hour', 300, 12, 2 * hour, 20], ['seven_day', 10080, 80, 96 * hour, 1]], codex: proCodex}), now, {codexRunning: 0});
   const claude = status.engines.claude;
   assert.deepEqual([claude.status, claude.headroom, claude.effectiveHeadroom, claude.pace], ['ok', 12, 30, 'slow']);
-  assert.deepEqual([claude.windows.five_hour.percentLeft, claude.windows.five_hour.minutesToReset, claude.windows.five_hour.burnPerHour], [12, 120, 20]);
+  assert.deepEqual([claude.windows.five_hour.percentLeft, claude.windows.five_hour.minutesToReset, claude.windows.five_hour.burnPerHour], [12, 120, 29.3]);
   assert.equal(claude.windows.weekly.pace, 'spend');
   assert.equal(status.cap.claude, 1);
-  assert.match(describe(status), /^Claude: 5-hour 12% left, resets in 2h 0m, 20%\/h, slow \| weekly 80% left/m);
-  // 30% left with 4 h to go at 5%/h ends with 10 left: hold, with slots from the 5-hour headroom.
-  const holding = agentStatus(fixture({claude: [['five_hour', 300, 30, 4 * hour, 5], ['seven_day', 10080, 80, 96 * hour, 1]], codex: proCodex}), now);
-  assert.deepEqual([holding.engines.claude.pace, holding.engines.claude.effectiveHeadroom], ['hold', 38]);
-  assert.equal(holding.cap.claude, Math.ceil(MAX_SLOTS.claude * 38 / 100));
+  assert.match(describe(status), /^Claude: 5-hour 12% left, resets in 2h 0m, 29.3%\/h, slow \| weekly 80% left/m);
+  // 45% left with half the window to go, cooling to 5%/h: lasts with under 20 left, so hold, with slots from the 5-hour headroom.
+  const holding = agentStatus(fixture({claude: [['five_hour', 300, 45, 150 * 60000, 5], ['seven_day', 10080, 80, 96 * hour, 1]], codex: proCodex}), now);
+  assert.deepEqual([holding.engines.claude.pace, holding.engines.claude.effectiveHeadroom], ['hold', 90]);
+  assert.equal(holding.cap.claude, Math.ceil(MAX_SLOTS.claude * 90 / 100));
 });
 
 test('Pro: a spent 5-hour window puts Claude out until that window resets', () => {

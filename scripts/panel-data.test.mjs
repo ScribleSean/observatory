@@ -203,20 +203,14 @@ test('limits readings become stale exactly at ten minutes', () => {
   }
 });
 
-test('stored pace remains the default and can be omitted without changing other row fields', () => {
+test('limit rows show no stored pace, even from an older snapshot that has one', () => {
   const checkedAt = new Date(now - 60000).toISOString();
   const quota = { status: 'ok', checkedAt,
     windows: [{ bucket: 'codex', window: 'primary', remainingPercent: 40, durationMinutes: 300,
       resetsAt: new Date(now + 3600000).toISOString() }],
     pace: [{ bucket: 'codex', window: 'primary', status: 'projected', asOf: checkedAt,
       estimatedExhaustionAt: new Date(now + 30 * 60000).toISOString() }] };
-  const data = { quota, claudeLimits: quota };
-  assert.deepEqual(limits(data, now), limits(data, now, { storedPace: true }));
-  const without = limits(data, now, { storedPace: false });
-  limits(data, now).forEach((row, index) => {
-    assert.equal(row.note, 'Resets in 1h 0m · runs out in 30m');
-    assert.deepEqual(without[index], { ...row, note: 'Resets in 1h 0m' });
-  });
+  for (const row of limits({ quota, claudeLimits: quota }, now)) assert.equal(row.note, 'Resets in 1h 0m');
 });
 
 test('device freshness gates today for tokens, activity and provider tokens, and keeps the history', () => {

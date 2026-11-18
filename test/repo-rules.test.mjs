@@ -180,15 +180,16 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
     assert.ok(swift.includes(part),`glance/mac/Glance.swift does not say "${part}" like lib/strings.json.`);
     assert.ok(cs.includes(part),`glance/windows/Glance.cs does not say "${part}" like lib/strings.json.`);
   }
-  // Both panels draw glance.forecast from lib/forecast.mjs: one tile per engine, and the menu title or tray tip.
-  for (const key of ['sentence','menu','engines','phrase']) {
+  // Both panels draw glance.forecast from lib/forecast.mjs as stored: the headline, the menu title or tray tip.
+  for (const key of ['sentence','menu','engines','headline','resets']) {
     assert.ok(swift.includes(`["${key}"]`),`glance/mac/Glance.swift does not read forecast "${key}".`);
     assert.ok(cs.includes(`Get(`) && cs.includes(`"${key}"`),`glance/windows/Glance.cs does not read forecast "${key}".`);
   }
   assert.ok(swift.includes('glance["forecast"]'),'Glance.swift does not read glance.forecast.');
   assert.ok(cs.includes('Get(glance, "forecast")'),'Glance.cs does not read glance.forecast.');
-  assert.ok(swift.includes('replacingOccurrences(of: " at this pace", with: "")'),'Glance.swift does not strip " at this pace".');
-  assert.ok(cs.includes('Replace(" at this pace", "")'),'Glance.cs does not strip " at this pace".');
+  // The stored words are shown unchanged, so the menu bar, tray and dashboard read the same.
+  assert.ok(!swift.includes('at this pace'),'Glance.swift edits the stored forecast words.');
+  assert.ok(!cs.includes('at this pace'),'Glance.cs edits the stored forecast words.');
   assert.match(swift,/engine\.status == "out" \? palette\.error : engine\.status == "runs-out" \? palette\.warning/,'Glance.swift does not map out to error and runs-out to warning.');
   assert.match(cs,/engine\.Status == "out" \? p\.Error : engine\.Status == "runs-out" \? p\.Warning/,'Glance.cs does not map out to error and runs-out to warning.');
   assert.ok(swift.includes('state.menu'),'Glance.swift menu bar does not show forecast.menu.');
