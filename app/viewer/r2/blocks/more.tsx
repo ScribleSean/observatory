@@ -34,7 +34,7 @@ export function MoreView({ title }: { title: string }) {
 export function LimitMeter({ element }: ComponentRenderProps<MeterProps>) {
   const { snapshot, scope, now, frame } = useR2();
   const { engine: wanted, window = null } = element.props;
-  const engines = (resolveBlock('LimitMeter', { engine: wanted, window: null }, snapshot, scope, { now }) as { engine: LimitsVM['engines'][number] | null }).engine;
+  const { engine: engines, headline } = resolveBlock('LimitMeter', { engine: wanted, window: null }, snapshot, scope, { now }) as { engine: LimitsVM['engines'][number] | null; headline: string };
   const all = (snapshot.view as { config?: { sources: Record<string, boolean> }[] } | undefined)?.config ?? [];
   const on = (key: string) => all.some(row => row.sources[key]);
   const grok = wanted === 'claude' && on('grokLimits') ? resolveBlock('GrokRequests', {}, snapshot, scope, { now }) as GrokRequestsVM | null : null;
@@ -42,6 +42,7 @@ export function LimitMeter({ element }: ComponentRenderProps<MeterProps>) {
   return (
     <section className="blk" aria-label="Limits now">
       <div className="bh"><h3>Limits now</h3></div>
+      <p className="sayline">{headline}</p>
       {engines ? <MeterRows engine={engines} windowId={window} now={now} timeZone={frame.timeZone} /> : <div className="empty"><b>Off</b>This limit is turned off in observatory.config.json.</div>}
       {grok && grok.total.value !== 0 && <GrokRequestsRow vm={grok} label={frame.period.label} />}
       {hidden.length > 0 && <div className="foot">{hidden.join('. ')}.</div>}

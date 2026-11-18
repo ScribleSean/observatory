@@ -1,6 +1,7 @@
 // One forecast, shown the same everywhere. Each computer forecasts once per reading and stores the result in its
-// combined.json. This feeds one combined snapshot to every surface's data builder (the dashboard's Week page,
-// glance.json for the menu bar and tray, the tray text and `npm run status -- --json`) and checks that each shows
+// combined.json. This feeds one combined snapshot to every surface's data builder (the dashboard's Week page, the
+// round 2 Limits view and its "Limits now" block, glance.json for the menu bar and tray, the tray text and
+// `npm run status -- --json`) and checks that each shows
 // the same run-out time, the same words and the same computer state. Any divergence fails here.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,8 @@ import { weekView } from '../lib/view-week.mjs';
 import { glanceView } from '../lib/glance-view.mjs';
 import { agentStatus } from '../lib/agent-status.mjs';
 import { when, between } from '../lib/forecast.mjs';
+import { buildLimits, buildOverview, resolveBlock } from '../lib/view-r2.mjs';
+import { defaultScope } from '../lib/scope.mjs';
 import { ownSnapshot } from './helpers.mjs';
 
 const HOUR = 3600000, MINUTE = 60000;
@@ -46,6 +49,9 @@ function readings({ id, minutes, remaining, resetHours, jitter = 0, weeks = 0 })
 function combinedWith({ weekly, fiveHour = null, timeZone = 'America/New_York' }) {
   const parts = [readings({ id: 'seven_day', minutes: 10080, ...weekly }), ...(fiveHour ? [readings({ id: 'five_hour', minutes: 300, ...fiveHour })] : [])];
   const mac = ownSnapshot('Mac', now, snapshot => ({ ...snapshot, timezone: timeZone, collectedAt: iso(now - MINUTE),
+    // The settings echo the round 2 views read to know which sources are on.
+    configEcho: { host: 'Mac', name: 'Studio Mac', role: 'hub', titles: false, roleAliases: {}, checkedAt: null,
+      sources: { claudeCode: true, claudeLimits: true, codex: false, codexLimits: false, grokLimits: false }, engines: { claude: 'auto', codex: 'off', grok: 'auto' } },
     claudeLimits: { status: 'ok', checkedAt: iso(now - MINUTE), ...(fiveHour ? {} : { notReported: ['five_hour'] }), windows: parts.map(part => part.window) },
     grokLimits: { status: 'not-connected', windows: [] },
     limitHistory: [{ host: 'Mac', status: 'ok', points: parts.flatMap(part => part.points) }],
@@ -60,7 +66,10 @@ function combinedWith({ weekly, fiveHour = null, timeZone = 'America/New_York' }
 /** What each surface shows from one combined snapshot, at `at`. */
 function surfaces(combined, at = now) {
   const copy = () => JSON.parse(JSON.stringify(combined));
+  const r2 = copy(), scope = defaultScope(r2, { now: at });
+  const limits = buildLimits(r2, scope, { now: at });
   return { stored: combined.glance.forecast, week: weekView(summaryOf(copy()), { now: at }),
+    limits, limitsNow: resolveBlock('LimitMeter', { engine: 'claude' }, r2, scope, { now: at }), overview: buildOverview(r2, scope, { now: at }),
     glance: glanceView(copy(), { now: at, timeZone: combined.view.timezone }),
     status: JSON.parse(JSON.stringify(agentStatus(copy(), at))), tray: combined.glance.lines, summary: summaryOf(copy()) };
 }
@@ -68,8 +77,17 @@ function surfaces(combined, at = now) {
 const joined = say => say ? [say.lead, say.when, say.tail].filter(Boolean).join(' ') : null;
 const STATUS_WINDOW = { 10080: 'weekly', 300: 'five_hour' };
 
+/** The round 2 Limits view, its "Limits now" block and the Overview lead with the menu bar's line, in the same words. */
+function agreeRound2({ limits, limitsNow, overview, glance }) {
+  assert.equal(limits.headline, glance.headline.text, 'round 2 Limits view');
+  assert.equal(limitsNow.headline, glance.headline.text, 'round 2 Limits now');
+  assert.equal(overview.limitsHeadline, glance.headline.text, 'round 2 Overview');
+}
+
 function agree(combined) {
-  const { stored, week, glance, status, tray, summary } = surfaces(combined);
+  const all = surfaces(combined);
+  const { stored, week, glance, status, tray, summary, limits } = all;
+  agreeRound2(all);
   assert.deepEqual(stored.engines.map(engine => engine.engine), ['claude', 'codex'], 'no Grok: the lead is a Claude window');
   const lead = stored.engines.find(engine => engine.engine === stored.scarce?.engine);
   assert.equal(lead.engine, 'claude');
@@ -107,6 +125,10 @@ function agree(combined) {
     // glance.json: the lead window is the headline, any other a row with its reset.
     if (window.windowId === lead.windowId) assert.equal(glance.headline.text, window.headline);
     else assert.equal(glance.limits.find(row => row.engine === 'claude' && row.name.endsWith(window.window)).resets, window.resetsWhen, `glance row for ${name}`);
+    // The round 2 Limits view: the same words and reset, on its meter and in its "Limits now" block.
+    const meter = limits.engines.find(engine => engine.engine === 'claude').windows.find(row => row.windowId === window.windowId);
+    assert.deepEqual([meter.forecastText, meter.forecastResets], [window.headline, window.resets], `round 2 meter for ${name}`);
+    assert.equal(all.limitsNow.engine.windows.find(row => row.windowId === window.windowId).forecastText, window.headline);
     // Status: the same words, run-out time and reset label.
     const own = status.engines.claude.windows[STATUS_WINDOW[window.durationMinutes]];
     assert.deepEqual([own.forecast.phrase, own.forecast.runsOutAt, own.forecast.resetsLabel, own.forecast.headline],
@@ -179,8 +201,11 @@ test('a computer turned off in the settings reads Off everywhere, never the time
 test('an old forecast reads as old on every surface, with the day and time it was made', () => {
   const combined = combinedWith({ weekly: { remaining: 5, resetHours: 20, jitter: 1, weeks: 2 } });
   const later = now + 20 * MINUTE;
-  const { stored, week, glance, status } = surfaces(combined, later);
+  const all = surfaces(combined, later);
+  const { stored, week, glance, status } = all;
+  agreeRound2(all);
   const expected = `${stored.engines[0].headline}, as of Wed 7:40 AM`;
+  assert.equal(all.limits.engines[0].windows.find(row => row.windowId === 'seven_day').forecastText, `${stored.windows.find(row => row.windowId === 'seven_day').headline}, as of Wed 7:40 AM`);
   assert.equal(glance.headline.text, expected);
   assert.equal(joined(week.headline.say), expected);
   assert.equal(status.engines.claude.forecast.headline, expected);
@@ -193,8 +218,11 @@ test('an old forecast reads as old on every surface, with the day and time it wa
 test('past its reset a stored claim no longer holds: Unknown, with when it was made, on every surface', () => {
   const combined = combinedWith({ weekly: { remaining: 0, resetHours: 20 } });
   const later = now + 21 * HOUR;
-  const { week, glance, status } = surfaces(combined, later);
+  const all = surfaces(combined, later);
+  const { week, glance, status } = all;
+  agreeRound2(all);
   assert.equal(glance.headline.text, 'Unknown, as of Wed 7:40 AM');
+  assert.equal(all.limits.engines[0].windows.find(row => row.windowId === 'seven_day').forecastText, 'Unknown, as of Wed 7:40 AM');
   assert.equal(glance.headline.resets, null);
   assert.equal(joined(week.headline.say), 'Unknown, as of Wed 7:40 AM');
   assert.equal(status.engines.claude.forecast.headline, 'Unknown, as of Wed 7:40 AM');
@@ -206,8 +234,11 @@ test('a snapshot with no stored forecast reads Unknown, in one word, on every su
   // As an older version wrote it: engines with phrases, but no stored windows, time or words.
   const { asOf: _asOf, windows: _windows, ...older } = combined.glance.forecast;
   combined.glance.forecast = { ...older, engines: older.engines.map(({ headline: _headline, claim: _claim, resets: _resets, say: _say, ...engine }) => engine) };
-  const { week, glance, status } = surfaces(combined);
+  const all = surfaces(combined);
+  const { week, glance, status } = all;
+  agreeRound2(all);
   assert.equal(glance.headline.text, 'Unknown');
+  assert.equal(all.limits.engines[0].windows.find(row => row.windowId === 'seven_day').forecastText, 'Unknown');
   assert.equal(week.headline.say.lead, 'Unknown');
   assert.equal(week.headline.pill, null);
   assert.equal(status.engines.claude.forecast.headline, 'Unknown');

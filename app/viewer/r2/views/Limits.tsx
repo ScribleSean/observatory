@@ -4,7 +4,7 @@ import type { Frame, GrokRequestsVM, LimitWindowVM, LimitsVM } from '../../../..
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildLimits, resolveBlock } from '../../../../lib/view-r2.mjs';
 import { limitHistorySeries } from '../../../../lib/view-limit-history.mjs';
-import { LimitMeter, windowNow, paceWords, type Engine } from '../blocks/LimitMeter';
+import { LimitMeter, windowNow, type Engine } from '../blocks/LimitMeter';
 import { GrokRequests } from '../blocks/GrokRequests';
 import { Block, BarList, Empty, StateView, Strip, Tail, UNKNOWN, addDays, clock, dateIn, dateSpan, dayClock, names, shortDate, span, weekday, type Cell } from './parts';
 import './more.css';
@@ -103,7 +103,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
       ? { label: 'Week gone', value: pct(100 * state.gone), context: `${span(state.gone * state.length)} of 7d` }
       : { label: 'Week gone', value: UNKNOWN, context: 'no reset time read' },
     state && state.projected !== null
-      ? { label: 'Projected at the reset', value: pct(state.projected), accent: state.projected >= 100, context: state.runoutAt ? `runs out ${dayClock(state.runoutAt, timeZone)}` : 'at this week’s pace' }
+      ? { label: 'Projected at the reset', value: pct(state.projected), accent: state.projected >= 100, context: weekly?.forecastText ?? UNKNOWN }
       : { label: 'Projected at the reset', value: UNKNOWN, context: 'not enough readings yet' },
     lastFour.length
       ? { label: 'Weeks that ran out early', value: String(ranOut.length), unit: `of the last ${lastFour.length}`, context: ranOut.length ? `last in the week of ${shortDate(ranOut[0].key)}` : 'every recorded week lasted' }
@@ -121,6 +121,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
   const today = dateIn(now, timeZone);
   return (
     <div className="grid more">
+      <p className="sayline" aria-label="Forecast">{vm.headline}</p>
       <Strip cells={cells} />
       {weekly && (
         <Block span={8} title="Will the week last?" sub={`Claude Code weekly${state?.reset && state.length ? `, ${dateSpan(dateIn(state.reset - state.length, timeZone), dateIn(state.reset, timeZone))}` : ''}${readOn ? `, ${readOn}` : ''}`}
@@ -133,7 +134,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
           {past.length === 0 ? <Empty title="No past weeks" line="A week shows here once its reset has passed." /> : (
             <div className="tw"><table><tbody>
               <tr><td className="name">{state?.reset && state.length ? dateSpan(dateIn(state.reset - state.length, timeZone), dateIn(state.reset - HOUR, timeZone)) : 'This week'}
-                <div className="sub">{state ? paceWords(state, timeZone) ?? UNKNOWN : UNKNOWN}</div></td>
+                <div className="sub">{weekly?.forecastText ?? UNKNOWN}</div></td>
                 {/* zero-ok: meter width only, the cell beside it reads Unknown */}
                 <td style={{ width: '34%' }} aria-hidden="true"><div className="meter" style={{ margin: 0 }}><i style={{ width: `${state?.used ?? 0}%` }} /></div></td>
                 <td className="r strong">{state?.used === null || !state ? UNKNOWN : pct(state.used)}</td></tr>

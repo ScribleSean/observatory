@@ -5,7 +5,7 @@ import { UNKNOWN, clock, dayClock } from '../views/parts';
 import '../views/more.css';
 
 export type Engine = LimitsVM['engines'][number];
-type Forecast = { status?: string; ratePerHour?: number | null; runoutAt?: string | null } | null;
+type Forecast = { status?: string; leftAtReset?: number | null } | null;
 
 const MINUTE = 60000;
 /** The window's length in minutes, from its label: "weekly", "5 hour", "30 day". */
@@ -25,25 +25,14 @@ export function windowNow(window: LimitWindowVM, now: number) {
   const minutes = windowMinutes(window), reset = window.resetsAt ? Date.parse(window.resetsAt) : NaN;
   const length = minutes ? minutes * MINUTE : null;
   const gone = length && Number.isFinite(reset) ? Math.max(0, Math.min(1, 1 - (reset - now) / length)) : null;
+  // The projection is the stored forecast's share left at the reset (lib/forecast.mjs), never a second forecast.
   const forecast = window.forecast as Forecast;
-  let projected: number | null = null;
-  if (used !== null && forecast?.status === 'runs-out') projected = 100;
-  else if (used !== null && forecast && typeof forecast.ratePerHour === 'number' && Number.isFinite(reset))
-    projected = Math.min(100, used + forecast.ratePerHour * Math.max(0, reset - now) / (60 * MINUTE));
-  else if (used !== null && forecast?.status === 'room' && gone === 1) projected = used;
-  return { used, gone, length, reset: Number.isFinite(reset) ? reset : null, projected, runoutAt: forecast?.status === 'runs-out' ? forecast.runoutAt ?? null : null };
+  const projected = used === null || !forecast ? null : forecast.status === 'out' || forecast.status === 'runs-out' ? 100
+    : typeof forecast.leftAtReset === 'number' ? Math.max(0, Math.min(100, 100 - forecast.leftAtReset)) : null;
+  return { used, gone, length, reset: Number.isFinite(reset) ? reset : null, projected, runsOut: forecast?.status === 'runs-out' || forecast?.status === 'out' };
 }
 
 const pct = (value: number) => `${Math.round(value)}%`;
-
-/** The pace in plain words, from the projection. */
-export function paceWords(state: ReturnType<typeof windowNow>, timeZone: string) {
-  if (state.used === null) return null;
-  if (state.used >= 100) return 'used up';
-  if (state.runoutAt) return `runs out ${dayClock(state.runoutAt, timeZone)}`;
-  if (state.projected !== null) return 'on pace to last';
-  return null;
-}
 
 function Row({ name, window, now, timeZone }: { name: string; window: LimitWindowVM; now: number; timeZone: string }) {
   const state = windowNow(window, now);
@@ -59,13 +48,14 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
     );
   }
   const spent = state.used >= 100 || window.state === 'spent';
-  const pace = paceWords(state, timeZone);
+  // The stored forecast's words, exactly as the menu bar shows them (lib/forecast.mjs shown()).
+  const pace = window.forecastText;
   return (
     <div className="lim">
-      <div className="h"><span>{title}</span><span>{state.reset ? `Resets ${dayClock(state.reset, timeZone)}` : 'Reset Unknown'}</span></div>
+      <div className="h"><span>{title}</span><span>{window.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone)}` : 'Reset Unknown')}</span></div>
       <div className="h" style={{ marginTop: 2 }}>
         <b className={spent ? 'acc' : undefined}>{pct(state.used)}<small>used</small></b>
-        {pace && <span className={state.runoutAt ? 'acc' : undefined}>{pace}</span>}
+        {pace && <span className={state.runsOut ? 'acc' : undefined}>{pace}</span>}
       </div>
       <div className="meter">
         <i style={{ width: `${state.used}%`, ...(spent ? { background: 'var(--accent)' } : {}) }} />

@@ -37,7 +37,7 @@ test('every builder returns its documented shape for every range unit, and every
   for (const unit of RANGE_UNITS) {
     const scope = at(unit);
     const overview = v.buildOverview(snapshot, scope, { now: NOW });
-    assert.deepEqual(Object.keys(overview).sort(), ['agents', 'chart', 'coverage', 'flags', 'frame', 'grok', 'headline', 'limits', 'running', 'topSessions'].sort());
+    assert.deepEqual(Object.keys(overview).sort(), ['agents', 'chart', 'coverage', 'flags', 'frame', 'grok', 'headline', 'limits', 'limitsHeadline', 'running', 'topSessions'].sort());
     for (const [id, num] of Object.entries(overview.headline)) assertNum(num, id);
     assert.ok(overview.topSessions.length <= v.TOP_SESSIONS);
     for (const point of overview.chart) { assertNum(point.spend, null); assert.ok(point.spend.breakdowns.device); }
@@ -174,16 +174,27 @@ test('account limits show once each, with the computer they were read on, whatev
   assert.ok(month.some(window => window.used === 100));
 });
 
-test('the limits forecast is the one the collector stored, shown as it is', () => {
-  const weekly = v.buildLimits(snapshot, at('week'), { now: NOW }).engines[0].windows[0];
-  const stored = snapshot.view.claudeLimits.windows[0].forecast;
+test('the limits forecast is the one the hub stored, shown through shown() as every surface shows it', () => {
+  const limits = v.buildLimits(snapshot, at('week'), { now: NOW });
+  const weekly = limits.engines[0].windows[0];
+  const stored = snapshot.glance.forecast.windows.find(window => window.engine === 'claude' && window.windowId === 'seven_day');
   assert.equal(weekly.forecast, stored);
-  assert.equal(weekly.forecastText, 'runs out Thu 9 PM');
-  assert.deepEqual(v.buildOverview(snapshot, at('week'), { now: NOW }).limits[0].windows[0].forecastText, 'runs out Thu 9 PM');
-  assert.equal(v.buildLimits(snapshot, at('week'), { now: NOW }).engines[0].windows[1].forecast, null);
-  // The view-models never compute a forecast of their own.
+  assert.equal(weekly.forecastText, stored.headline);
+  assert.equal(weekly.forecastResets, stored.resets);
+  assert.equal(v.buildOverview(snapshot, at('week'), { now: NOW }).limits[0].windows[0].forecastText, stored.headline);
+  assert.equal(limits.engines[0].headline, snapshot.glance.forecast.engines.find(engine => engine.engine === 'claude').headline);
+  // An hour later the stored words are dated, and nothing projects from them.
+  const later = v.buildLimits(snapshot, at('week'), { now: NOW + 3600000 }).engines[0].windows[0];
+  assert.match(later.forecastText, /, as of Wed \d{1,2}:\d\d (AM|PM)$/);
+  assert.equal(later.forecast, null);
+  // A snapshot with no stored forecast reads Unknown, never a forecast of its own.
+  const none = { ...snapshot, glance: { limits: snapshot.glance.limits } };
+  assert.equal(v.buildLimits(none, at('week'), { now: NOW }).engines[0].windows[0].forecastText, 'Unknown');
+  assert.equal(v.buildLimits(none, at('week'), { now: NOW }).headline, 'Unknown');
+  // The view-models only show the stored forecast: they never call the forecaster.
   const source = readFileSync(new URL('../lib/view-r2.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /forecast\.mjs|quota-pace/);
+  assert.match(source, /import \{ shown, shownSentence \} from '\.\/forecast\.mjs';/);
+  assert.doesNotMatch(source, /windowForecast|projection\(|quota-pace|\bforecast\(/);
 });
 
 test('Grok is counted in requests and never added to dollars or tokens', () => {

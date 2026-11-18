@@ -83,11 +83,12 @@ test('Settings shows each computer\'s sources from the settings echo, with no co
 });
 
 const weekReset = NOW + 58 * HOUR;
-const limitsVM = (weekly = {}) => ({ frame: frame(), engines: [
-  { engine: 'claude', name: 'Claude Code', plan: null, windows: [
-    { windowId: 'seven_day', label: 'weekly', remaining: null, resetsAt: null, readOn: null, checkedAt: null, state: 'stale', forecast: null, pastWindows: [], ...weekly },
-    { windowId: 'five_hour', label: '5 hour', remaining: null, resetsAt: null, readOn: null, checkedAt: '2026-11-12T10:00:00Z', state: 'stale', forecast: null, pastWindows: [] }] },
-  { engine: 'grok', name: 'Grok', plan: null, windows: [] }] });
+const unread = { forecast: null, forecastText: 'Unknown', forecastStale: false, forecastResets: null };
+const limitsVM = (weekly = {}) => ({ frame: frame(), headline: 'Claude has room', engines: [
+  { engine: 'claude', name: 'Claude Code', plan: null, headline: 'Claude has room', windows: [
+    { windowId: 'seven_day', label: 'weekly', remaining: null, resetsAt: null, readOn: null, checkedAt: null, state: 'stale', ...unread, pastWindows: [], ...weekly },
+    { windowId: 'five_hour', label: '5 hour', remaining: null, resetsAt: null, readOn: null, checkedAt: '2026-11-12T10:00:00Z', state: 'stale', ...unread, pastWindows: [] }] },
+  { engine: 'grok', name: 'Grok', plan: null, headline: 'Grok has room', windows: [] }] });
 const grok = { total: num(null, 'Unknown', { unit: 'requests' }), days: view.grokLimits.requests.days.map(day => ({ date: day.date, value: day.count })),
   weekly: { remaining: 64, resetsAt: view.grokLimits.windows[0].resetsAt, checkedAt: view.grokLimits.windows[0].checkedAt } };
 
@@ -104,13 +105,14 @@ test('Limits reads Unknown, never 0, before the app reports a window', () => {
 
 test('Limits shows the weekly limit once, with the computer it was read on, and splits it by device in points', () => {
   const vm = limitsVM({ remaining: 40, resetsAt: new Date(weekReset).toISOString(), readOn: 'Studio', checkedAt: new Date(NOW).toISOString(), state: 'ok',
-    forecast: { status: 'room', ratePerHour: 0.5 }, pastWindows: [{ start: '2026-11-06', used: 94 }, { start: '2026-10-30', used: 100 }] });
+    forecast: { status: 'room', ratePerHour: 0.5, leftAtReset: 11 }, forecastText: 'Claude has room', forecastResets: 'Resets Sat 5:45 AM', pastWindows: [{ start: '2026-11-06', used: 94 }, { start: '2026-10-30', used: 100 }] });
   const readings = Array.from({ length: 12 }, (_, index) => ({ at: weekReset - 168 * HOUR + index * 8 * HOUR, used: index * 5 }));
   const byDevice = devicePoints(view, vm.engines[0].windows[0], NOW, TZ);
   const markup = clean(html(createElement(LimitsBody, { vm, grok, readings, byDevice, now: NOW, timeZone: TZ })), 'Limits');
   assert.equal(markup.match(/60%<small>used<\/small>/g)?.length, 1, 'the weekly limit shows once, never summed');
   assert.ok(markup.includes('read on Studio'));
-  assert.ok(markup.includes('89%') && markup.includes('at the reset'), '60% plus 0.5 points an hour for 58 hours');
+  assert.ok(markup.includes('89%') && markup.includes('at the reset'), 'the projection is the stored forecast: 11% left at the reset');
+  assert.ok(markup.includes('Claude has room'), 'the stored forecast words, as the menu bar shows them');
   assert.ok(markup.includes('Ran out before the reset') && markup.includes('Lasted, 6% unused'));
   assert.ok(markup.includes('1<small>of the last 2</small>'));
   assert.equal(byDevice.length, 3);

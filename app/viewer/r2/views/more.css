@@ -88,3 +88,8 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 }
 .spark.tall{height:clamp(40px,12cqi,64px);margin-top:0}
 .more .li .t,.more .li .t div{white-space:normal;overflow:visible;text-overflow:clip}
+
+/* The stored forecast's line, the same words as the menu bar. */
+.r2 .sayline{margin:0;font-size:15px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.r2 .grid.more>.sayline{grid-column:1/-1}
+.r2 .blk>.sayline{padding:var(--sp-1) var(--pad) var(--sp-2);font-size:13px}
