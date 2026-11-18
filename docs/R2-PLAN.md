@@ -4,6 +4,10 @@ Round 2 rebuilds the dashboard around one scope bar and seven views: Overview, S
 
 This file records the data model, the contract modules and how the work splits into lanes. The contract modules hold types and signatures only. Each lane fills in its own files.
 
+## Status
+
+As of Nov 18, 2026 every lane is merged on `claude/observatory-r2`: the collector (a), view-models (b), the shell with Overview and Sessions (c), Limits, Tokens, Screen time, Drift and Settings (d) and the MCP server (f), together with `main`'s stored forecast. The integration also removed the stand-in view-models, wired saved views to the block catalog's checks, made the Limits view show the stored forecast through `shown()`, bundled the fonts, kept large histories from reading as unavailable, removed the old Week and History pages, and wrote the documentation and screenshots (lane e). It is not merged into `main` and has not been run against real data.
+
 ## What is missing today
 
 The ledger (`lib/ledger-shape.mjs`, `scripts/ledger.mjs`) keeps only the current and previous weekly limit windows. Month, year and all-time views of sessions, spend and shipped work have no data. Token and screen-time totals already keep daily history for good (`scripts/token-store.mjs`, `scripts/activity-history.mjs`, `lib/view-history.mjs`), so those views only need the new scope.
@@ -41,7 +45,7 @@ Where it is kept:
 
 How days change: a branch merged on Friday turns Monday's commits into commits on main. Each collection rebuilds the last 14 days from transcripts and git. Older days are frozen, except that commits on main are checked again for 92 days from the stored commit ids. The first collection backfills every day the transcripts still hold. Claude Code deletes transcripts after 30 days by default, so history before that is not recoverable.
 
-Size: each computer's `ledgerHistory` must fit in 1.5 MB. When it does not, `fitLedgerHistory` drops, in order, session rows from the oldest day down to 35 days, then the compact rows, then the per-day breakdowns, oldest first. Day totals and shipped counts are the last to go. `combined.json` holds each computer twice, so three computers stay under `snapshotMaximumBytes` with the activity history beside them. Lane a measures this with a year of fixture data.
+Size: each computer's `ledgerHistory` must fit in 1.5 MB. When it does not, `fitLedgerHistory` drops, in order, session rows from the oldest day down to 35 days, then the compact rows, then the per-day breakdowns of days older than that, then the recent days' session rows, oldest first, then the remaining breakdowns. Day totals and shipped counts are never dropped, so a large history never reads as unavailable. `combined.json` holds each computer twice, so three computers stay under `snapshotMaximumBytes` with the activity history beside them. Lane a measures this with a year of fixture data.
 
 ### Rules every number follows
 
