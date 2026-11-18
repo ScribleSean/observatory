@@ -100,6 +100,19 @@ test('shipped work: commits by commit time, merges counted once a day, Unknown w
   assert.deepEqual(failed.sessions.find(row=>!row.ship.length).ship,[]);
 });
 
+test('a repository folder name the snapshot refuses is counted as other, so its commits count and the day stays readable',()=>{
+  const odd='/fictional/code/app (old)',comma='/fictional/code/a,b';
+  const s=session({id:'odd',gitRepo:odd,repo:odd,writes:[{repo:odd,at:NOON},{repo:comma,at:NOON}]});
+  const shipped=new Map([['claude:odd',{commits:[{repo:odd,sha:'c1',at:NOON+MIN,onMain:true,merge:false},{repo:comma,sha:'c2',at:NOON+2*MIN,onMain:false,merge:false}],branches:[]}]]);
+  const {days:[day],commits}=build([s],{joined:{shipped,unread:new Set()}});
+  assert.equal(day.sessions[0].repo,null,'the folder it ran in is dropped');
+  assert.deepEqual(day.sessions[0].ship,[{repo:'other',apiUsd:0,commits:2,onMain:1,merges:0}]);
+  assert.deepEqual(day.ship,{commits:2,onMain:1,merges:0});
+  assert.deepEqual(commits.map(commit=>commit.repoName),['other','other']);
+  const clean=cleanLedgerHistory(wrap([snapshotDay(day,{listSessions:true,titles:true,frozen:false})]),{titles:true});
+  assert.deepEqual(clean.days[0].repos,[{repo:'other',apiUsd:0,commits:2,onMain:1,merges:0}]);
+});
+
 test('titles stay only while titles are on, and no path, prompt or commit id is in a day',()=>{
   const repo='/fictional/secret-folder/hedge';
   const s=session({repo,writes:[{repo,at:NOON}]});
@@ -144,7 +157,9 @@ test('a tampered history row is refused: out of order, a path for a repository, 
   assert.ok(cleanLedgerHistory(wrap(shaped),{titles:true}));
   assert.throws(()=>cleanLedgerHistory(wrap([...shaped].reverse()),{titles:true}));
   const pathRepo=structuredClone(shaped);pathRepo[1].repos[0].repo='/Users/someone/hedge';
-  assert.throws(()=>cleanLedgerHistory(wrap(pathRepo),{titles:true}));
+  const cleanPath=cleanLedgerHistory(wrap(pathRepo),{titles:true});
+  assert.equal(cleanPath.days[1].repos[0].repo,'other','a path for a repository is counted as other, never kept');
+  assert.ok(!JSON.stringify(cleanPath).includes('someone'));
   const sessionRepo=structuredClone(shaped);sessionRepo[1].sessions[0].repo='../hedge';
   assert.equal(cleanLedgerHistory(wrap(sessionRepo),{titles:true}).days[1].sessions[0].repo,null,'a session repository that is not a folder name is dropped');
   const crowded=structuredClone(shaped);crowded[1].sessions=Array.from({length:SESSION_DAY_TOP+1},(_,index)=>({...shaped[1].sessions[0],id:index.toString(16).padStart(12,'0')}));

@@ -10,6 +10,7 @@ import path from 'node:path';
 import {priced,ledgerId,repoName,knownSum,round} from './ledger.mjs';
 import {dayKey} from './read-projects.mjs';
 import {isWorkKind} from './ledger-kinds.mjs';
+import {isRepoName} from '../lib/r2-shape.mjs';
 
 const byUsd=(a,b)=>(b.apiUsd ?? -1)-(a.apiUsd ?? -1);
 
@@ -28,7 +29,11 @@ export function datesFrom(first,last) {
 export const dateFloorMs=date=>Date.parse(`${date}T00:00:00Z`)-15*3600000;
 
 const emptyTokens=()=>({input:0,output:0,cacheRead:0,cacheWrite:0});
-const folder=repo=>{const name=path.basename(repo);return name && name!=='.' && name!=='..'?name:null;};
+// A repository's folder name, as the snapshot keeps it. A name the snapshot's rule refuses (brackets, commas,
+// over 64 characters) counts as 'other', so its commits still count and the history stays readable.
+const folder=repo=>{const name=path.basename(repo);return !name || name==='.' || name==='..'?null:isRepoName(name)?name:'other';};
+// The folder a session ran in, or null when its name fails the same rule.
+const ranIn=gitRepo=>{const name=repoName(gitRepo);return isRepoName(name)?name:null;};
 // A merged branch is one change: a merge commit and the branch it brought in count once.
 const mergeUnits=(commits,branches)=>new Set([...commits.filter(commit=>commit.merge).map(commit=>`${commit.repo}\0${commit.mergedTip ?? commit.sha}`),
   ...branches.map(branch=>`${branch.repo}\0${branch.tip ?? branch.name}`)]);
@@ -54,7 +59,7 @@ function sessionDay(source,session,part,{titles}) {
   const unknown=session.unknownTokens===true;
   const usd=values=>unknown?null:round(knownSum(values));
   const apiUsd=usd(requests.map(request=>request.usd));
-  const repo=repoName(session.gitRepo);
+  const repo=ranIn(session.gitRepo);
   // Shipped, per repository folder. A repository written in that day that git could not read is Unknown.
   const ship=new Map();
   const entry=name=>{

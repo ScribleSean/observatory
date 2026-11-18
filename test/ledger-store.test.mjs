@@ -103,6 +103,26 @@ test('a merge made after the rebuild window turns old commits into commits on ma
   } finally {db.close();}
 }));
 
+test('a day stored with a repository name the snapshot refuses still loads, with that repository as other',()=>withFolder(async folder=>{
+  const db=await openLedgerStore(folder);
+  try {
+    const date=addDays(TODAY,-1);
+    const ship=(repo,commits)=>({repo,apiUsd:0,commits,onMain:0,merges:0});
+    const session={id:'aaaaaaaaaaaa',title:null,origin:'interactive',task:'build',repo:"Sean's app",firstAt:`${date}T15:00:00.000Z`,lastAt:`${date}T16:00:00.000Z`,
+      apiUsd:2.5,tokens:{input:1,output:1,cacheRead:1,cacheWrite:1},models:[],kinds:[],ship:[ship('app (old)',2),ship('a,b',1),ship('fence',4)]};
+    const day={date,tool:'claude',status:'ok',apiUsd:2.5,sessionCount:1,subagents:0,tokens:{input:1,output:1,cacheRead:1,cacheWrite:1},models:[],kinds:[],origins:[],
+      repos:[ship('app (old)',2),ship('a,b',1),ship('fence',4)],ship:{commits:7,onMain:0,merges:0},sessions:[session],other:null};
+    writeHistory(db,{days:[day],commits:[]});
+    const clean=cleanLedgerHistory(historyRow(db,{host:'Mac',now:NOW,timeZone:TIME_ZONE,titles:true}),{titles:true});
+    assert.equal(clean.status,'ok');
+    const kept=clean.days.find(entry=>entry.date===date);
+    assert.deepEqual(kept.repos,[ship('other',3),ship('fence',4)]);
+    assert.deepEqual(kept.sessions[0].ship,[ship('other',3),ship('fence',4)]);
+    assert.equal(kept.sessions[0].repo,null);
+    assert.equal(kept.apiUsd,2.5);
+  } finally {db.close();}
+}));
+
 test('applyOnMain keeps Unknown values Unknown',()=>{
   const day={sessions:[{id:'aaaaaaaaaaaa',ship:[{repo:'fence',commits:2,onMain:null,merges:0}]},{id:'bbbbbbbbbbbb',ship:[{repo:'fence',commits:1,onMain:0,merges:0}]}],
     repos:[{repo:'fence',onMain:null}],ship:{onMain:null}};
