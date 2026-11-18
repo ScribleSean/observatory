@@ -8,7 +8,7 @@ Observatory reads records your tools already keep on your computer. It has no ac
 
 <p align="center"><img src="docs/images/r2-sessions-dark.png" width="420" alt="The Sessions view: every session with its role, computer, models, spend and commits on main"> <img src="docs/images/r2-limits-dark.png" width="420" alt="The Limits view: the weekly limit with its stored forecast, how much of the week is gone, and Grok requests"></p>
 
-<p align="center"><img src="docs/images/r2-overview-light.png" width="420" alt="The Overview in the light theme"> <img src="docs/images/next-menubar.png" width="420" alt="The menu bar panel in light and dark"></p>
+<p align="center"><img src="docs/images/r2-overview-light.png" width="420" alt="The Overview in the light theme"></p>
 
 The screenshots use the fictional sample data from `npm run preview`.
 
@@ -20,8 +20,6 @@ The dashboard has seven views under one scope bar. The scope bar picks the compu
 - **Tokens**, **Screen time**, **Drift** and **Settings** show tokens by model and kind, time at the screen, model settings that differ between computers, and each computer's sources. Settings only shows them: change them in `observatory.config.json` on that computer.
 
 The Ask field and the pinned questions ("Where did today's spend go?", "Will the week last?") rearrange the same blocks. Nothing in the dashboard calls a model. The menu bar and tray show the scarcer limit, what is running now and the top flag.
-
-[Demo with fictional data](https://scriblesean.github.io/observatory/)
 
 ## Install
 
