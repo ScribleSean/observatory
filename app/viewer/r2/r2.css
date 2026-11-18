@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+@import './fonts.css';
 /* Round 2 look. Tokens first, then chrome, blocks and the two breakpoints (1100 and 640). */
 :root{
   /* surfaces */

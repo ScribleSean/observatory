@@ -147,3 +147,20 @@ test('the dashboard entry is the round 2 app, and its copy has no em dash or sem
     assert.ok(!/[—;]/.test(words),words.match(/.{0,40}[—;].{0,40}/)?.[0]);
   }
 });
+
+test('the dashboard bundles Geist and Geist Mono and loads no font or stylesheet from the network', async () => {
+  const { readFile, readdir } = await import('node:fs/promises');
+  const root = new URL('../app/', import.meta.url);
+  const files = (await readdir(root, { recursive: true })).filter(file => file.endsWith('.css'));
+  for (const file of files) {
+    const css = await readFile(new URL(file, root), 'utf8');
+    assert.doesNotMatch(css, /url\(\s*['"]?(https?:)?\/\//, `${file} loads something from the network`);
+  }
+  const fonts = await readFile(new URL('viewer/r2/fonts.css', root), 'utf8');
+  const faces = [...fonts.matchAll(/font-family:"([^"]+)";font-style:normal;font-weight:(\d+);font-display:swap;src:url\("([^"]+)"\) format\("woff2"\)/g)].map(match => [match[1], match[2], match[3]]);
+  assert.deepEqual(faces.map(([family, weight]) => `${family} ${weight}`), ['Geist 400', 'Geist 500', 'Geist 600', 'Geist Mono 400', 'Geist Mono 500']);
+  assert.ok(faces.every(([, , src]) => /^@fontsource\/geist-(sans|mono)\/files\/[a-z0-9-]+\.woff2$/.test(src)));
+  const { dependencies } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(dependencies['@fontsource/geist-sans'], '5.3.0', 'pinned exactly');
+  assert.equal(dependencies['@fontsource/geist-mono'], '5.3.0', 'pinned exactly');
+});
