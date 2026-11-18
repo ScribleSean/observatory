@@ -8,8 +8,9 @@ import {fileURLToPath} from 'node:url';
 import {summaryOf} from '../lib/summary.mjs';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const FICTIONAL_DEVICES=['Studio Mac','Desk PC'];
-const ALLOWED_FILE=/^(index\.html|local\/(combined|summary)\.json|assets\/[\w-]+\.(js|css|svg))$/;
+// The computers of the round 2 fixture (lib/sample-r2.mjs) that scripts/preview.mjs serves.
+const FICTIONAL_DEVICES=['Studio','Tower','Lab'];
+const ALLOWED_FILE=/^(index\.html|local\/(combined|summary)\.json|assets\/[\w-]+\.(js|css|svg|woff2))$/;
 
 function forbidden() {
   const words=[/\/Users\//,/\/home\//,/[A-Za-z]:\\\\/,/file:\/\//,/\blocalhost\b/,/127\.0\.0\.1/,/[\w.+-]+@[\w-]+\.[\w.]+/];

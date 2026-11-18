@@ -377,11 +377,14 @@ test('a forked Codex thread does not count the turns it copied from its parent',
   assert.equal(await read(),'unavailable');
 }));
 
-test('the demo build shows sample project tokens as ok on both computers',async()=>withFolder(async folder=>{
+test('the preview and demo serve the fictional round 2 fixture, with today\'s project tokens',async()=>withFolder(async folder=>{
   const file=path.join(folder,'combined.json');
   execFileSync(process.execPath,[fileURLToPath(new URL('../scripts/preview.mjs',import.meta.url))],{env:{...process.env,PREVIEW_OUT:file},stdio:'ignore'});
   const combined=JSON.parse(await readFile(file,'utf8'));
-  assert.deepEqual(combined.view.projectTokens.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','ok']]);
+  assert.equal(combined.demo,true);
+  assert.deepEqual(combined.devices.map(device=>device.name),['Studio','Tower','Lab']);
+  assert.deepEqual(combined.view.ledgerHistory.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','ok'],['Linux','ok']]);
+  assert.deepEqual(combined.view.projectTokens.map(row=>[row.host,row.status]),[['Mac','ok']]);
 }));
 
 test('combine cleans sample project tokens against its own clock, not the wall clock',()=>{

@@ -10,7 +10,7 @@ import {ownSnapshot} from '../test/helpers.mjs';
 import {activityView} from '../lib/view-activity.mjs';
 import {freshness} from '../lib/panel-data.mjs';
 
-const fictional={demo:true,devices:[{host:'Mac',name:'Studio Mac'},{host:'Windows',name:'Desk PC'}]};
+const fictional={demo:true,devices:[{host:'Mac',name:'Studio'},{host:'Windows',name:'Tower'},{host:'Linux',name:'Lab'}]};
 
 async function demoFolder({html='<script type="module" src="./assets/index-a1.js"></script>',data=fictional,extra={}}={}) {
   const dir=await mkdtemp(path.join(tmpdir(),'observatory-demo-'));
