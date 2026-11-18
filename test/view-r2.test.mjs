@@ -100,7 +100,10 @@ test('a computer whose history starts later adds nothing before its first day', 
   const dates = view.frame.period.dates;
   close(view.headline.spend.value, ledgerSum(['Mac', 'Linux'], dates, d => d.apiUsd));
   const linuxPart = view.headline.spend.breakdowns.device.find(part => part.key === 'Linux').value;
-  close(linuxPart, ledgerSum(['Linux'], dates.filter(date => date >= linux.firstDate), d => d.apiUsd));
+  close(linuxPart, ledgerSum(['Linux'], dates.filter(date => date >= linux.firstDate), d => d.apiUsd));  // November against October 1 to 18: Lab's history starts on Oct 25, inside the comparison, so it adds less there.
+  const november = v.buildOverview(snapshot, { ...at('month', '2026-11-18'), devices: ['Mac', 'Linux'] }, { now: NOW });
+  assert.deepEqual(november.coverage.compare.startsLater, [{ host: 'Linux', name: 'Lab', before: '2026-10-25' }]);
+  assert.deepEqual(november.coverage.startsLater, [], 'it is recorded for all of November');
 });
 
 test('a sum across computers says "not deduplicated" next to its per-device parts, one computer does not', () => {

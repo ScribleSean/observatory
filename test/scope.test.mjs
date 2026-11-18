@@ -82,14 +82,17 @@ test('the comparison is the previous period cut to as many dates as this one has
   // A whole past month against a shorter one keeps every date of the shorter one.
   const march = comparisonOf({ unit: 'month', anchor: '2026-03-15' }, NY);
   assert.deepEqual([march.period.first, march.period.last, march.toDate, march.label], ['2026-02-01', '2026-02-28', false, 'vs the month before']);
-  const year = comparisonOf({ unit: 'year', anchor: '2027-02-01' }, { ...NY, now: Date.parse('2027-02-01T15:00:00Z') });
+  const year = comparisonOf({ unit: 'year', anchor: '2027-02-01' }, { ...NY, now: Date.parse('2027-02-01T15:00:00Z'), firstDate: '2025-12-01' });
   assert.deepEqual([year.period.first, year.period.last], ['2026-01-01', '2026-02-01']);
 });
 
-test('no comparison for All, or when nothing was recorded before this period', () => {
+test('no comparison for All, or when the previous period starts before the first record', () => {
   assert.equal(comparisonOf({ unit: 'all', anchor: '2026-11-18' }, NY), null);
   assert.equal(comparisonOf({ unit: 'week', anchor: '2026-11-18' }, { ...NY, firstDate: '2026-11-16' }), null);
-  assert.notEqual(comparisonOf({ unit: 'week', anchor: '2026-11-18' }, { ...NY, firstDate: '2026-11-15' }), null);
+  assert.notEqual(comparisonOf({ unit: 'week', anchor: '2026-11-18' }, { ...NY, firstDate: '2026-11-09' }), null);
+  // Records from Oct 19: "November so far vs Oct 1 to 18" would compare with days that were never recorded.
+  assert.equal(comparisonOf({ unit: 'month', anchor: '2026-11-18' }, { ...NY, firstDate: '2026-10-19' }), null);
+  assert.equal(comparisonOf({ unit: 'week', anchor: '2026-11-18' }, { ...NY, firstDate: '2026-11-10' }), null);
   assert.equal(comparisonOf({ unit: 'week', anchor: '2026-11-18' }, { ...NY, firstDate: null }), null);
 });
 
