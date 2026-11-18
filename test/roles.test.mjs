@@ -88,16 +88,14 @@ test('real-shaped titles map sensibly: a user alias, a Role: prefix and untitled
   assert.equal(sessionNameOverDays(days, { aliases }).display, '[Chief of staff] Atlas');
 });
 
-// Titles shaped like real ones, with fictional names. The agent name is built from parts so no such name is
-// written out here.
-const agent = name => `${name}${'B'}ot`;
+// Titles shaped like real ones, with fictional agent names from the allow-list in test/repo-rules.test.mjs.
 
 test('the object comes from the title, and a role found from the work never replaces it', () => {
   const build = [{ kind: 'main', apiUsd: 9 }, { kind: 'build', apiUsd: 4 }];
   // An agent name before a colon comes off, and the rest is the object.
-  assert.deepEqual(pick(sessionName({ title: `${agent('Lantern')}: land the packaging branches`, origin: 'interactive', repo: 'lantern-hardware-kit', kinds: build })),
+  assert.deepEqual(pick(sessionName({ title: 'LanternBot: land the packaging branches', origin: 'interactive', repo: 'lantern-hardware-kit', kinds: build })),
     ['Builder', 'kind', 'land the packaging branches', '[Builder] land the packaging branches']);
-  assert.deepEqual(pick(sessionName({ title: `${agent('Orchard')}: rebuild Orchard into something good`, origin: 'interactive', task: 'build', repo: 'orchard' })),
+  assert.deepEqual(pick(sessionName({ title: 'OrchardBot: rebuild Orchard into something good', origin: 'interactive', task: 'build', repo: 'orchard' })),
     ['Builder', 'kind', 'rebuild Orchard into something good', '[Builder] rebuild Orchard into something good']);
   // A plain title stays whole behind the role its work gives.
   assert.deepEqual(pick(sessionName({ title: 'Tidepool voice decoder', origin: 'interactive', task: 'research', repo: 'notes' })),
@@ -105,7 +103,7 @@ test('the object comes from the title, and a role found from the work never repl
   // A titled headless run keeps its title too.
   assert.equal(sessionName({ title: 'Nightly audit of kestrel', origin: 'headless', task: 'review', repo: 'kestrel' }).display, '[Reviewer] Nightly audit of kestrel');
   // With no role at all, the object is still the title, never the repository.
-  assert.deepEqual(pick(sessionName({ title: `${agent('Lantern')}: tidy the shelf`, origin: 'interactive', repo: 'lantern' })), [null, null, 'tidy the shelf', 'tidy the shelf']);
+  assert.deepEqual(pick(sessionName({ title: 'LanternBot: tidy the shelf', origin: 'interactive', repo: 'lantern' })), [null, null, 'tidy the shelf', 'tidy the shelf']);
   assert.deepEqual(pick(sessionName({ title: 'Tidepool notes', origin: 'interactive', repo: 'tidepool' })), [null, null, 'Tidepool notes', 'Tidepool notes']);
   // A word before a colon that is neither a role nor an agent name stays.
   assert.equal(sessionName({ title: 'Plan: next steps', task: 'build', repo: 'x' }).display, '[Builder] Plan: next steps');
@@ -116,9 +114,9 @@ test('a title that leaves only a date, a name or nothing takes the date, the nam
   assert.deepEqual(pick(sessionName({ title: 'Chief of staff: (Nov 18)', repo: 'orchard' })), ['Chief of staff', 'title', 'Nov 18', '[Chief of staff] Nov 18']);
   assert.equal(sessionName({ title: 'Chief of staff 11/18', repo: 'orchard' }).display, '[Chief of staff] 11/18');
   // An agent name whose rest only says a role: the role is known, and the name is what the title has left.
-  assert.deepEqual(pick(sessionName({ title: `${agent('Atlas')}: chief of staff`, repo: 'orchard' })), ['Chief of staff', 'title', agent('Atlas'), `[Chief of staff] ${agent('Atlas')}`]);
+  assert.deepEqual(pick(sessionName({ title: 'AtlasBot: chief of staff', repo: 'orchard' })), ['Chief of staff', 'title', 'AtlasBot', '[Chief of staff] AtlasBot']);
   // An agent name may carry a number.
-  assert.equal(sessionName({ title: `${agent('Atlas')} 4: lanes and landing`, task: 'build', repo: 'orchard' }).display, '[Builder] lanes and landing');
+  assert.equal(sessionName({ title: 'AtlasBot 4: lanes and landing', task: 'build', repo: 'orchard' }).display, '[Builder] lanes and landing');
   // A bare role takes the day the session started, so two of them read apart.
   assert.equal(sessionName({ title: 'Chief of staff', repo: 'orchard', started: '2026-11-17' }).display, '[Chief of staff] Nov 17');
   assert.equal(sessionNameOverDays([{ title: 'Chief of staff', date: '2026-11-17', origin: 'interactive', task: null, repo: 'orchard', kinds: [] },
@@ -132,7 +130,7 @@ test('a title that leaves only a date, a name or nothing takes the date, the nam
 
 test('over several days the latest title is the object, whatever gave the role', () => {
   const days = [
-    { title: `${agent('Lantern')}: land the packaging branches`, origin: 'interactive', task: null, repo: 'lantern-hardware-kit', kinds: [{ kind: 'build', apiUsd: 3 }] },
+    { title: 'LanternBot: land the packaging branches', origin: 'interactive', task: null, repo: 'lantern-hardware-kit', kinds: [{ kind: 'build', apiUsd: 3 }] },
     { title: null, origin: 'interactive', task: null, repo: 'lantern-hardware-kit', kinds: [{ kind: 'build', apiUsd: 5 }] },
   ];
   assert.equal(sessionNameOverDays(days).display, '[Builder] land the packaging branches');
