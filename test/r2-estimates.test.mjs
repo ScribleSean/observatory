@@ -55,11 +55,10 @@ test('a priced model keeps its own cost next to an unpriced one while the day to
   const result = v.buildTokens(mixed(), scope('day'), { now: NOW });
   assert.equal(result.spend.value, null);
   assert.equal(result.agents.find(row => row.agent === 'Opus').usd.value, 5);
-  assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Opus'), { key: 'Opus', label: 'Opus', value: 5, text: '$5.00', share: 100 });
+  assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Opus'), { key: 'Opus', label: 'Opus', value: 5, text: '$5.00', share: null });
 });
 
-// Bug in lib/view-r2.mjs rawParts (the `get` helper): `?? (unknown ? null : 0)` also catches a model whose own value is null, so it reads $0.00.
-test.todo('an unpriced model is Unknown in the agent rows and the model breakdown, never $0', () => {
+test('an unpriced model is Unknown in the agent rows and the model breakdown, never $0', () => {
   const result = v.buildTokens(mixed(), scope('day'), { now: NOW });
   assert.equal(result.agents.find(row => row.agent === 'Sonnet').usd.value, null);
   assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Sonnet'), { key: 'Sonnet', label: 'Sonnet', value: null, text: 'Unknown', share: null });
