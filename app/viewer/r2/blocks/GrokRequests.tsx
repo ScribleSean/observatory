@@ -5,6 +5,7 @@ import { UNKNOWN, dayClock, plural, weekday } from '../views/parts';
 import '../views/more.css';
 
 function Spark({ days, height }: { days: GrokRequestsVM['days']; height?: number }) {
+  // zero-ok: bar height scale only, an Unknown day draws hollow
   const top = Math.max(...days.map(day => day.value ?? 0), 1);
   return (
     <div className="spark" style={height ? { height, marginTop: 0 } : undefined}>
@@ -22,11 +23,11 @@ export function weeklyText(weekly: GrokRequestsVM['weekly'], timeZone: string) {
 }
 
 /** The compact row in a limits block: the period's count, a bar per day and the weekly limit. */
-export function GrokRequestsRow({ vm, label, timeZone }: { vm: GrokRequestsVM; label: string; timeZone: string }) {
+export function GrokRequestsRow({ vm, label }: { vm: GrokRequestsVM; label: string }) {
   const total = vm.total.value;
   return (
     <div className="lim">
-      <div className="h"><span>GrokBot requests</span><span>{label}</span></div>
+      <div className="h"><span>Grok requests</span><span>{label}</span></div>
       <div className="h" style={{ marginTop: 2 }}>
         {total === null ? <b className="unk">{UNKNOWN}</b> : <b>{total.toLocaleString('en-US')}<small>{total === 1 ? 'request' : 'requests'}</small></b>}
         <span>{vm.weekly && vm.weekly.remaining !== null ? `weekly limit ${Math.round(vm.weekly.remaining)}% left` : 'weekly limit Unknown'}</span>
@@ -39,12 +40,14 @@ export function GrokRequestsRow({ vm, label, timeZone }: { vm: GrokRequestsVM; l
 /** The Grok block on the Limits view: the last days as bars, then the facts under them. */
 export function GrokRequests({ vm, timeZone, today }: { vm: GrokRequestsVM; timeZone: string; today: string }) {
   const week = vm.days.slice(-7), weekUnknown = week.some(day => day.value === null);
+  // zero-ok: shown only when no day of the week is Unknown
   const weekTotal = week.reduce((sum, day) => sum + (day.value ?? 0), 0);
+  // zero-ok: picks the largest day, never shown as a value
   const peak = week.reduce<{ date: string; value: number | null } | null>((best, day) => !best || (day.value ?? 0) > (best.value ?? 0) ? day : best, null);
   const yesterday = vm.days.filter(day => day.date < today).at(-1);
   return (
-    <section className="blk s4" aria-label="GrokBot requests">
-      <div className="bh"><h3>GrokBot</h3><span className="fa">requests per day, last {vm.days.length} days</span></div>
+    <section className="blk s4" aria-label="Grok requests">
+      <div className="bh"><h3>Grok</h3><span className="fa">requests per day, last {vm.days.length} days</span></div>
       <div className="bb">
         <Spark days={vm.days} height={56} />
         <div className="kv" style={{ marginTop: 'var(--sp-3)' }}>

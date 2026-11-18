@@ -79,6 +79,7 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
             return (
               <tr key={role}><td className="name"><span className="role">[{role}]</span> {week?.example ?? <span className="fa">no session this week</span>}</td>
                 <td>{ROLE_WORK[role]}</td>
+                {/* zero-ok: a role missing from this week's list ran no session this week */}
                 <td className={`r hide-s${roleWeek ? '' : ' fa'}`}>{roleWeek ? `${plural(week?.sessions ?? 0, 'session')} · ${money(week?.spend ?? 0)}` : UNKNOWN}</td></tr>
             );
           })}</tbody>

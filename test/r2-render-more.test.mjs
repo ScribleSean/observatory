@@ -64,7 +64,7 @@ test('Settings shows each computer\'s sources from the settings echo, with no co
   const settingsVM = { frame: frame(), computers: view.config.map(row => ({ host: row.host, name: row.name, role: row.role, sources: row.sources, engines: row.engines, titles: row.titles })),
     sources: [{ id: 'claude', name: 'Claude Code', reads: 'Session logs', on: { Mac: true, Windows: true, Linux: true } },
       { id: 'codex', name: 'Codex', reads: 'Session logs and plan quota', on: { Mac: false, Windows: true, Linux: false } },
-      { id: 'grok', name: 'GrokBot', reads: 'Requests per day', on: { Mac: true, Windows: false, Linux: false } }],
+      { id: 'grok', name: 'Grok', reads: 'Requests per day', on: { Mac: true, Windows: false, Linux: false } }],
     roleAliases: [{ prefix: 'tidepool notes', role: 'Researcher' }], howToChange: 'Edit observatory.config.json on that computer. The next collection uses it.' };
   const markup = clean(html(createElement(SettingsBody, { vm: settingsVM, firstDate: firstLedgerDate(view), roleWeek: null, pins: null, now: NOW })), 'Settings');
   for (const control of ['<input', '<button', '<select', '<textarea', 'role="switch"', 'class="sw', 'onclick']) assert.ok(!markup.toLowerCase().includes(control), `no ${control}`);
@@ -87,7 +87,7 @@ const limitsVM = (weekly = {}) => ({ frame: frame(), engines: [
   { engine: 'claude', name: 'Claude Code', plan: null, windows: [
     { windowId: 'seven_day', label: 'weekly', remaining: null, resetsAt: null, readOn: null, checkedAt: null, state: 'stale', forecast: null, pastWindows: [], ...weekly },
     { windowId: 'five_hour', label: '5 hour', remaining: null, resetsAt: null, readOn: null, checkedAt: '2026-11-12T10:00:00Z', state: 'stale', forecast: null, pastWindows: [] }] },
-  { engine: 'grok', name: 'GrokBot', plan: null, windows: [] }] });
+  { engine: 'grok', name: 'Grok', plan: null, windows: [] }] });
 const grok = { total: num(null, 'Unknown', { unit: 'requests' }), days: view.grokLimits.requests.days.map(day => ({ date: day.date, value: day.count })),
   weekly: { remaining: 64, resetsAt: view.grokLimits.windows[0].resetsAt, checkedAt: view.grokLimits.windows[0].checkedAt } };
 
@@ -96,7 +96,7 @@ test('Limits reads Unknown, never 0, before the app reports a window', () => {
   const markup = clean(html(createElement(LimitsBody, { vm, grok, readings: [], byDevice: devicePoints(view, vm.engines[0].windows[0], NOW, TZ), now: NOW, timeZone: TZ })), 'Limits');
   assert.ok(markup.includes('Claude Code weekly limit') && markup.includes('Unknown'));
   assert.ok(!/>0%</.test(markup), 'no 0% for a window never read');
-  assert.ok(markup.includes('not reported since Nov 12'), 'the 5 hour window says since when');
+  assert.ok(markup.includes('not in the 5:00 AM read'), 'the 5 hour window says which read left it out');
   assert.ok(markup.includes('requests per day, last 30 days') && markup.includes('64% left'), 'Grok shows requests per day and its weekly limit');
   assert.ok(markup.includes('class="z unk"'), 'a day with no count read is drawn hollow');
   assert.ok(!markup.includes('$'), 'Grok requests are never in dollars');
@@ -188,4 +188,27 @@ test('day, month, year and all time bucket into hours, days, months and weeks wi
   assert.ok(dayColumns(periods.all, values, '2026-11-18').every((column, index, list) => index === 0 || column.key > list[index - 1].key));
   values.set('2026-11-17', null);
   assert.equal(dayColumns(periods.week, values, '2026-11-18')[1].value, null, 'an Unknown day makes its bucket Unknown');
+});
+
+test('every view renders through the real view-models for every range unit, with Unknown never drawn as 0', async () => {
+  const { Limits } = await load('/app/viewer/r2/views/Limits.tsx');
+  const { Tokens } = await load('/app/viewer/r2/views/Tokens.tsx');
+  const { ScreenTime } = await load('/app/viewer/r2/views/ScreenTime.tsx');
+  const { Drift } = await load('/app/viewer/r2/views/Drift.tsx');
+  const { Settings } = await load('/app/viewer/r2/views/Settings.tsx');
+  const { defaultScope } = await import('../lib/scope.mjs');
+  const base = defaultScope(combined, { now: NOW });
+  for (const unit of RANGE_UNITS) {
+    const scope = { ...base, range: { unit, anchor: base.range.anchor } };
+    for (const [name, View] of Object.entries({ Limits, Tokens, ScreenTime, Drift, Settings })) {
+      const markup = clean(html(createElement(View, { snapshot: combined, scope, now: NOW })), `${name} ${unit}`);
+      assert.ok(markup.includes('class="grid more"'), `${name} ${unit}`);
+    }
+  }
+  const limits = html(createElement(Limits, { snapshot: combined, scope: base, now: NOW }));
+  assert.equal(limits.match(/Claude Code weekly limit/g)?.length, 1, 'the weekly limit shows once');
+  assert.ok(limits.includes('read on Studio'), 'with the computer it was read on');
+  assert.ok(limits.includes('Grok') && limits.includes('64% left'));
+  const settings = html(createElement(Settings, { snapshot: combined, scope: base, now: NOW }));
+  for (const control of ['<input', '<button', '<select']) assert.ok(!settings.includes(control), control);
 });

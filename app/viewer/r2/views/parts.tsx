@@ -100,7 +100,7 @@ export function Block({ span = 4, rows, title, sub, right, foot, className = '',
   return (
     <section className={`blk s${span}${rows ? ` rows${rows}` : ''}${className ? ` ${className}` : ''}`} aria-label={label}>
       {title !== undefined && <div className="bh"><h3>{title}</h3>{sub !== undefined && <span className="fa">{sub}</span>}
-        {right !== undefined && <><span className="sp" />{right}</>}</div>}
+        {right !== undefined && <><span className="fill" />{right}</>}</div>}
       {children}
       {foot !== undefined && <div className="foot">{foot}</div>}
     </section>
@@ -145,12 +145,13 @@ export function BarList({ items, format, accent = false, limit = 0, max, shares 
   items: Bar[]; format: (value: number | null) => string; accent?: boolean; limit?: number; max?: number; shares?: boolean;
 }) {
   let rows = [...items].sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
-  const total = rows.reduce((sum, row) => sum + (row.value ?? 0), 0);
+  const total = rows.some(row => row.value === null) ? null : rows.reduce((sum, row) => sum + row.value!, 0);
   if (limit && rows.length > limit) {
     const rest = rows.slice(limit - 1);
-    const value = rest.every(row => row.value === null) ? null : rest.reduce((sum, row) => sum + (row.value ?? 0), 0);
+    const value = rest.some(row => row.value === null) ? null : rest.reduce((sum, row) => sum + row.value!, 0);
     rows = [...rows.slice(0, limit - 1), { key: 'more', label: `${rest.length} more`, value }];
   }
+  // zero-ok: bar length scale only
   const top = max ?? Math.max(...rows.map(row => row.value ?? 0), 0.0001);
   return (
     <div className="bl">
@@ -159,7 +160,7 @@ export function BarList({ items, format, accent = false, limit = 0, max, shares 
           <span className={`t${index === 0 ? ' t1' : ''}`} title={row.title ?? row.label}>{row.label}</span>
           <span className="bar"><i className={accent ? 'a' : undefined} style={{ width: `${row.value ? Math.max(1.5, 100 * row.value / top) : 0}%` }} /></span>
           <span className={`n${row.value === null ? ' fa' : ''}`}>{row.text ?? format(row.value)}</span>
-          <span className="p">{shares && row.value !== null ? share(row.value, total) : ''}</span>
+          <span className="p">{shares && row.value !== null && total !== null ? share(row.value, total) : ''}</span>
         </div>
       ))}
     </div>
@@ -173,14 +174,16 @@ export type Column = { key: string; label: string; value: number | null; full: s
 
 /** Grey columns with value labels: on every column when there are 12 or fewer, else on the peak only. */
 export function Columns({ columns, format, hint }: { columns: Column[]; format: (value: number | null) => string; hint: string }) {
+  // zero-ok: column height scale only
   const top = Math.max(...columns.map(column => column.value ?? 0), 0);
   const peak = top > 0 ? columns.findIndex(column => column.value === top) : -1;
   return (
     <div className="chart">
-      <div className="cols sp">
+      <div className="cols spend">
         {columns.map((column, index) => (
           <div key={column.key} className={`col${column.future ? ' empty' : ''}`} title={column.future ? undefined : `${column.full}: ${format(column.value)}`}>
             <em className={index === peak ? 'peak' : undefined}>{column.value && (index === peak || columns.length <= 12) ? format(column.value) : ''}</em>
+            {/* zero-ok: a future column draws empty */}
             {column.value === null && !column.future ? <i className="unk" style={{ height: '14%' }} title="Unknown" /> : <i className="grey" style={{ height: `${top ? 100 * (column.value ?? 0) / top : 0}%` }} />}
           </div>
         ))}

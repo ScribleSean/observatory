@@ -34,9 +34,10 @@ export function midnight(date: string, timeZone: string) {
 }
 
 /** The past windows, newest first, with how each ended. A window at 100% at the reset ran out early. */
-function pastRows(window: LimitWindowVM) {
+function pastRows(window: LimitWindowVM, timeZone: string) {
+  const dayOf = (start: string) => start.length > 10 ? dateIn(Date.parse(start), timeZone) : start;
   return [...window.pastWindows].sort((a, b) => b.start.localeCompare(a.start)).map(past => ({
-    key: past.start, dates: dateSpan(past.start, addDays(past.start, 6)), used: past.used,
+    key: dayOf(past.start), dates: dateSpan(dayOf(past.start), addDays(dayOf(past.start), 6)), used: past.used,
     ranOut: past.used !== null && past.used >= 100,
   }));
 }
@@ -86,11 +87,13 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
   const weekly = weeklyOf(claude), fiveHour = fiveHourOf(claude);
   if (!claude && !codex && !grok) return <StateView title="No limits are on" line="Turn on claudeLimits, codexLimits or grokLimits under sources in observatory.config.json. See Settings." />;
   const state = weekly ? windowNow(weekly, now) : null;
-  const past = weekly ? pastRows(weekly) : [];
+  const past = weekly ? pastRows(weekly, timeZone) : [];
   const lastFour = past.slice(0, 4).filter(row => row.used !== null);
   const ranOut = lastFour.filter(row => row.ranOut);
   const five = fiveHour ? windowNow(fiveHour, now) : null;
   const readOn = weekly?.readOn ? `read on ${weekly.readOn}` : null;
+  const lastWeek = grok?.days.slice(-7) ?? [];
+  const grokWeek = lastWeek.some(day => day.value === null) ? null : lastWeek.reduce((sum, day) => sum + day.value!, 0);
   const cells: Cell[] = [
     state && state.used !== null
       ? { label: 'Claude Code weekly limit', value: pct(state.used), unit: 'used', accent: state.used >= 100,
@@ -107,11 +110,11 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
       : { label: 'Weeks that ran out early', value: UNKNOWN, context: 'no past weeks recorded' },
     five && five.used !== null
       ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: five.reset ? `resets ${clock(five.reset, timeZone)}` : '' }
-      : { label: 'Claude Code 5 hour', value: UNKNOWN, context: fiveHour?.checkedAt ? `not reported since ${shortDate(dateIn(Date.parse(fiveHour.checkedAt), timeZone))}` : 'not reported by the app' },
+      : { label: 'Claude Code 5 hour', value: UNKNOWN, context: fiveHour?.checkedAt ? `not in the ${clock(fiveHour.checkedAt, timeZone)} read` : 'not reported by the app' },
     grok
-      ? { label: 'GrokBot requests', value: grok.days.slice(-7).some(day => day.value === null) ? UNKNOWN : String(grok.days.slice(-7).reduce((sum, day) => sum + (day.value ?? 0), 0)), unit: 'last 7 days',
+      ? { label: 'Grok requests', value: grokWeek === null ? UNKNOWN : String(grokWeek), unit: 'last 7 days',
         context: grok.weekly && grok.weekly.remaining !== null ? `weekly limit ${Math.round(grok.weekly.remaining)}% left` : 'weekly limit Unknown' }
-      : { label: 'GrokBot', value: 'Off', unknown: true, context: 'off, or no requests read' },
+      : { label: 'Grok', value: 'Off', unknown: true, context: 'off, or no requests read' },
   ];
   const stale = byDevice.filter(device => device.points === null).map(device => device.name);
   const pointsOk = byDevice.some(device => device.points !== null);
@@ -131,12 +134,14 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
             <div className="tw"><table><tbody>
               <tr><td className="name">{state?.reset && state.length ? dateSpan(dateIn(state.reset - state.length, timeZone), dateIn(state.reset - HOUR, timeZone)) : 'This week'}
                 <div className="sub">{state ? paceWords(state, timeZone) ?? UNKNOWN : UNKNOWN}</div></td>
-                <td style={{ width: '34%' }}><div className="meter" style={{ margin: 0 }}><i style={{ width: `${state?.used ?? 0}%` }} /></div></td>
+                {/* zero-ok: meter width only, the cell beside it reads Unknown */}
+                <td style={{ width: '34%' }} aria-hidden="true"><div className="meter" style={{ margin: 0 }}><i style={{ width: `${state?.used ?? 0}%` }} /></div></td>
                 <td className="r strong">{state?.used === null || !state ? UNKNOWN : pct(state.used)}</td></tr>
               {past.slice(0, 6).map(row => (
                 <tr key={row.key}><td className="name">{row.dates}
                   <div className="sub">{row.used === null ? UNKNOWN : row.ranOut ? <span className="acc">Ran out before the reset</span> : `Lasted, ${pct(100 - row.used)} unused`}</div></td>
-                  <td style={{ width: '34%' }}><div className="meter" style={{ margin: 0 }}><i style={{ width: `${row.used ?? 0}%`, ...(row.ranOut ? { background: 'var(--accent)' } : {}) }} /></div></td>
+                  {/* zero-ok: meter width only, the cell beside it reads Unknown */}
+                  <td style={{ width: '34%' }} aria-hidden="true"><div className="meter" style={{ margin: 0 }}><i style={{ width: `${row.used ?? 0}%`, ...(row.ranOut ? { background: 'var(--accent)' } : {}) }} /></div></td>
                   <td className={`r strong${row.used === null ? ' fa' : ''}`}>{row.used === null ? UNKNOWN : pct(row.used)}</td></tr>
               ))}
             </tbody></table></div>
@@ -154,7 +159,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
       {grok && <GrokRequests vm={grok} timeZone={timeZone} today={today} />}
       {claude && (fiveHour && five?.used !== null
         ? <Block title="Claude Code 5 hour"><LimitMeter engine={claude} windowId={fiveHour.windowId} now={now} timeZone={timeZone} /></Block>
-        : <Block title="Claude Code 5 hour"><Empty title={UNKNOWN} line={fiveHour?.checkedAt ? `The app has not reported this window since ${shortDate(dateIn(Date.parse(fiveHour.checkedAt), timeZone))}. It shows here when it does.` : 'The app has not reported this window. It shows here when it does.'} /></Block>)}
+        : <Block title="Claude Code 5 hour"><Empty title={UNKNOWN} line={fiveHour?.checkedAt ? `The app did not report this window in the ${clock(fiveHour.checkedAt, timeZone)} read. It shows here when it does.` : 'The app has not reported this window. It shows here when it does.'} /></Block>)}
       {codex && (
         <Block title={`Codex${codex.plan ? `, ${codex.plan} plan` : ''}`}>
           {codex.windows.length ? <LimitMeter engine={codex} now={now} timeZone={timeZone} /> : <Empty title={UNKNOWN} line="Codex has not reported a limit yet." />}
@@ -174,10 +179,13 @@ export function devicePoints(view: { ledgerHistory?: { host: string; days: { dat
   const rows = (view.ledgerHistory ?? []).map(row => {
     const days = row.days.filter(day => day.date >= first && day.date <= last);
     const unknown = days.some(day => day.status !== 'ok' || day.apiUsd === null);
+    // zero-ok: summed only when every day is known, else usd is null
     return { host: row.host, name: view.deviceNames?.[row.host] ?? row.host, usd: unknown ? null : days.reduce((sum, day) => sum + (day.apiUsd ?? 0), 0) };
   });
-  const total = rows.reduce((sum, row) => sum + (row.usd ?? 0), 0);
-  return rows.map(row => ({ host: row.host, name: row.name, points: row.usd === null || total <= 0 ? null : state.used! * row.usd / total }));
+  // A share of an Unknown whole is Unknown, so one unread computer makes every part Unknown.
+  if (rows.some(row => row.usd === null)) return rows.map(row => ({ host: row.host, name: row.name, points: null }));
+  const total = rows.reduce((sum, row) => sum + row.usd!, 0);
+  return rows.map(row => ({ host: row.host, name: row.name, points: total <= 0 ? null : state.used! * row.usd! / total }));
 }
 
 /** Readings of the Claude Code weekly limit as percent used, from the limit history the hub keeps. */
@@ -189,7 +197,7 @@ export function weeklyReadings(view: object, now: number): Reading[] {
 export function Limits({ snapshot, scope, now }: { snapshot: { view: Record<string, unknown> & { timezone?: string } }; scope: Scope; now: number }) {
   const vm = buildLimits(snapshot, scope, { now });
   const timeZone = (vm.frame as Frame).timeZone;
-  const grok = vm.engines.some(engine => engine.engine === 'grok') ? resolveBlock('GrokRequests', {}, snapshot, scope, { now }) as GrokRequestsVM | null : null;
+  const grok = vm.engines.some(engine => engine.engine === 'grok') ? resolveBlock('GrokRequests', { scope: { range: { unit: 'month' } } }, snapshot, scope, { now }) as GrokRequestsVM | null : null;
   const weekly = weeklyOf(vm.engines.find(engine => engine.engine === 'claude'));
   return <LimitsBody vm={vm} grok={grok} readings={weeklyReadings(snapshot.view, now)} byDevice={devicePoints(snapshot.view as never, weekly, now, timeZone)} now={now} timeZone={timeZone} />;
 }

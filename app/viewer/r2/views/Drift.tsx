@@ -15,7 +15,7 @@ export type SetupRow = { setting: string; values: Record<string, string>; state:
 export type DriftData = { vm: DriftVM; rows: SetupRow[]; reference: string | null; now: number };
 
 const SOURCE_LABELS: [string, string][] = [['claudeCode', 'Claude Code sessions'], ['claudeLimits', 'Claude Code limits'], ['codex', 'Codex sessions'], ['codexLimits', 'Codex limits'],
-  ['grokLimits', 'GrokBot requests'], ['screenTime', 'Screen time'], ['sessions', 'Live sessions'], ['wsl', 'WSL logs']];
+  ['grokLimits', 'Grok requests'], ['screenTime', 'Screen time'], ['sessions', 'Live sessions'], ['wsl', 'WSL logs']];
 // Settings a platform decides: Linux collects no screen time, and only Windows has WSL.
 const BY_DESIGN: Record<string, (host: string) => boolean> = { screenTime: host => host === 'Linux', wsl: host => host === 'Windows' };
 
@@ -33,6 +33,7 @@ export function setupRows(config: ConfigEcho[], settings: SettingsRow[], hosts: 
     const row = settings.find(item => item.host === host);
     if (!row || row.status !== 'ok' || !row.profiles?.length) return null;
     const last = row.profiles.reduce((date, profile) => profile.date > date ? profile.date : date, '');
+    // zero-ok: ordering only
     return row.profiles.filter(profile => profile.date === last).sort((a, b) => (b.totalTokens ?? 0) - (a.totalTokens ?? 0))[0];
   };
   const echo = (host: string) => config.find(row => row.host === host);
@@ -50,24 +51,27 @@ export function setupRows(config: ConfigEcho[], settings: SettingsRow[], hosts: 
     row('Speed', host => latest(host)?.speed ?? null),
     ...SOURCE_LABELS.map(([key, label]) => row(label, host => onOff(echo(host)?.sources[key]), BY_DESIGN[key])),
     row('Session titles', host => { const value = echo(host)?.titles; return value === undefined ? null : value ? 'kept' : 'hashed away'; }),
-    ...(['claude', 'codex', 'grok'] as const).map(engine => row(`${{ claude: 'Claude Code', codex: 'Codex', grok: 'GrokBot' }[engine]} limit tile`, host => echo(host)?.engines[engine] ?? null)),
+    ...(['claude', 'codex', 'grok'] as const).map(engine => row(`${{ claude: 'Claude Code', codex: 'Codex', grok: 'Grok' }[engine]} limit tile`, host => echo(host)?.engines[engine] ?? null)),
   ];
 }
 
+type ModelDrift = { model: string; replies: number; flags: unknown[] };
+
 export function DriftBody({ vm, rows, reference, now }: DriftData) {
+  const models = vm.models as ModelDrift[];
   const frame = vm.frame as Frame, timeZone = frame.timeZone;
   const devices = frame.devices.filter((device: DeviceChip) => device.state !== 'not-set-up');
   const differs = rows.filter(row => row.state === 'differs');
   const refName = devices.find(device => device.host === reference)?.name ?? reference ?? UNKNOWN;
   const oldest = devices.filter(device => device.since).sort((a, b) => Date.parse(a.since!) - Date.parse(b.since!))[0];
-  const flags = vm.models.reduce((sum: number, model: { flags?: unknown[] }) => sum + (model.flags?.length ?? 0), 0);
+  const flags = models.reduce((sum, model) => sum + model.flags.length, 0);
   const stale = devices.filter(device => device.state === 'stale');
   const cells: Cell[] = [
     { label: 'Settings that differ', value: String(differs.length), unit: `of ${rows.length}`, accent: differs.length > 0,
       context: differs.length ? devices.filter(device => device.host !== reference && differs.some(row => row.values[device.host] !== row.values[reference ?? ''])).map(device => device.name).join(', ') + ` against ${refName}` : 'every computer matches' },
     { label: 'Computers compared', value: String(devices.length), context: `${refName} is the reference` },
     oldest ? { label: 'Oldest read', value: clock(oldest.since, timeZone), context: `${oldest.name}, ${span(now - Date.parse(oldest.since!))} ago` } : { label: 'Oldest read', value: UNKNOWN, context: 'no computer read yet' },
-    vm.models.length ? { label: 'Model drift flags', value: String(flags), accent: flags > 0, context: `across ${plural(vm.models.length, 'model')}, last 30 days` } : { label: 'Model drift flags', value: UNKNOWN, context: 'no replies read yet' },
+    models.length ? { label: 'Model drift flags', value: String(flags), accent: flags > 0, context: `across ${plural(models.length, 'model')}, last 30 days` } : { label: 'Model drift flags', value: UNKNOWN, context: 'no replies read yet' },
   ];
   return (
     <div className="grid more">
@@ -87,8 +91,8 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
         </table></div>
       </Block>
       <Block title="Model drift" sub="last 30 days">
-        {vm.models.length === 0 ? <Empty title={UNKNOWN} line="No replies have been read on any computer yet. This shows when a model answers differently than it used to." /> : (
-          <div className="mlist">{vm.models.map((model: { model: string; replies: number; flags: unknown[] }) => (
+        {models.length === 0 ? <Empty title={UNKNOWN} line="No replies have been read on any computer yet. This shows when a model answers differently than it used to." /> : (
+          <div className="mlist">{models.map(model => (
             <div key={model.model} className="li"><span className="t"><div><b>{modelLabel(model.model)}</b></div><div>{plural(model.replies, 'reply')}</div></span>
               <span className={`n${model.flags.length ? ' acc' : ' fa'}`}>{model.flags.length ? plural(model.flags.length, 'flag') : 'Steady'}</span></div>
           ))}</div>

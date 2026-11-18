@@ -1,7 +1,7 @@
 // One engine's limit windows as meter rows: used, a tick at the share of the window gone, the projection
 // at the reset and the computer the reading came from. An account limit is never summed across computers.
 import type { LimitWindowVM, LimitsVM } from '../../../../lib/view-r2.mjs';
-import { UNKNOWN, clock, dayClock, shortDate, dateIn } from '../views/parts';
+import { UNKNOWN, clock, dayClock } from '../views/parts';
 import '../views/more.css';
 
 export type Engine = LimitsVM['engines'][number];
@@ -50,7 +50,7 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
   const title = `${name} ${window.label}`;
   if (state.used === null || window.state === 'stale' || window.state === 'off') {
     const why = window.state === 'off' ? 'Turned off in observatory.config.json'
-      : window.checkedAt ? `Not reported since ${shortDate(dateIn(Date.parse(window.checkedAt), timeZone))}` : 'Not reported by the app yet';
+      : window.checkedAt ? `Not in the ${clock(window.checkedAt, timeZone)} read` : 'Not reported by the app yet';
     return (
       <div className="lim">
         <div className="h"><span>{title}</span><b className="unk">{window.state === 'off' ? 'Off' : UNKNOWN}</b></div>
