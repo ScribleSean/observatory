@@ -30,7 +30,7 @@ import {readLedgerSources} from './sources/index.mjs';
 import {buildLedger,WEEK_MS} from './ledger.mjs';
 import {joinCommits} from './ledger-commits.mjs';
 import {buildLedgerHistory,dateFloorMs} from './ledger-history.mjs';
-import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,writeHistory,recheckOnMain,historyRow,keepGrokDays} from './ledger-store.mjs';
+import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,applyTitlesSetting,writeHistory,recheckOnMain,historyRow,keepGrokDays} from './ledger-store.mjs';
 import {cleanLedgerHistory,LEDGER_HISTORY_SCHEMA} from '../lib/r2-shape.mjs';
 
 // The ledger reads at most this long in one collection. What it read stays cached, so a first run on a
@@ -201,6 +201,7 @@ async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,t
   if(!plan)return {row,history:null};
   // A history that cannot be built or kept reads as unavailable. The ledger row stands either way.
   try {
+    applyTitlesSetting(store,titles);
     writeHistory(store,{...buildLedgerHistory({tools:historyTools,joined,timeZone,titles}),backfilled,held});
     try {await recheckOnMain(store,{today:plan.today,deadline:Date.now()+ONMAIN_RECHECK_MS,...(git?{git}:{})});} catch {}
     return {row,history:historyRow(store,{host,now:nowMs,timeZone,titles,unread,tools})};

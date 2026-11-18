@@ -160,6 +160,31 @@ export function writeHistory(db,{days,commits,backfilled=[],held=[]}) {
   });
 }
 
+/**
+ * Keeps the store in step with sessions.titles. When titles go from on to off, every stored title is
+ * removed, frozen days included, so the store holds none from then on. Returns how many days changed.
+ * @param {DatabaseSync} db
+ * @param {boolean} titles
+ */
+export function applyTitlesSetting(db,titles) {
+  const was=meta(db,'titles');
+  if(titles) {if(was!=='1')setMeta(db,'titles',1);return 0;}
+  if(was==='0')return 0;
+  let changed=0;
+  transaction(db,()=>{
+    const put=db.prepare('UPDATE ledger_days SET day=? WHERE tool=? AND date=?');
+    for(const row of db.prepare('SELECT tool,date,day FROM ledger_days').all()) {
+      const day=JSON.parse(row.day);
+      if(!Array.isArray(day.sessions) || !day.sessions.some(session=>session.title!==null && session.title!==undefined))continue;
+      for(const session of day.sessions)session.title=null;
+      put.run(JSON.stringify(day),row.tool,row.date);
+      changed++;
+    }
+    setMeta(db,'titles',0);
+  });
+  return changed;
+}
+
 // A stored day's commits on main, counted again from its commit rows. Values that were Unknown stay so.
 export function applyOnMain(day,rows) {
   const count=(session,repo)=>rows.filter(row=>row.session===session && row.repo_name===repo && row.on_main===1).length;

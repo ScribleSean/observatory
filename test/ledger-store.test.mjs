@@ -6,7 +6,7 @@ import {mkdir,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder,testConfig} from './helpers.mjs';
 import {claudeAssistant,claudePrompt,claudeTitle,writeClaude,makeRepo,git} from './ledger-fixtures.mjs';
-import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,writeHistory,historyRow,recheckOnMain,keepGrokDays,applyOnMain,rebuildFrom} from '../scripts/ledger-store.mjs';
+import {openLedgerStore,historyPlan,datesToBuild,gapKnownFrom,applyTitlesSetting,writeHistory,historyRow,recheckOnMain,keepGrokDays,applyOnMain,rebuildFrom} from '../scripts/ledger-store.mjs';
 import {buildLedgerHistory,addDays} from '../scripts/ledger-history.mjs';
 import {readLedgerSources,claude,codex} from '../scripts/sources/index.mjs';
 import {memoryCache} from '../scripts/sources/parse-cache.mjs';
@@ -176,6 +176,19 @@ test('a store file that is not a database is moved aside and a new store is made
   assert.equal(await readFile(path.join(folder,'private-history','ledger.sqlite.unreadable-2026-11-18T17-00-00-000Z'),'utf8'),junk,'kept as it was');
 }));
 
+test('turning titles off removes the titles already stored, once',()=>withFolder(async folder=>{
+  const db=await openLedgerStore(folder);
+  try {
+    const old=addDays(TODAY,-40);
+    writeHistory(db,buildLedgerHistory({tools:[{source:claude,sessions:[record('a',Date.parse(`${old}T17:00:00Z`)),record('b',NOW-HOUR,{title:'Paint the gate'})],dates:[old,TODAY]}],joined:null,timeZone:TIME_ZONE,titles:true}));
+    assert.equal(applyTitlesSetting(db,true),0);
+    assert.equal(applyTitlesSetting(db,false),2,'both days had a title');
+    const stored=db.prepare('SELECT day FROM ledger_days').all().map(row=>JSON.parse(row.day));
+    assert.deepEqual(stored.flatMap(day=>day.sessions.map(session=>session.title)),[null,null]);
+    assert.equal(applyTitlesSetting(db,false),0,'nothing left to remove');
+  } finally {db.close();}
+}));
+
 test('applyOnMain keeps Unknown values Unknown',()=>{
   const day={sessions:[{id:'aaaaaaaaaaaa',ship:[{repo:'fence',commits:2,onMain:null,merges:0}]},{id:'bbbbbbbbbbbb',ship:[{repo:'fence',commits:1,onMain:0,merges:0}]}],
     repos:[{repo:'fence',onMain:null}],ship:{onMain:null}};
@@ -248,6 +261,8 @@ test('a collection backfills from transcripts, writes a history row the cleaner 
     // Titles off: none in the history.
     const off=await buildSnapshot({...config,sessions:{titles:false,roles:{}}},readers,{now:new Date(NOW+2*HOUR),ledgerStore:db});
     assert.ok(off.data.ledgerHistory[0].days.flatMap(day=>day.sessions).every(session=>session.title===null));
+    const stored=db.prepare('SELECT day FROM ledger_days').all().map(row=>row.day).join('\n');
+    for(const title of ['Mend the fence','Paint the fence'])assert.ok(!stored.includes(title),`the store keeps no "${title}" once titles are off`);
     // Codex days kept from when it was on add nothing while its setting is off.
     writeHistory(db,buildLedgerHistory({tools:[{source:codex,sessions:[],dates:[addDays(TODAY,-3)]}],joined:null,timeZone:TIME_ZONE,titles:true}));
     const codexOff=await buildSnapshot(config,readers,{now:new Date(NOW+3*HOUR),ledgerStore:db});
