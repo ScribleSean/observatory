@@ -39,11 +39,21 @@ export const LEDGER_READ_MS=150000;
 // The commit join's share of the tick (scripts/tick.mjs TICK_DEADLINE_MS): the read above, this, and
 // the hub's pulls fit inside it. Repositories not reached in time ship Unknown and are read next time.
 export const LEDGER_JOIN_MS=20000;
-// A backfill joins a month of commits once, so it gets a longer share. Repositories it does not reach
-// ship Unknown on those days.
+// A backfill joins a month of commits once, so it gets a longer share, taken from what the read left
+// unused. Repositories it does not reach ship Unknown on those days.
 export const BACKFILL_JOIN_MS=60000;
 // Checking older commits for reaching main again (scripts/ledger-store.mjs recheckOnMain).
 export const ONMAIN_RECHECK_MS=10000;
+
+/**
+ * How long the commit join may take. The read and the join together stay within LEDGER_READ_MS plus
+ * LEDGER_JOIN_MS from when the read started, so a backfill tick ends inside the tick deadline too.
+ * @param {{started: number, now: number, backfill: boolean}} times
+ */
+export function joinMs({started,now,backfill}) {
+  if(!backfill)return LEDGER_JOIN_MS;
+  return Math.min(BACKFILL_JOIN_MS,Math.max(LEDGER_JOIN_MS,started+LEDGER_READ_MS+LEDGER_JOIN_MS-now));
+}
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
@@ -151,7 +161,7 @@ const unavailableHistory=(host,status,checkedAt)=>({host,status,checkedAt,schema
 
 // The ledger row and the daily ledger history, from one read and one commit join. `store` is the private
 // history store (scripts/ledger-store.mjs), or null to build the ledger row only.
-async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,titles,join=joinCommits,git}) {
+async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,titles,join=joinCommits,git,started=Date.now()}) {
   const nowMs=now.getTime(),timeZone=TIMEZONE;
   const tools=ledgerRead.tools.map(tool=>tool.source.id);
   let plan=null;
@@ -184,7 +194,7 @@ async function ledgerAndHistory({host,readers,ledgerRead,store,now,limits,live,t
   let joined=null;
   try {
     joined=await join([...sessions.values()],{since,until:nowMs,...(git?{git}:{}),cache:ledgerRead.cache ?? null,
-      deadline:Date.now()+(backfilled.length?BACKFILL_JOIN_MS:LEDGER_JOIN_MS)});
+      deadline:Date.now()+joinMs({started,now:Date.now(),backfill:backfilled.length>0})});
   } catch {joined=null;}
   const {row}=await buildLedger({host,read:ledgerRead,limits,live,now:nowMs,cache:ledgerRead.cache ?? null,
     join:async()=>{if(!joined)throw Error('Commit join failed');return joined;}});
@@ -224,8 +234,10 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     } catch {return {host,status:'unavailable',checkedAt:at};}
   };
   const ledgerOn=Boolean(readers.ledger) && (config.sources.claudeCode || config.sources.codex);
+  let ledgerStarted=Date.now();
   const readLedger=async()=>{
     if(!ledgerOn)return null;
+    ledgerStarted=Date.now();
     try {return await readers.ledger(now);}
     catch(error) {return {failed:true,error};}
   };
@@ -272,7 +284,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     const titles=config.sessions?.titles!==false;
     try {
       // What was read is saved before asking git, so a tick stopped during the join does not read it all again.
-      const built=await ledgerAndHistory({host,readers,ledgerRead,store:ledgerStore,now,limits:{claudeLimits,quota},live:sessions,titles,join,git});
+      const built=await ledgerAndHistory({host,readers,ledgerRead,store:ledgerStore,now,limits:{claudeLimits,quota},live:sessions,titles,join,git,started:ledgerStarted});
       ledger=cleanLedgerRow(built.row,{titles,salt:titles?null:await titleSalt(config.dataFolder)});
       if(built.history)try {ledgerHistory=cleanLedgerHistory(built.history,{titles});} catch {}
     } catch {ledger={host,status:'unavailable',collectedAt:at};}

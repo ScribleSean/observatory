@@ -4,8 +4,8 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {collect,buildSnapshot,runPowerShellFile} from '../scripts/collect.mjs';
-import {tick} from '../scripts/tick.mjs';
+import {collect,buildSnapshot,runPowerShellFile,joinMs,ONMAIN_RECHECK_MS} from '../scripts/collect.mjs';
+import {tick,TICK_DEADLINE_MS} from '../scripts/tick.mjs';
 import {withFolder,testConfig} from './helpers.mjs';
 
 const at=new Date('2026-10-21T17:00:00Z');
@@ -122,4 +122,15 @@ test('the Grok reader runs only while its source is on',async()=>{
   const on=await buildSnapshot(testConfig('/unused',{sources:{...testConfig('/unused').sources,grokLimits:true}}),grok,{now:at});
   assert.equal(calls,1);
   assert.equal(on.data.grokLimits.status,'ok');
+});
+
+test('a backfill tick takes its longer commit join from what the read left, so the tick ends inside its deadline',()=>{
+  // The read may run 150 s and the usual join 20 s. A backfill join gets up to 60 s, but only what is left of those 170 s.
+  assert.equal(joinMs({started:0,now:30000,backfill:true}),60000);
+  assert.equal(joinMs({started:0,now:130000,backfill:true}),40000);
+  assert.equal(joinMs({started:0,now:150000,backfill:true}),20000);
+  assert.equal(joinMs({started:0,now:30000,backfill:false}),20000);
+  // Read, join, the check for commits on main, and the hub's 30 s pull fit inside the tick, wherever the read stops.
+  for(let read=0;read<=150000;read+=5000)
+    assert.ok(read+joinMs({started:0,now:read,backfill:true})+ONMAIN_RECHECK_MS+30000<=TICK_DEADLINE_MS,`a read of ${read} ms`);
 });
