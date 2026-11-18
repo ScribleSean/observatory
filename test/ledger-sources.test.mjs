@@ -291,6 +291,20 @@ test('Claude: a headless run without a title keeps its origin and the kind of it
     assert.deepEqual([sessions.get('desktop').origin,sessions.get('desktop').task],['interactive','build']);
     assert.deepEqual([sessions.get('unknown').origin,sessions.get('unknown').task],[null,null]);
     assert.ok(!JSON.stringify([...sessions.values()]).includes('watering schedule'),'no prompt text in a record');
+    assert.equal(sessions.get('headless').gitRepo,realpathSync.native(repo),'a git repository is resolved');
+  });
+});
+
+test('Claude: a session in a folder that is not a git repository has no repository',async()=>{
+  await withFolder(async home=>{
+    const folder=path.join(home,'Documents','letters');
+    await mkdir(folder,{recursive:true});
+    await writeClaude(home,'-Documents-letters','plain',[
+      {type:'user',timestamp:iso(T),cwd:folder,message:{role:'user',content:'Sort these'}},
+      claudeAssistant({id:'p1',at:T+MIN,cwd:folder}),
+    ]);
+    const session=claudeOf(await read(home)).sessions.find(item=>item.id==='plain');
+    assert.equal(session.gitRepo,null);
   });
 });
 

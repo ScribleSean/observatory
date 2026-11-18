@@ -89,7 +89,8 @@ function liveMatches(source,sessions,live) {
   return matched;
 }
 
-// The folder name of the repository a session ran in, or null. Never a path, and never the home folder.
+// The folder name of the git repository a session ran in, or null. Never a path, never the home folder, and never
+// a working folder that is not a repository: only a name the resolver found a repository for leaves this computer.
 function repoName(dir) {
   if(typeof dir!=='string' || !path.isAbsolute(dir) || path.resolve(dir)===path.resolve(os.homedir()))return null;
   const name=path.basename(dir);
@@ -166,7 +167,7 @@ function sessionRow(source,session,requests,period,ctx) {
   }
   const recent=requests.filter(request=>request.at>=ctx.now-RATE_MS && request.at<=ctx.now);
   return {id:ledgerId(source.id,session.id),title:session.title ?? null,
-    origin:session.origin==='headless' || session.origin==='interactive'?session.origin:null,task:isWorkKind(session.task)?session.task:null,repo:repoName(session.repo),startedAt:iso(inPeriod[0].at),lastActiveAt:iso(inPeriod.at(-1).at),
+    origin:session.origin==='headless' || session.origin==='interactive'?session.origin:null,task:isWorkKind(session.task)?session.task:null,repo:repoName(session.gitRepo),startedAt:iso(inPeriod[0].at),lastActiveAt:iso(inPeriod.at(-1).at),
     running,state,ratePerHour:running && !session.unknownTokens?round(knownSum(recent.map(request=>request.usd))*3600000/RATE_MS):null,
     tokens,apiUsd,
     models:[...models.values()].map(model=>({model:model.model,apiUsd:session.unknownTokens?null:round(knownSum(model.usd)),outputTokens:model.outputTokens}))

@@ -151,6 +151,7 @@ function toRecord({id,main,agents},resolve) {
     requests,agents:[...agentRows.values()],writes,branches,runs,unknownTokens:states.some(state=>state.invalid===true),
     rateLimits:main?[...main.rl]:[],typed:main?[...main.typed]:[],
     live:main?{last:main.last,stop:main.stop,lastRole:main.lastRole,pending:Object.keys(main.pend).length}:null,
-    repo:main?.cwd?resolve(main.cwd) ?? main.cwd:null,
+    // repo matches a live process by its folder and stays in memory. gitRepo is set only for a resolved git repository.
+    repo:main?.cwd?resolve(main.cwd) ?? main.cwd:null,gitRepo:main?.cwd?resolve(main.cwd) ?? null:null,
     origin:main?.origin ?? null,task:main?.task ?? null};
 }
