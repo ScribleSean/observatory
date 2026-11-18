@@ -1,5 +1,5 @@
 import type { Spec } from '@json-render/react';
-import { UNKNOWN, buildSessions, count, share, started, useR2, type SessionRow } from '../data';
+import { UNKNOWN, buildSessions, clock, count, share, useR2, type SessionRow } from '../data';
 import { SpecView } from '../registry';
 import { SESSIONS } from '../specs';
 import { BarList } from '../blocks/Breakdown';
@@ -34,7 +34,7 @@ export function SessionPanel() {
             <button type="button" className="btn sq x" aria-label="Close" onClick={() => openSession(null)}>×</button>
             <h2><SessionName row={row} />{row.kind === 'bundle' && <span className="fa"> ({row.count})</span>}</h2>
             <div className="fa" style={{ fontSize: 'var(--fs-small)' }}>
-              {[row.device, TOOL_NAMES[row.tool] ?? row.tool, row.running ? 'running at the last read' : null, `started ${started(row.startedAt, zone)}`, vm.frame.period.label].filter(Boolean).join(' · ')}
+              {[row.device, TOOL_NAMES[row.tool] ?? row.tool, row.running ? 'running at the last read' : null, `started ${clock(row.startedAt, zone, now)}`, vm.frame.period.label].filter(Boolean).join(' · ')}
             </div>
           </div>
           <div className="sec"><div className="pk">

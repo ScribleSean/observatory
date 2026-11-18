@@ -2,6 +2,7 @@
 // from lib/scope.mjs and the documented builders in lib/view-r2.mjs.
 import { createContext, useContext } from 'react';
 import type { Spec } from '@json-render/react';
+import { readAt, when } from '../../../lib/forecast.mjs';
 
 export { defaultScope, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
 export { buildFrame, buildOverview, buildSessions, buildTokens, buildScreenTime, metric, answerQuestion, resolveBlock } from '../../../lib/view-r2.mjs';
@@ -80,13 +81,19 @@ export const dayLabel = (date: string, long = false) => `${long ? `${DAYS[utc(da
 export const weekdayLabel = (date: string) => `${DAYS[utc(date).getUTCDay()]} ${utc(date).getUTCDate()}`;
 export const monthLabel = (date: string) => MONTHS[utc(date).getUTCMonth()];
 
-export function clock(time: string | null, timeZone: string): string {
-  const at = Date.parse(time ?? '');
-  return Number.isFinite(at) ? new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(at)) : UNKNOWN;
+const isoOf = (time: string | number | null | undefined) => {
+  const at = typeof time === 'number' ? time : time ? Date.parse(time) : NaN;
+  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+};
+/** A time something was read, with its day: "Wed 8:18 AM", or "Nov 12, 8:18 AM" six days or more away (lib/forecast.mjs readAt). */
+export function clock(time: string | number | null | undefined, timeZone: string, now: number): string {
+  const iso = isoOf(time);
+  return iso === null ? UNKNOWN : readAt(iso, { now, timeZone });
 }
-export function started(time: string | null, timeZone: string): string {
-  const at = Date.parse(time ?? '');
-  return Number.isFinite(at) ? new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(at)).replace(',', '') : UNKNOWN;
+/** A time still ahead, as the forecast words it: "Fri 5 PM", or a date six days or more away (lib/forecast.mjs when). */
+export function dayClock(time: string | number | null | undefined, timeZone: string, now: number): string {
+  const iso = isoOf(time);
+  return iso === null ? UNKNOWN : when(iso, { now, timeZone });
 }
 
 /** Every bucket of the period's chart, with the ones still ahead, so a week always draws seven columns. */

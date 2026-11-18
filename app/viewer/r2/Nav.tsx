@@ -8,10 +8,10 @@ export function viewFromHash(hash: string): ViewId {
   return VIEWS.find(([id]) => id === name)?.[0] ?? 'overview';
 }
 
-type Props = { view: ViewId; onView: (view: ViewId) => void; readAt: string | null; timeZone: string; onTheme: () => void };
+type Props = { view: ViewId; onView: (view: ViewId) => void; readAt: string | null; timeZone: string; now: number; onTheme: () => void };
 
 /** The top bar: brand, the seven views, the time of the newest read and the theme button. */
-export function Nav({ view, onView, readAt, timeZone, onTheme }: Props) {
+export function Nav({ view, onView, readAt, timeZone, now, onTheme }: Props) {
   return (
     <header className="top"><div className="wrap">
       <div className="brand"><i aria-hidden="true" /><span>Observatory</span></div>
@@ -20,7 +20,7 @@ export function Nav({ view, onView, readAt, timeZone, onTheme }: Props) {
           onClick={event => { event.preventDefault(); onView(id); }}>{name}</a>)}
       </nav>
       <div className="tools">
-        {readAt && <span className="upd">Read {clock(readAt, timeZone)}</span>}
+        {readAt && <span className="upd">Read {clock(readAt, timeZone, now)}</span>}
         <button type="button" className="btn sq" title="Switch light and dark" aria-label="Switch light and dark" onClick={onTheme}>◐</button>
       </div>
     </div></header>

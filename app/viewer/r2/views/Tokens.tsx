@@ -3,7 +3,7 @@
 import type { Frame, TokensVM } from '../../../../lib/view-r2.mjs';
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildTokens } from '../../../../lib/view-r2.mjs';
-import { Block, BarList, Columns, Tail, Empty, StateView, Strip, UNKNOWN, bucketWord, dateIn, dayColumns, money, names, partBars, share, tokens, type Cell } from './parts';
+import { Block, BarList, Columns, Tail, Empty, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, money, names, partBars, share, tokens, type Cell } from './parts';
 import './more.css';
 
 export type TokenKinds = { cacheRead: number | null; cacheWrite: number | null; output: number | null; input: number | null };
@@ -17,7 +17,7 @@ export function TokensBody({ vm, kinds, now }: TokensData) {
   const selected = frame.devices.filter(device => device.selected);
   const staleToday = period.unit === 'day' && period.current && selected.length === 1 && selected[0].state === 'stale';
   if (staleToday || (vm.total.value === null && selected.length === 1))
-    return <StateView title={UNKNOWN} line={`${selected[0]?.name ?? 'This computer'} has not been read since ${selected[0]?.since ? new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(Date.parse(selected[0].since)) : 'it was set up'}.`} />;
+    return <StateView title={UNKNOWN} line={`${selected[0]?.name ?? 'This computer'} has not been read since ${selected[0]?.since ? clock(selected[0].since, timeZone, now) : 'it was set up'}.`} />;
   if (vm.total.value === 0) return <StateView title="No tokens" line={`Nothing ran in ${period.label}.`} />;
   const total = vm.total.value;
   const cells: Cell[] = [

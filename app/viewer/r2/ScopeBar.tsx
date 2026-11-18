@@ -1,4 +1,4 @@
-import { clock, periodNote, useR2, type RangeUnit, type ViewId } from './data';
+import { UNKNOWN, periodNote, useR2, type RangeUnit, type ViewId } from './data';
 
 const RANGES: [RangeUnit, string][] = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year'], ['all', 'All']];
 // What each view does with the scope. Limits belong to the account, not to one computer. Settings ignore the scope.
@@ -23,7 +23,8 @@ export function ScopeBar() {
         {chips.length > 1 && <button type="button" className={all ? 'on' : ''} aria-pressed={all} title="Every device combined" onClick={() => setScope({ ...scope, devices: hosts })}>All</button>}
         {chips.map(chip => {
           const on = !all && scope.devices.length === 1 && scope.devices[0] === chip.host;
-          const state = chip.state === 'stale' ? `off ${clock(chip.since, frame.timeZone)}` : `Live, read ${clock(chip.since, frame.timeZone)}`;
+          // The hub's label, as the menu bar shows it: "Off", or the day and time of the last reading.
+          const state = chip.off ? 'Off' : chip.state === 'stale' ? `last read ${chip.stateLabel ?? UNKNOWN}` : `Live, read ${chip.stateLabel ?? UNKNOWN}`;
           return (
             <button key={chip.host} type="button" className={on || chips.length === 1 ? 'on' : ''} aria-pressed={on} title={`${chip.name}, ${state}`} onClick={() => setScope({ ...scope, devices: [chip.host] })}>
               <span className={chip.state === 'stale' ? 'dot stale' : 'dot'} />{chip.name}{chip.state === 'stale' && <small>{state}</small>}

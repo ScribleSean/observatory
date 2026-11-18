@@ -39,7 +39,7 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
   const title = `${name} ${window.label}`;
   if (state.used === null || window.state === 'stale' || window.state === 'off') {
     const why = window.state === 'off' ? 'Turned off in observatory.config.json'
-      : window.checkedAt ? `Not in the ${clock(window.checkedAt, timeZone)} read` : 'Not reported by the app yet';
+      : window.checkedAt ? `Not in the ${clock(window.checkedAt, timeZone, now)} read` : 'Not reported by the app yet';
     return (
       <div className="lim">
         <div className="h"><span>{title}</span><b className="unk">{window.state === 'off' ? 'Off' : UNKNOWN}</b></div>
@@ -52,7 +52,7 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
   const pace = window.forecastText;
   return (
     <div className="lim">
-      <div className="h"><span>{title}</span><span>{window.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone)}` : 'Reset Unknown')}</span></div>
+      <div className="h"><span>{title}</span><span>{window.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone, now)}` : 'Reset Unknown')}</span></div>
       <div className="h" style={{ marginTop: 2 }}>
         <b className={spent ? 'acc' : undefined}>{pct(state.used)}<small>used</small></b>
         {pace && <span className={state.runsOut ? 'acc' : undefined}>{pace}</span>}
@@ -63,7 +63,7 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
       </div>
       <div className="f">
         <span>{state.gone !== null ? `${pct(100 * state.gone)} of the ${window.label === 'weekly' ? 'week' : 'window'} gone` : `Read on ${window.readOn ?? UNKNOWN}`}</span>
-        <span>{state.projected !== null ? `about ${pct(state.projected)} at the reset` : window.readOn ? `read on ${window.readOn} at ${clock(window.checkedAt, timeZone)}` : ''}</span>
+        <span>{state.projected !== null ? `about ${pct(state.projected)} at the reset` : window.readOn ? `read on ${window.readOn} at ${clock(window.checkedAt, timeZone, now)}` : ''}</span>
       </div>
     </div>
   );

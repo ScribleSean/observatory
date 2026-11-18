@@ -55,5 +55,5 @@ export function GrokRequests({ element }: ComponentRenderProps<GrokProps>) {
   const { snapshot, scope, now, frame, today } = useR2();
   const vm = resolveBlock('GrokRequests', element.props, snapshot, patchScope(scope, element.props.scope), { now }) as GrokRequestsVM | null;
   if (!vm) return <section className="blk"><div className="bh"><h3>Grok</h3></div><div className="empty"><b>Grok is off</b>Turn it on with sources.grokLimits in observatory.config.json.</div></section>;
-  return <GrokBlock vm={vm} timeZone={frame.timeZone} today={today} />;
+  return <GrokBlock vm={vm} timeZone={frame.timeZone} today={today} now={now} />;
 }

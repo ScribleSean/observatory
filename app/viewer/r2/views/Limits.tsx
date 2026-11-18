@@ -97,7 +97,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
   const cells: Cell[] = [
     state && state.used !== null
       ? { label: 'Claude Code weekly limit', value: pct(state.used), unit: 'used', accent: state.used >= 100,
-        context: state.reset ? `resets ${dayClock(state.reset, timeZone)}, in ${span(state.reset - now)}` : readOn ?? '' }
+        context: state.reset ? `resets ${dayClock(state.reset, timeZone, now)}, in ${span(state.reset - now)}` : readOn ?? '' }
       : { label: 'Claude Code weekly limit', value: claude ? UNKNOWN : 'Off', unknown: true, context: claude ? weekly?.checkedAt ? `not reported since ${shortDate(dateIn(Date.parse(weekly.checkedAt), timeZone))}` : 'no reading yet' : 'turned off in settings' },
     state && state.gone !== null && state.length
       ? { label: 'Week gone', value: pct(100 * state.gone), context: `${span(state.gone * state.length)} of 7d` }
@@ -109,8 +109,8 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
       ? { label: 'Weeks that ran out early', value: String(ranOut.length), unit: `of the last ${lastFour.length}`, context: ranOut.length ? `last in the week of ${shortDate(ranOut[0].key)}` : 'every recorded week lasted' }
       : { label: 'Weeks that ran out early', value: UNKNOWN, context: 'no past weeks recorded' },
     five && five.used !== null
-      ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: five.reset ? `resets ${clock(five.reset, timeZone)}` : '' }
-      : { label: 'Claude Code 5 hour', value: UNKNOWN, context: fiveHour?.checkedAt ? `not in the ${clock(fiveHour.checkedAt, timeZone)} read` : 'not reported by the app' },
+      ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: five.reset ? `resets ${clock(five.reset, timeZone, now)}` : '' }
+      : { label: 'Claude Code 5 hour', value: UNKNOWN, context: fiveHour?.checkedAt ? `not in the ${clock(fiveHour.checkedAt, timeZone, now)} read` : 'not reported by the app' },
     grok
       ? { label: 'Grok requests', value: grokWeek === null ? UNKNOWN : String(grokWeek), unit: 'last 7 days',
         context: grok.weekly && grok.weekly.remaining !== null ? `weekly limit ${Math.round(grok.weekly.remaining)}% left` : 'weekly limit Unknown' }
@@ -158,10 +158,10 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
             : <Empty title={UNKNOWN} line="The weekly limit or this window's spend has not been read." />}</div>
         </Block>
       )}
-      {grok && <GrokRequests vm={grok} timeZone={timeZone} today={today} />}
+      {grok && <GrokRequests vm={grok} timeZone={timeZone} today={today} now={now} />}
       {claude && (fiveHour && five?.used !== null
         ? <Block title="Claude Code 5 hour"><LimitMeter engine={claude} windowId={fiveHour.windowId} now={now} timeZone={timeZone} /></Block>
-        : <Block title="Claude Code 5 hour"><Empty title={UNKNOWN} line={fiveHour?.checkedAt ? `The app did not report this window in the ${clock(fiveHour.checkedAt, timeZone)} read. It shows here when it does.` : 'The app has not reported this window. It shows here when it does.'} /></Block>)}
+        : <Block title="Claude Code 5 hour"><Empty title={UNKNOWN} line={fiveHour?.checkedAt ? `The app did not report this window in the ${clock(fiveHour.checkedAt, timeZone, now)} read. It shows here when it does.` : 'The app has not reported this window. It shows here when it does.'} /></Block>)}
       {codex && (
         <Block title={`Codex${codex.plan ? `, ${codex.plan} plan` : ''}`}>
           {codex.windows.length ? <LimitMeter engine={codex} now={now} timeZone={timeZone} /> : <Empty title={UNKNOWN} line="Codex has not reported a limit yet." />}

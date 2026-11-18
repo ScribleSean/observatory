@@ -62,7 +62,11 @@ test('a stale computer shows a hollow dot and the time it was last read, and the
   const html=render({});
   const chips=data.buildFrame(combined,data.defaultScope(combined,{now}),{now}).devices;
   assert.deepEqual(chips.map(chip=>chip.state),['live','stale','live']);
-  assert.equal((html.match(/class="dot stale"><\/span>Tower<small>off /g) ?? []).length,1);
+  assert.equal((html.match(/class="dot stale"><\/span>Tower<small>last read Wed \d{1,2}:\d\d (AM|PM)<\/small>/g) ?? []).length,1,'the stale chip names the day of its last reading');
+  assert.match(html,/Read Wed \d{1,2}:\d\d (AM|PM)</,'the header read time names its day');
+  // A computer turned off in the hub's settings reads Off, never the time of its last reading (lib/combine.mjs deviceState).
+  const off={...combined,devices:combined.devices.map(device=>device.host==='Windows'?{...device,state:'off',stateLabel:'Off'}:device)};
+  assert.ok(render({snapshot:off}).includes('Tower<small>Off</small>'));
   assert.ok(html.includes('class="dot"></span>Studio</button>') && html.includes('class="dot"></span>Lab</button>'));
   assert.ok(text(html).includes('Tower last read'),'Needs you names the stale computer');
 });

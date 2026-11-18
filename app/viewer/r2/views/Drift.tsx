@@ -70,14 +70,14 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
     { label: 'Settings that differ', value: String(differs.length), unit: `of ${rows.length}`, accent: differs.length > 0,
       context: differs.length ? devices.filter(device => device.host !== reference && differs.some(row => row.values[device.host] !== row.values[reference ?? ''])).map(device => device.name).join(', ') + ` against ${refName}` : 'every computer matches' },
     { label: 'Computers compared', value: String(devices.length), context: `${refName} is the reference` },
-    oldest ? { label: 'Oldest read', value: clock(oldest.since, timeZone), context: `${oldest.name}, ${span(now - Date.parse(oldest.since!))} ago` } : { label: 'Oldest read', value: UNKNOWN, context: 'no computer read yet' },
+    oldest ? { label: 'Oldest read', value: clock(oldest.since, timeZone, now), context: `${oldest.name}, ${span(now - Date.parse(oldest.since!))} ago` } : { label: 'Oldest read', value: UNKNOWN, context: 'no computer read yet' },
     models.length ? { label: 'Model drift flags', value: String(flags), accent: flags > 0, context: `across ${plural(models.length, 'model')}, last 30 days` } : { label: 'Model drift flags', value: UNKNOWN, context: 'no replies read yet' },
   ];
   return (
     <div className="grid more">
       <Strip cells={cells} four />
       <Block span={8} title="Setup drift" sub="is every computer running the same setup?"
-        foot={stale.length ? <><span className="dot stale" />{stale.map(device => `${device.name} values are from the ${clock(device.since, timeZone)} read`).join('. ')}</> : <>Values from each computer&apos;s observatory.config.json and its latest sessions</>}>
+        foot={stale.length ? <><span className="dot stale" />{stale.map(device => `${device.name} values are from the ${clock(device.since, timeZone, now)} read`).join('. ')}</> : <>Values from each computer&apos;s observatory.config.json and its latest sessions</>}>
         <div className="tw"><table>
           <thead><tr><th>Setting</th>{devices.map(device => <th key={device.host}>{device.name}</th>)}<th>State</th></tr></thead>
           <tbody>{rows.map(row => (
@@ -102,7 +102,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
       <Block title="Last read" sub="the values above are from these reads">
         {devices.map(device => (
           <div key={device.host} className="li"><span className="t"><div><b>{device.name}</b></div><div>{device.host === reference ? 'Hub' : 'Read over SSH'}</div></span>
-            <span className={device.state === 'stale' ? 'fa' : 'mu'}>{device.state === 'stale' && <span className="dot stale" style={{ marginRight: 6 }} />}{clock(device.since, timeZone)}</span></div>
+            <span className={device.state === 'stale' ? 'fa' : 'mu'}>{device.state === 'stale' && <span className="dot stale" style={{ marginRight: 6 }} />}{device.off ? 'Off' : clock(device.since, timeZone, now)}</span></div>
         ))}
       </Block>
       </Side>

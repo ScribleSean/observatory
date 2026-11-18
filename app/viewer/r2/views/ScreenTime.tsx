@@ -22,7 +22,7 @@ export function ScreenTimeBody({ vm, spend, config, now }: ScreenTimeData) {
     return <StateView title="Screen time is off" line="Turn it on with sources.screenTime in observatory.config.json on each computer. See Settings." />;
   }
   const staleToday = period.unit === 'day' && period.current && tracked.length === 1 && tracked[0].state === 'stale';
-  if (staleToday) return <StateView title={UNKNOWN} line={`${tracked[0].name} was last read at ${clock(tracked[0].since, timeZone)} and has no screen time for today yet.`} />;
+  if (staleToday) return <StateView title={UNKNOWN} line={`${tracked[0].name} was last read at ${clock(tracked[0].since, timeZone, now)} and has no screen time for today yet.`} />;
   const total = vm.total.value;
   if (total === 0) return <StateView title="No screen time" line={`Nothing was tracked in ${period.label}.`} />;
   const trackedDays = vm.days.filter(day => day.tracked && day.seconds.value !== null).length;
@@ -38,7 +38,7 @@ export function ScreenTimeBody({ vm, spend, config, now }: ScreenTimeData) {
   const stale = tracked.filter(device => device.state === 'stale');
   const footParts = [
     ...(selected.length > 1 && off.length ? [`${names(off.map(device => device.name))} ${off.length === 1 ? 'has' : 'have'} screen time off`] : []),
-    ...stale.map(device => `${device.name} was last read at ${clock(device.since, timeZone)}`),
+    ...stale.map(device => `${device.name} was last read at ${clock(device.since, timeZone, now)}`),
   ];
   const foot = footParts.length ? <>{stale.length > 0 && <span className="dot stale" />}{tracked.length < selected.length ? `${names(tracked.map(device => device.name))} only. ` : ''}{footParts.join('. ')}.</> : undefined;
   const today = dateIn(now, timeZone);

@@ -41,21 +41,7 @@ export function share(part: number | null | undefined, whole: number | null | un
 
 export const plural = (count: number, word: string) => `${count.toLocaleString('en-US')} ${word}${count === 1 ? '' : 's'}`;
 
-/** A wall clock in the snapshot's zone: "6:48 AM". */
-export function clock(iso: string | number | null | undefined, timeZone: string) {
-  const at = typeof iso === 'number' ? iso : iso ? Date.parse(iso) : NaN;
-  if (!Number.isFinite(at)) return UNKNOWN;
-  return new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(at);
-}
-
-/** "Fri 5 PM", with minutes only when they are not zero. */
-export function dayClock(iso: string | number | null | undefined, timeZone: string) {
-  const at = typeof iso === 'number' ? iso : iso ? Date.parse(iso) : NaN;
-  if (!Number.isFinite(at)) return UNKNOWN;
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', hour: 'numeric', minute: '2-digit' })
-    .formatToParts(at).map(part => [part.type, part.value]));
-  return `${parts.weekday} ${parts.hour}${parts.minute === '00' ? '' : `:${parts.minute}`} ${parts.dayPeriod}`;
-}
+export { clock, dayClock } from '../data';
 
 /** YYYY-MM-DD in a time zone. */
 export function dateIn(at: number, timeZone: string) {

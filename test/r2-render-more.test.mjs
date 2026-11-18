@@ -47,7 +47,7 @@ for (const unit of ['year', 'all']) for (let date = periods[unit].first; date <=
   periods[unit].dates.push(date);
   const next = new Date(`${date}T00:00:00Z`); next.setUTCDate(next.getUTCDate() + 1); date = next.toISOString().slice(0, 10);
 }
-const chips = (selected = ['Mac', 'Windows', 'Linux']) => combined.devices.map(device => ({ host: device.host, name: device.name, state: device.stale ? 'stale' : 'live', since: device.collectedAt, selected: selected.includes(device.host) }));
+const chips = (selected = ['Mac', 'Windows', 'Linux']) => combined.devices.map(device => ({ host: device.host, name: device.name, state: device.stale ? 'stale' : 'live', since: device.collectedAt, off: false, stateLabel: device.stateLabel, selected: selected.includes(device.host) }));
 const frame = (unit = 'week', selected) => ({ scope: { devices: selected ?? ['Mac', 'Windows', 'Linux'], range: { unit, anchor: '2026-11-18' }, sources: ['claude', 'codex', 'grok'] },
   period: periods[unit], comparison: null, devices: chips(selected), sources: [], steps: { back: null, forward: null }, timeZone: TZ, generatedAt: combined.generatedAt, stale: false });
 const num = (value, text, extra = {}) => ({ metric: null, unit: 'count', value, text, of: null, sumLabel: null, previous: null, delta: null, deltaText: null, breakdowns: {}, note: null, ...extra });
@@ -97,7 +97,7 @@ test('Limits reads Unknown, never 0, before the app reports a window', () => {
   const markup = clean(html(createElement(LimitsBody, { vm, grok, readings: [], byDevice: devicePoints(view, vm.engines[0].windows[0], NOW, TZ), now: NOW, timeZone: TZ })), 'Limits');
   assert.ok(markup.includes('Claude Code weekly limit') && markup.includes('Unknown'));
   assert.ok(!/>0%</.test(markup), 'no 0% for a window never read');
-  assert.ok(markup.includes('not in the 5:00 AM read'), 'the 5 hour window says which read left it out');
+  assert.ok(markup.includes('not in the Nov 12, 5:00 AM read'), 'the 5 hour window says which read left it out, with its date');
   assert.ok(markup.includes('requests per day, last 30 days') && markup.includes('64% left'), 'Grok shows requests per day and its weekly limit');
   assert.ok(markup.includes('class="z unk"'), 'a day with no count read is drawn hollow');
   assert.ok(!markup.includes('$'), 'Grok requests are never in dollars');

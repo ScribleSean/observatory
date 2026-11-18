@@ -50,7 +50,7 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
   ];
   const days = firstDate ? Math.round((Date.parse(`${dateIn(now, timeZone)}T00:00:00Z`) - Date.parse(`${firstDate}T00:00:00Z`)) / 86400000) + 1 : null;
   const devices = frame.devices;
-  const stateWord = (device: DeviceChip) => device.state === 'live' ? 'Live' : device.state === 'stale' ? 'Stale' : 'Not set up';
+  const stateWord = (device: DeviceChip) => device.off ? 'Off' : device.state === 'live' ? 'Live' : device.state === 'stale' ? 'Stale' : 'Not set up';
   return (
     <div className="grid more">
       <Block span={8} title="Sources" sub={`read only. To change one, edit ${CONFIG_FILE_NAME} on that computer`} foot={<>{vm.howToChange}</>}>
@@ -64,7 +64,7 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
           const computer = vm.computers.find(item => item.host === device.host);
           const role = computer?.role === 'hub' ? 'Hub' : computer ? 'Read over SSH' : 'Not set up';
           return <Row key={device.host} off={device.state === 'not-set-up'} name={device.name}
-            state={device.state === 'not-set-up' ? 'Not set up' : `${role} · ${device.state === 'stale' ? 'last read' : 'read'} ${clock(device.since, timeZone)}`}
+            state={device.state === 'not-set-up' ? 'Not set up' : device.off ? `${role} · Off` : `${role} · ${device.state === 'stale' ? 'last read' : 'read'} ${device.stateLabel ?? clock(device.since, timeZone, now)}`}
             value={<span className={device.state === 'live' ? 'mu' : 'fa'}>{stateWord(device)}</span>} />;
         })}
       </Block>

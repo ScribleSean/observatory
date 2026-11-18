@@ -193,7 +193,7 @@ test('the limits forecast is the one the hub stored, shown through shown() as ev
   assert.equal(v.buildLimits(none, at('week'), { now: NOW }).headline, 'Unknown');
   // The view-models only show the stored forecast: they never call the forecaster.
   const source = readFileSync(new URL('../lib/view-r2.mjs', import.meta.url), 'utf8');
-  assert.match(source, /import \{ shown, shownSentence \} from '\.\/forecast\.mjs';/);
+  assert.match(source, /import \{ readAt, shown, shownSentence \} from '\.\/forecast\.mjs';/);
   assert.doesNotMatch(source, /windowForecast|projection\(|quota-pace|\bforecast\(/);
 });
 
@@ -279,7 +279,7 @@ test('roles use the settings map: a Mac session titled "Tidepool notes" is a Res
 
 test('the flags name stale computers and sessions that need a look', () => {
   const flags = v.buildOverview(snapshot, at('week'), { now: NOW }).flags;
-  assert.equal(flags[0].text, 'Tower last read 7:00 AM');
+  assert.equal(flags[0].text, 'Tower last read Wed 7:00 AM', 'a time names its day');
   assert.ok(flags.length <= v.FLAG_LINES);
   assert.ok(flags.slice(1).every(flag => flag.sessionKey === null || /^(Mac|Windows|Linux)\./.test(flag.sessionKey)));
 });

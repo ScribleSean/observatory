@@ -131,7 +131,7 @@ export function R2Shell({ snapshot, now, loaded, saved = [], initialHash = '', i
 
   return (
     <div className="r2">
-      <Nav view={view} onView={go} readAt={readAt} timeZone={zone} onTheme={flipTheme} />
+      <Nav view={view} onView={go} readAt={readAt} timeZone={zone} now={now} onTheme={flipTheme} />
       {!ui && <>
         <div className="scope"><div className="wrap" /></div>
         <div className="wrap"><main>

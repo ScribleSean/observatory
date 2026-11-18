@@ -17,9 +17,9 @@ function Spark({ days, tall = false }: { days: GrokRequestsVM['days']; tall?: bo
 }
 
 /** "64% left, resets Sat 10 AM", or Unknown until the app caches a reading. */
-export function weeklyText(weekly: GrokRequestsVM['weekly'], timeZone: string) {
+export function weeklyText(weekly: GrokRequestsVM['weekly'], timeZone: string, now: number) {
   if (!weekly || weekly.remaining === null) return 'Unknown until the app caches it';
-  return `${Math.round(weekly.remaining)}% left${weekly.resetsAt ? `, resets ${dayClock(weekly.resetsAt, timeZone)}` : ''}`;
+  return `${Math.round(weekly.remaining)}% left${weekly.resetsAt ? `, resets ${dayClock(weekly.resetsAt, timeZone, now)}` : ''}`;
 }
 
 /** The compact row in a limits block: the period's count, a bar per day and the weekly limit. */
@@ -38,7 +38,7 @@ export function GrokRequestsRow({ vm, label }: { vm: GrokRequestsVM; label: stri
 }
 
 /** The Grok block on the Limits view: the last days as bars, then the facts under them. */
-export function GrokRequests({ vm, timeZone, today }: { vm: GrokRequestsVM; timeZone: string; today: string }) {
+export function GrokRequests({ vm, timeZone, today, now }: { vm: GrokRequestsVM; timeZone: string; today: string; now: number }) {
   const week = vm.days.slice(-7), weekUnknown = week.some(day => day.value === null);
   // zero-ok: shown only when no day of the week is Unknown
   const weekTotal = week.reduce((sum, day) => sum + (day.value ?? 0), 0);
@@ -56,7 +56,7 @@ export function GrokRequests({ vm, timeZone, today }: { vm: GrokRequestsVM; time
           <span>Yesterday</span>
           <span>{!yesterday || yesterday.value === null ? UNKNOWN : plural(yesterday.value, 'request')}</span>
           <span>Weekly limit</span>
-          <span>{weeklyText(vm.weekly, timeZone)}</span>
+          <span>{weeklyText(vm.weekly, timeZone, now)}</span>
         </div>
       </div>
     </section>

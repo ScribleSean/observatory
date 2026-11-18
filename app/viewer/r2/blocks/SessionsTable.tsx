@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { ComponentRenderProps } from '@json-render/react';
 import { ROLES } from '../../../../lib/roles.mjs';
-import { UNKNOWN, buildSessions, clock, count, metric, patchScope, plural, share, started, useR2, type SessionRow, type SessionsVM } from '../data';
+import { UNKNOWN, buildSessions, clock, count, metric, patchScope, plural, share, useR2, type SessionRow, type SessionsVM } from '../data';
 
 type Props = import('../../../../lib/r2-blocks.mjs').SessionsTableProps;
 type Sort = NonNullable<Props['sort']>;
@@ -38,16 +38,16 @@ function Landed({ row, merged }: { row: { onMain: SessionRow['onMain']; merged?:
 
 /** Running now: data, not a status light. */
 function Running({ vm }: { vm: SessionsVM }) {
-  const { openSession } = useR2();
+  const { openSession, now } = useR2();
   const { frame, rows } = vm;
   if (!frame.period.current) return null;
   return (
     <section className="blk">
-      <div className="bh"><h3>Running now</h3><span className="fa">{plural(rows.length, 'session')} at the {clock(frame.generatedAt, frame.timeZone)} read</span></div>
+      <div className="bh"><h3>Running now</h3><span className="fa">{plural(rows.length, 'session')} at the {clock(frame.generatedAt, frame.timeZone, now)} read</span></div>
       {rows.length === 0 && <div className="empty">Nothing was running at the last read.</div>}
       {rows.map(row => (
         <button key={row.key} type="button" className="li" onClick={() => openSession(row.key)}>
-          <span className="t"><div><b><SessionName row={row} /></b></div><div>{[row.device, row.models[0], plural(row.subagents, 'subagent'), `since ${started(row.startedAt, frame.timeZone)}`].filter(Boolean).join(' · ')}</div></span>
+          <span className="t"><div><b><SessionName row={row} /></b></div><div>{[row.device, row.models[0], plural(row.subagents, 'subagent'), `since ${clock(row.startedAt, frame.timeZone, now)}`].filter(Boolean).join(' · ')}</div></span>
           <span className="n">{row.spend.text}</span>
         </button>
       ))}
@@ -96,7 +96,7 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
         <td className="r hide-s">{bar(row, row.share)}</td>
         <td>{flag ? <span className="acc">{row.onMain.of === 0 ? 'no commits' : `${count(row.onMain.value)} of ${count(row.onMain.of)}`}</span> : <Landed row={row} merged />}</td>
         <td className="r hide-s">{row.perLanded.value === null ? <span className="fa">none</span> : row.perLanded.text}</td>
-        {full && <td className="hide-m">{started(row.startedAt, frame.timeZone)}</td>}
+        {full && <td className="hide-m">{clock(row.startedAt, frame.timeZone, now)}</td>}
       </tr>,
       ...(row.kind === 'bundle' && expanded ? row.children.map(kid => line(kid, true)) : []),
     ];
