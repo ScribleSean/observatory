@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   periodOf, stepRange, comparisonOf, patchScope, deviceChips, visibleSources, defaultScope, scopeToSearch, scopeFromSearch,
-  dateIn, datesBetween, addDays, validDate,
+  dateIn, datesBetween, addDays, validDate, limitsOn, sourceOn,
 } from '../lib/scope.mjs';
 import { sampleR2Combined, SAMPLE_R2_TIME_ZONE } from '../lib/sample-r2.mjs';
 
@@ -146,4 +146,16 @@ test('date helpers', () => {
   assert.equal(addDays('2028-02-28', 1), '2028-02-29');
   assert.equal(validDate('2026-02-29'), false);
   assert.equal(dateIn(SAMPLE_R2_TIME_ZONE, NOW), '2026-11-18');
+});
+
+test('a combined file with no settings echo shows every source and limit not listed in sourcesOff', () => {
+  const snapshot = sampleR2Combined(NOW);
+  const older = { ...snapshot, view: { ...snapshot.view, config: undefined, sourcesOff: ['codex'] } };
+  assert.deepEqual(['claude', 'codex', 'grok'].map(id => limitsOn(older, id)), [true, false, true]);
+  assert.deepEqual(['claude', 'codex', 'grok'].map(id => sourceOn(older, id)), [true, false, true]);
+  const week = { devices: ['Mac', 'Windows', 'Linux'], range: { unit: 'week', anchor: '2026-11-18' }, sources: ['claude', 'codex', 'grok'] };
+  assert.deepEqual(visibleSources(older, week, { now: NOW }), ['claude', 'grok']);
+  // With the echo there, it decides as before.
+  const echoed = { ...snapshot, view: { ...snapshot.view, config: snapshot.view.config.map(row => ({ ...row, sources: { ...row.sources, grokLimits: false } })), sourcesOff: [] } };
+  assert.equal(limitsOn(echoed, 'grok'), false);
 });
