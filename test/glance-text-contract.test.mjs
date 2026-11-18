@@ -38,7 +38,6 @@ const server = await createServer({ configFile: false, root, server: { middlewar
 after(() => server.close());
 const { Limits } = await server.ssrLoadModule('/app/viewer/r2/views/Limits.tsx');
 const { Tokens } = await server.ssrLoadModule('/app/viewer/r2/views/Tokens.tsx');
-const { windowNow } = await server.ssrLoadModule('/app/viewer/r2/blocks/LimitMeter.tsx');
 
 const HOUR = 3600000, MINUTE = 60000;
 // Wed Nov 18 2026, 7:40 AM in New York. Every reading below is made up.

@@ -23,7 +23,7 @@ cd observatory
 npm run setup
 ```
 
-Setup writes `observatory.config.json` if there is none, set to read limits, tokens and screen time. It builds the dashboard and the menu bar or tray app on your computer, and starts the app now and at login. There is no installer and no account. Click the telescope icon in the menu bar (the tray on Windows), then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601.
+Setup writes `observatory.config.json` if there is none, set to read limits, tokens and screen time. It builds the dashboard and the menu bar or tray app on your computer, and starts the app now and at login. There is no installer and no account. Click the ring and dot icon in the menu bar (the tray on Windows), then **Open dashboard**. The ring fills for the share of the Claude weekly limit used. The dashboard runs at http://127.0.0.1:5601.
 
 - `npm run setup -- --dry-run` lists what setup would do and changes nothing.
 - To update, run `git pull`, then `npm run setup`.
