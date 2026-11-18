@@ -400,3 +400,35 @@ test('a computer turned off adds nothing, even when its history has a day it cou
   assert.deepEqual(spend.breakdowns.device.map(part => part.key).sort(), ['Linux', 'Mac']);
   assert.ok(!v.buildOverview(off, scope, { now: NOW }).flags.some(line => line.text.includes('Tower')));
 });
+
+// Hand-made ledger days for the session count: one session id per entry in `ids`, listed or as a compact row.
+const zeroTokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+const handDay = (date, ids, { listed = true, rowsKept = true } = {}) => ({ date, tool: 'claude', status: 'ok', frozen: false, apiUsd: ids.length,
+  sessionCount: ids.length, subagents: 0, tokens: zeroTokens, models: [], kinds: [], origins: [], repos: [], ship: { commits: 0, onMain: 0, merges: 0 },
+  sessions: listed ? ids.map(id => ({ id, title: null, origin: 'interactive', task: 'build', repo: null, firstAt: `${date}T15:00:00.000Z`, lastAt: `${date}T16:00:00.000Z`,
+    apiUsd: 1, tokens: zeroTokens, models: [], kinds: [], ship: [] })) : [],
+  other: listed || !ids.length ? null : { count: ids.length, apiUsd: ids.length, subagents: 0, ship: { commits: 0, onMain: 0, merges: 0 }, rows: rowsKept ? ids.map(id => [id, 1, 0, 0]) : [] } });
+const unreadDay = date => ({ ...handDay(date, []), status: 'unavailable', apiUsd: null, sessionCount: null });
+const withDays = byHost => ({ ...snapshot, view: { ...snapshot.view, ledgerHistory: snapshot.view.ledgerHistory.map(row => byHost[row.host]
+  ? { ...row, firstDate: byHost[row.host].days[0].date, sessionsFrom: byHost[row.host].sessionsFrom ?? byHost[row.host].days[0].date, days: byHost[row.host].days } : row) } });
+
+test('sessions count distinct sessions, and an Unknown count gives a true lower bound, not session-days', () => {
+  const week = at('week', '2026-11-18', { devices: ['Mac', 'Windows'] });
+  // One session runs Monday to Wednesday on the Mac. The PC could not read Tuesday.
+  const span = withDays({ Mac: { days: ['2026-11-16', '2026-11-17', '2026-11-18'].map(date => handDay(date, ['aaaaaaaaaaaa'])) },
+    Windows: { days: [handDay('2026-11-16', []), unreadDay('2026-11-17'), handDay('2026-11-18', [])] } });
+  const partly = v.metric(span, 'sessions', week, { now: NOW });
+  assert.equal(partly.value, null);
+  assert.deepEqual(partly.atLeast, { value: 1, text: 'at least 1, 1 day not read on Tower' });
+  assert.equal(v.metric(span, 'sessions', { ...week, devices: ['Mac'] }, { now: NOW }).value, 1, 'all read: one session');
+  // Days older than sessionsFrom keep compact rows, which still tell one session from three.
+  const macOnly = { ...week, devices: ['Mac'] };
+  const compact = withDays({ Mac: { sessionsFrom: '2026-11-19', days: ['2026-11-16', '2026-11-17', '2026-11-18'].map(date => handDay(date, ['aaaaaaaaaaaa'], { listed: false })) } });
+  assert.equal(v.metric(compact, 'sessions', macOnly, { now: NOW }).value, 1);
+  // With the compact rows trimmed too, only day counts are left, which would count the session three times: Unknown.
+  const counts = withDays({ Mac: { sessionsFrom: '2026-11-19', days: ['2026-11-16', '2026-11-17', '2026-11-18'].map(date => handDay(date, ['aaaaaaaaaaaa'], { listed: false, rowsKept: false })) } });
+  const bare = v.metric(counts, 'sessions', macOnly, { now: NOW });
+  assert.equal(bare.value, null);
+  assert.equal(bare.text, 'Unknown');
+  assert.equal(bare.atLeast, null);
+});
