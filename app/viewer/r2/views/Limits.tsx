@@ -57,15 +57,30 @@ export function tagTops(now: number, reset: number | null) {
   return { now: nowTop, reset: resetTop };
 }
 
+/**
+ * Where the weekly line ends and what its tag says, from the window's one stored reading and its freshness (the
+ * view-model's `remaining` and `asOf`, through lib/forecast.mjs lastReading), so the strip and the chart never disagree.
+ * A current reading ends at now and says "now". An old one ends when it was read and says "as of Wed 7:20 AM". With no
+ * reading the value is Unknown, and the line stops at its last stored reading.
+ */
+export function burnEnd(window: LimitWindowVM, now: number): { at: number | null; used: number | null; tag: string } {
+  const used = windowNow(window, now).used;
+  if (used === null) return { at: null, used: null, tag: 'now' };
+  if (!window.asOf) return { at: now, used, tag: 'now' };
+  const read = window.checkedAt ? Date.parse(window.checkedAt) : NaN;
+  return { at: Number.isFinite(read) && read <= now ? read : null, used, tag: window.asOf };
+}
+
 function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; readings: Reading[]; now: number; timeZone: string }) {
   const state = windowNow(window, now);
   if (state.reset === null || state.length === null) return <Empty title={UNKNOWN} line="The weekly window has no reset time yet." />;
   const start = state.reset - state.length;
   const x = (at: number) => Math.max(0, Math.min(1000, 1000 * (at - start) / state.length!));
   const y = (used: number) => 100 - Math.max(0, Math.min(100, used));
-  const points = readings.filter(reading => reading.at >= start && reading.at <= now).sort((a, b) => a.at - b.at);
-  // An old reading is already the last point: nothing is drawn after it.
-  if (state.used !== null && !window.asOf) points.push({ at: now, used: state.used });
+  const end = burnEnd(window, now);
+  // Nothing is drawn after the reading the strip shows.
+  const points = readings.filter(reading => reading.at >= start && reading.at <= (end.at ?? now)).sort((a, b) => a.at - b.at);
+  if (end.used !== null) points.push({ at: end.at ?? points.at(-1)?.at ?? now, used: end.used });
   if (points.length === 0) return <Empty title="No readings yet" line="The line starts with the first reading of this window." />;
   const path = points.map((point, index) => `${index ? 'L' : 'M'}${x(point.at).toFixed(0)},${y(point.used).toFixed(1)}`).join(' ');
   const last = points.at(-1)!, nowX = x(last.at);
@@ -91,8 +106,8 @@ function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; read
       </svg>
       <span className="y" style={{ top: 0 }}>100%</span><span className="y" style={{ top: '50%' }}>50%</span><span className="y" style={{ top: '100%' }}>0</span>
       {ticks.map(tick => <span key={tick.date} className={`x${tick.date === today ? ' now' : ''}`} style={{ left: `${100 * tick.left}%` }}>{weekday(tick.date)}</span>)}
-      <i className="pt" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%` }} />
-      <span className="tagl" style={{ left: `${nowX / 10}%`, top: `${tags.now}%`, transform: nowX > 150 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)' }}><b>{pct(last.used)}</b> <span className="fa">now</span></span>
+      {end.used !== null && <i className="pt" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%` }} />}
+      <span className="tagl" style={{ left: `${nowX / 10}%`, top: `${tags.now}%`, transform: nowX > 150 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)' }}><b>{end.used === null ? UNKNOWN : pct(end.used)}</b> <span className="fa">{end.tag}</span></span>
       {tags.reset !== null && <span className="tagl" style={{ right: 0, top: `${tags.reset}%` }}><b className="mu">{pct(state.projected!)}</b> <span className="fa">at the reset</span></span>}
     </div>
   );

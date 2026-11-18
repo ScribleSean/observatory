@@ -285,6 +285,32 @@ test('an old reading is worded the same everywhere: its last value, with when it
   assert.ok(limitsPage(combined).includes(label), 'the Limits page dates the old reading');
 });
 
+// The Limits strip's cell for one label, as text, and the tag at the end of the weekly burn line.
+const textOf = markup => markup.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const stripCell = (page, label) => { const at = page.indexOf(`>${label}<`); assert.ok(at > 0, `the strip has "${label}"`); return textOf(page.slice(at + label.length + 1, at + 600)); };
+const burnTag = page => { const tag = page.match(/<span class="tagl"[^>]*><b[^>]*>([^<]*)<\/b> <span class="fa">([^<]*)<\/span>/); assert.ok(tag, 'the burn line has an end tag'); return `${tag[1]} ${tag[2]}`; };
+
+test('the Limits strip and the burn chart show one stored reading by one freshness rule: current, as of, or Unknown in both', () => {
+  // Current: the value and "now" in the chart.
+  const current = limitsPage(fleet());
+  assert.match(stripCell(current, 'Claude Code weekly limit'), /^73% used /);
+  assert.equal(burnTag(current), '73% now');
+  // Old: the last value with when it was read, in both.
+  const label = 'as of Wed 7:20 AM';
+  const old = limitsPage(fleet({ age: 20 }));
+  assert.ok(stripCell(old, 'Claude Code weekly limit').startsWith(`73% used ${label}`), stripCell(old, 'Claude Code weekly limit'));
+  assert.equal(burnTag(old), `73% ${label}`);
+  // No stored reading to date: the history still holds readings of this window, but neither shows a number.
+  const unread = fleet({ age: 20 });
+  unread.glance.limits = unread.glance.limits.filter(row => !(row.provider === 'claude' && row.windowId === 'seven_day'));
+  const weekly = limitsVM(unread).engines.find(engine => engine.engine === 'claude').windows.find(window => window.windowId === 'seven_day');
+  assert.deepEqual([weekly.state, weekly.remaining, weekly.asOf], ['stale', null, null]);
+  const page = limitsPage(unread);
+  assert.match(page, /<path d="M[^"]+" fill="none" stroke="var\(--text\)"/, 'the stored readings are still drawn');
+  assert.match(stripCell(page, 'Claude Code weekly limit'), /^Unknown /);
+  assert.equal(burnTag(page), 'Unknown now');
+});
+
 test('a limits source that is off leaves that engine Unknown for job slots, never none, and running jobs always print', () => {
   const claudeOff = fleet({ sources: { ...ALL_ON, claudeLimits: false } });
   const status = agentStatus(clone(claudeOff), now, { codexRunning: 2 });
