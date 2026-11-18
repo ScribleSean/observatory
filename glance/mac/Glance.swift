@@ -465,11 +465,24 @@ enum Mark {
     return (p, d, w, (d - w) / 2, side / 2)
   }
 
-  // App icon of side s: the mark's diameter, stroke and dot radius. 32 and 16 sit on whole pixels.
+  // App icon on a full tile of side s (Windows .ico): the mark's diameter, stroke and dot radius, whole pixels up to 48.
   static func app(_ side: CGFloat) -> (d: CGFloat, w: CGFloat, dot: CGFloat) {
-    if side == 16 { return (12, 2, 2) }
-    if side == 32 { return (20, 3, 3) }
-    return (side / 2, side / 14, side / 14)
+    switch side {
+    case 16: return (12, 2, 2)
+    case 24: return (16, 2, 2)
+    case 32: return (20, 3, 3)
+    case 48: return (28, 4, 4)
+    default: return (side / 2, side / 14, side / 14)
+    }
+  }
+
+  // The macOS app icon at a point size and scale, in pixels: the tile sits 100 of 1024 in from each edge, set in
+  // points and multiplied by the scale, so the icon is the same at 1x and 2x.
+  static func macIcon(points: CGFloat, scale: CGFloat) -> (inset: CGFloat, tile: CGFloat, d: CGFloat, w: CGFloat, dot: CGFloat) {
+    let small: [CGFloat]? = points == 16 ? [1, 10, 2, 2] : points == 32 ? [3, 16, 2, 2] : nil
+    let inset = small?[0] ?? (points * 100 / 1024).rounded(), tile = points - 2 * inset
+    let mark = small.map { Array($0[1...]) } ?? [tile / 2, tile / 14, tile / 14]
+    return (inset * scale, tile * scale, mark[0] * scale, mark[1] * scale, mark[2] * scale)
   }
 
   static func circle(_ c: CGFloat, _ r: CGFloat) -> NSBezierPath {
@@ -536,17 +549,18 @@ enum Mark {
     return image
   }
 
-  // The app icon: a rounded tile and the mark, light or dark.
-  static func drawApp(side: CGFloat, light: Bool) {
+  // The app icon in a canvas of `canvas` pixels: a rounded tile `inset` in from each edge and the mark, light or dark.
+  static func drawApp(canvas: CGFloat, inset: CGFloat, mark: (d: CGFloat, w: CGFloat, dot: CGFloat), light: Bool) {
+    let tile = canvas - 2 * inset, c = canvas / 2
     color(light ? tileLight : tileDark).setFill()
-    NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: side, height: side), xRadius: side * tileRadius, yRadius: side * tileRadius).fill()
-    let g = app(side), tone = color(light ? accentLight : accentDark)
-    let ring = circle(side / 2, (g.d - g.w) / 2)
-    ring.lineWidth = g.w
+    NSBezierPath(roundedRect: NSRect(x: inset, y: inset, width: tile, height: tile), xRadius: tile * tileRadius, yRadius: tile * tileRadius).fill()
+    let tone = color(light ? accentLight : accentDark)
+    let ring = circle(c, (mark.d - mark.w) / 2)
+    ring.lineWidth = mark.w
     tone.setStroke()
     ring.stroke()
     tone.setFill()
-    circle(side / 2, g.dot).fill()
+    circle(c, mark.dot).fill()
   }
 
   // Draws into an exact pixel grid, so 16 and 32 land on whole pixels.
@@ -875,15 +889,28 @@ extension ISO8601DateFormatter {
   return 0
 }
 
-// `Observatory --app-icons folder` writes icon-<side>-light.png and icon-<side>-dark.png. scripts/make-icons.mjs
-// packs them into glance/icons (`npm run icons`).
+// `Observatory --app-icons folder` writes full-<side>-<theme>.png (the full tile, for the Windows .ico) and
+// mac-<points>@<scale>x-<theme>.png (the macOS icon). scripts/make-icons.mjs packs them into glance/icons (`npm run icons`).
 @MainActor func appIcons(_ arguments: [String]) -> Int32 {
   guard arguments.count >= 2 else { return 2 }
   let folder = URL(fileURLWithPath: arguments[1])
-  for side in [16, 24, 32, 48, 64, 128, 256, 512, 1024] {
-    for light in [false, true] {
-      guard let png = Mark.png(pixels: side, draw: { Mark.drawApp(side: CGFloat(side), light: light) }) else { return 1 }
-      do { try png.write(to: folder.appendingPathComponent("icon-\(side)-\(light ? "light" : "dark").png")) } catch { return 1 }
+  func write(_ name: String, _ pixels: Int, _ draw: () -> Void) -> Bool {
+    guard let png = Mark.png(pixels: pixels, draw: draw) else { return false }
+    return (try? png.write(to: folder.appendingPathComponent(name))) != nil
+  }
+  for light in [false, true] {
+    let theme = light ? "light" : "dark"
+    for side in [16, 24, 32, 48, 64, 128, 256] {
+      let mark = Mark.app(CGFloat(side))
+      guard write("full-\(side)-\(theme).png", side, { Mark.drawApp(canvas: CGFloat(side), inset: 0, mark: mark, light: light) }) else { return 1 }
+    }
+    for points in [16, 32, 128, 256, 512] {
+      for scale in [1, 2] {
+        let g = Mark.macIcon(points: CGFloat(points), scale: CGFloat(scale))
+        guard write("mac-\(points)@\(scale)x-\(theme).png", points * scale, {
+          Mark.drawApp(canvas: CGFloat(points * scale), inset: g.inset, mark: (g.d, g.w, g.dot), light: light)
+        }) else { return 1 }
+      }
     }
   }
   return 0
