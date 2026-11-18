@@ -6,11 +6,10 @@ import {buildSnapshot} from '../scripts/collect.mjs';
 import {collectClaudeUsage} from '../scripts/read-claude-usage.mjs';
 import {openTokenStore,keepTokenDays} from '../scripts/token-store.mjs';
 import {combine,SUM_LABEL} from '../lib/combine.mjs';
-import {tokensView} from '../lib/view-tokens.mjs';
 import {withFolder,testConfig} from './helpers.mjs';
 
 // Both computers lose their oldest Claude Code logs. The saved daily totals must keep those days,
-// and the combined All view must add each computer's days and carry the "not deduplicated" label.
+// and the combined view must keep each computer's days apart and label the sum "not deduplicated".
 const usage=(input,output)=>({input_tokens:input,cache_read_input_tokens:0,cache_creation_input_tokens:0,output_tokens:output});
 const reply=(id,timestamp,values)=>JSON.stringify({type:'assistant',timestamp,requestId:`r-${id}`,
   message:{role:'assistant',id:`m-${id}`,model:'claude-sonnet-4-20250514',usage:values,content:'synthetic'}})+'\n';
@@ -46,24 +45,19 @@ const both=async(folder,keep)=>{
   const combined=combine([{host:'Mac',snapshot:await mac.run(LATER,keep)},{host:'Windows',snapshot:await pc.run(LATER,keep)}],{now:at,generatedBy:'Mac'});
   return {combined,at};
 };
-const days=block=>Object.fromEntries(block.days.map(day=>[day.date,day.total]));
+const days=(combined,host)=>Object.fromEntries(combined.view.providerTokenSources
+  .find(row=>row.host===host && row.provider==='claude-code').days.map(day=>[day.date,day.totalTokens]));
 
-test('after both computers delete their old logs, All still counts every saved day and labels the sum',()=>withFolder(async folder=>{
-  const {combined,at}=await both(folder,true);
-  const all=tokensView(combined.view,{host:'All',period:'all',now:at}).claude;
-  assert.equal(all.status,'ok');
-  assert.deepEqual(days(all),{'2026-09-20':1200+5500,'2026-10-20':340+760});
-  assert.equal(all.totals.total,1200+5500+340+760);
-  assert.deepEqual(all.byDevice.map(row=>[row.host,row.total]),[['Mac',1540],['Windows',6260]]);
-  assert.equal(all.byDevice.reduce((sum,row)=>sum+row.total,0),all.totals.total);
-  const mac=tokensView(combined.view,{host:'Mac',period:'all',now:at}).claude;
-  assert.deepEqual(days(mac),{'2026-09-20':1200,'2026-10-20':340});
+test('after both computers delete their old logs, each computer still has every saved day and the sum is labeled',()=>withFolder(async folder=>{
+  const {combined}=await both(folder,true);
+  assert.deepEqual(days(combined,'Mac'),{'2026-09-20':1200,'2026-10-20':340});
+  assert.deepEqual(days(combined,'Windows'),{'2026-09-20':5500,'2026-10-20':760});
   assert.equal(combined.glance.both.label,SUM_LABEL);
   assert.ok(combined.glance.lines.some(line=>line.includes('not deduplicated')));
 }));
 
-test('without the saved daily totals the deleted days would vanish from All',()=>withFolder(async folder=>{
-  const {combined,at}=await both(folder,false);
-  const all=tokensView(combined.view,{host:'All',period:'all',now:at}).claude;
-  assert.deepEqual(days(all),{'2026-10-20':340+760});
+test('without the saved daily totals the deleted days would vanish',()=>withFolder(async folder=>{
+  const {combined}=await both(folder,false);
+  assert.deepEqual(days(combined,'Mac'),{'2026-10-20':340});
+  assert.deepEqual(days(combined,'Windows'),{'2026-10-20':760});
 }));

@@ -3,6 +3,7 @@
 // chip and an empty period.
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -20,7 +21,7 @@ const {PINS,OVERVIEW,SESSIONS,blockList,withoutBlocks,savedViewsFrom}=await serv
 const {registry}=await server.ssrLoadModule('/app/viewer/r2/registry.tsx');
 const {viewFromHash,VIEWS}=await server.ssrLoadModule('/app/viewer/r2/Nav.tsx');
 const data=await server.ssrLoadModule('/app/viewer/r2/data.ts');
-const {default:Dashboard}=await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+const {default:R2App}=await server.ssrLoadModule('/app/viewer/r2/App.tsx');
 
 const now=Date.parse('2026-11-18T15:00:00Z');
 const combined=sampleR2Combined(now);
@@ -141,7 +142,9 @@ test('before a snapshot arrives the shell shows loading, then says when there is
 });
 
 test('the dashboard entry is the round 2 app, and its copy has no em dash or semicolon',()=>{
-  assert.equal(typeof Dashboard,'function');
+  assert.equal(typeof R2App,'function');
+  const entry=readFileSync(new URL('../app/web/dashboard.tsx',import.meta.url),'utf8');
+  assert.deepEqual([...entry.matchAll(/^import .*?['"]([^'"]+)['"]/gm)].map(match=>match[1]),['react-dom/client','../viewer/r2/App'],'the entry loads the round 2 app and no other stylesheet');
   for(const props of [{},{initialHash:'#sessions'},{initialPin:'spend-today'},{initialSearch:'?unit=month'}]) {
     const words=text(render(props)).replace(/&[a-z#0-9]+;/gi,' ');
     assert.ok(!/[—;]/.test(words),words.match(/.{0,40}[—;].{0,40}/)?.[0]);

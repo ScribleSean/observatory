@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {weekView,joined,hasLastWeek,shippedPill,modelLabel,shareText,flagLines,sessionLabel} from '../lib/view-week.mjs';
-import {sessionView} from '../lib/view-session.mjs';
 import {sampleLedger} from '../lib/sample-ledger.mjs';
 import {limitShare,LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
 import {combine} from '../lib/combine.mjs';
@@ -243,42 +242,6 @@ test('model names read as their family, and unknown ids stay as they are',()=>{
   assert.deepEqual(['claude-opus-5-5','claude-sonnet-4-20250514','claude-haiku-4-5','gpt-6-astra','',null].map(modelLabel),['Opus','Sonnet','Haiku','gpt-6-astra','Unknown','Unknown']);
 });
 
-test('the session panel shows one session: share, fan-out, where it went, what it shipped and its flags',()=>{
-  const summary=feed();
-  const key=weekView(summary,{now}).table.rows[0].key;
-  const view=sessionView(summary,key,{now});
-  assert.equal(view.title,'Release review');
-  assert.deepEqual(view.meta.slice(0,2),['Studio Mac','Claude Code']);
-  assert.match(view.meta[2],/^Fri [\d:]+ [AP]M to Fri [\d:]+ [AP]M$/);
-  assert.equal(view.meta[3],'7h 48m');
-  assert.deepEqual(view.figures.map(figure=>[figure.label,figure.value]),[['Share of the week','28.8%'],['Subagents','372'],['Output tokens','21M'],['At API prices','$1,638']]);
-  assert.equal(view.fanout.peak,61);
-  assert.match(view.fanout.peakText,/^Peak 61 at \d+:\d\d [AP]M$/);
-  assert.equal(view.fanout.bars.length,31);
-  assert.ok(view.fanout.ticks.length<=6);
-  assert.deepEqual(view.kinds.map(kind=>[kind.label,kind.lead,kind.subagentsText,kind.shareText]),
-    [['Search and read','Opus','212','12.4%'],['Review passes','Opus','118','10.9%'],['Main thread','Opus','0','3.7%'],['Writing','Sonnet','42','1.7%']]);
-  assert.deepEqual(view.shipped,{tone:'none',text:'No change',line:['0 commits, 0 on the default branch.','In field-notes.','Cache hit 91%.']});
-  assert.deepEqual(view.flags.map(flag=>[flag.ownLead,flag.ownRest]),[
-    ['Fanned out to 372 subagents','and took 29% of the week. No branch merged.'],
-    ['Opus did search work','in 212 subagents. The smallest model would have cut the week by about 9.6%.']]);
-  assert.equal(sessionView(summary,'Mac.claude.000000000000',{now}),null);
-  assert.equal(sessionView(summary,key,{now,period:'previous'}),null,'a session is looked up in the week it belongs to');
-});
-
-test('a session with nothing read says Unknown and draws no chart',()=>{
-  const summary=feed(change=>{
-    Object.assign(change.week.ledger[0].tools[0].periods[0].sessions[0],{tokens:{input:null,output:null,cacheRead:null,cacheWrite:null},apiUsd:null,fanout:[],
-      shipped:{estimated:true,commits:null,onMain:null,merges:null,prsOpen:null,repos:[]}});
-    return change;
-  });
-  const key=joined(summary).sessions.find(session=>session.title==='Release review').key;
-  const view=sessionView(summary,key,{now});
-  assert.deepEqual(view.figures.map(figure=>figure.value),['Unknown','372','Unknown','Unknown']);
-  assert.equal(view.fanout,null);
-  assert.deepEqual(view.shipped,{tone:'none',text:'Unknown',line:[]});
-});
-
 test('a share that is not zero never reads as zero',()=>{
   assert.deepEqual([0,0.04,0.09,0.1,2.84].map(shareText),['0.0%','<0.1%','<0.1%','0.1%','2.8%']);
   const tiny=weekView(feed(summary=>{
@@ -296,26 +259,6 @@ test('the Machine column is there only when sessions come from more than one com
   assert.equal(one.table.machines,false);
   const unnamed=weekView(feed(summary=>{summary.devices=[];return summary;}),{now});
   assert.equal(unnamed.table.rows[0].machine,'Mac','a computer with no name of its own keeps its kind');
-});
-
-test('where it went has one row per kind of work, with the rest as Other',()=>{
-  const summary=feed();
-  const key=weekView(summary,{now}).table.rows[0].key;
-  const review=sessionView(summary,key,{now}).kinds[1];
-  assert.deepEqual(review.models.map(model=>[model.label,Math.round(model.part*100)]),[['Opus',82],['Sonnet',18]]);
-  const busy=feed(change=>{
-    const session=change.week.ledger[0].tools[0].periods[0].sessions[0];
-    session.kinds=WORK_KINDS.flatMap((kind,index)=>[
-      {kind,model:'claude-opus-5-5',subagents:index,apiUsd:(index+1)*10},
-      {kind,model:'claude-sonnet-4-20250514',subagents:1,apiUsd:(index+1)*5}]);
-    return change;
-  });
-  const kinds=sessionView(busy,key,{now}).kinds;
-  assert.deepEqual(kinds.map(kind=>kind.label),['Main thread','Writing','Tests','Build','Design','Review passes','Other']);
-  assert.equal(kinds.at(-1).subagentsText,String(0+1+8+3),'search, research and other, on both models');
-  assert.ok(kinds.every(kind=>kind.lead==='Opus' && kind.models.length===2));
-  const unread=feed(change=>{change.week.ledger[0].tools[0].periods[0].sessions[0].kinds[0].apiUsd=null;return change;});
-  assert.equal(sessionView(unread,key,{now}).kinds.find(kind=>kind.label==='Search and read').shareText,'Unknown');
 });
 
 test('a computer or tool that could not be read makes totals, shares and paces Unknown, never computed from what is left',()=>{

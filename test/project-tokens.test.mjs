@@ -9,7 +9,6 @@ import {collectProjectTokens,projectName,repositoryRoot,sessionHash} from '../sc
 import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS,MAX_SUBAGENTS} from '../scripts/project-tokens.mjs';
 import {buildSnapshot,toolFolder} from '../scripts/collect.mjs';
 import {combine} from '../lib/combine.mjs';
-import {projectsView,clock,TOP_SESSIONS} from '../lib/view-projects.mjs';
 import {withFolder,testConfig,ownSnapshot} from './helpers.mjs';
 
 const now=new Date('2026-10-21T17:00:00Z');
@@ -125,24 +124,12 @@ test('today by project: sessions, subagent share, worktrees, and no paths, promp
   assert.equal(other.usd,null,'an unpriced model is Unknown cost, not free');
 }));
 
-test('the view shows shares and keeps Unknown apart from zero',async()=>withFolder(async folder=>{
-  const row=buildProjectTokens(await fixture(folder),'Mac',now);
-  const [device]=projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()});
-  assert.equal(device.status,'ok');
-  const sessions=device.projects[0].sessions;
-  assert.ok(sessions.some(session=>Math.abs(session.subagentShare-1000/2050)<1e-9));
-  assert.ok(sessions.some(session=>session.subagentShare===null));
-  const tomorrow=projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()+86400000});
-  assert.equal(tomorrow[0].status,'unknown','yesterday is not shown as today');
-}));
-
 test('a failed provider makes the whole day Unknown rather than a smaller number',async()=>withFolder(async folder=>{
   await claudeFixture(folder);
   const raw=await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),codexFolder:path.join(folder,'missing'),now,timeZone,home});
   assert.equal(raw.providers.codex.status,'unavailable');
   const row=buildProjectTokens(raw,'Mac',now);
   assert.equal(row.status,'unavailable');
-  assert.equal(projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()})[0].status,'unknown');
 }));
 
 test('a day with no requests is no records, which is the only zero',async()=>withFolder(async folder=>{
@@ -150,7 +137,6 @@ test('a day with no requests is no records, which is the only zero',async()=>wit
   const row=buildProjectTokens(await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home}),'Mac',now);
   assert.equal(row.status,'ok');
   assert.deepEqual(row.projects,[]);
-  assert.equal(projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()})[0].status,'no-records');
 }));
 
 test('rows are capped, and the rest of the projects keep their tokens',()=>{
@@ -192,8 +178,6 @@ test('combine checks a pulled row like a local read and keeps computers apart',a
   const text=JSON.stringify(combined);
   for(const secret of SECRETS)assert.ok(!text.includes(secret),secret);
   assert.deepEqual(combined.view.projectTokens.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','unavailable']]);
-  const devices=projectsView(combined.view,{host:'All',now:now.getTime()});
-  assert.deepEqual(devices.map(device=>[device.host,device.status]),[['Mac','ok'],['Windows','unknown']]);
   assert.throws(()=>cleanProjectTokens({...row,projects:[{...row.projects[0],totalTokens:1}]}),/Invalid project tokens/);
 }));
 
@@ -203,15 +187,8 @@ test('CODEX_HOME is used when it is absolute, like CLAUDE_CONFIG_DIR',()=>{
   assert.throws(()=>toolFolder('CODEX_HOME','.codex',{CODEX_HOME:'relative/codex'}),/must be absolute/);
 });
 
-test('an old reading from today shows its time, and a reading from the future is refused',async()=>withFolder(async folder=>{
+test('a reading from the future is refused',async()=>withFolder(async folder=>{
   const row=buildProjectTokens(await fixture(folder),'Mac',now);
-  const view=at=>projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:at})[0];
-  assert.equal(view(now.getTime()+10*60000).stale,false);
-  const old=view(now.getTime()+20*60000);
-  assert.equal(old.stale,true);
-  assert.equal(old.asOf,'1:00 PM','as of the reading, in the collecting computer\'s time zone');
-  assert.equal(old.status,'ok');
-  assert.equal(clock('2026-10-21T13:02:00.000Z',timeZone),'9:02 AM');
   assert.throws(()=>cleanProjectTokens({...row,checkedAt:new Date(Date.now()+6*60000).toISOString()}),/Invalid project tokens/);
   assert.equal(cleanProjectTokens({...row,checkedAt:new Date(Date.now()+60000).toISOString()}).status,'ok');
 }));
@@ -400,15 +377,6 @@ test('a forked Codex thread does not count the turns it copied from its parent',
   assert.equal(await read(),'unavailable');
 }));
 
-test('the unlisted sessions row is Unknown when a listed session is Unknown',()=>{
-  const session=(id,totalTokens)=>({id,start:'2026-10-21T13:00:00Z',end:'2026-10-21T13:30:00Z',totalTokens,subagentTokens:0});
-  const row=total=>({host:'Mac',status:'ok',date:'2026-10-21',timeZone,checkedAt:now.toISOString(),
-    projects:[{name:'demo-app',totalTokens:1000,sessionCount:3,sessions:[session('a',400),session('b',total)]}]});
-  const more=total=>projectsView({timezone:timeZone,projectTokens:[row(total)]},{host:'Mac',now:now.getTime()})[0].projects[0].more;
-  assert.deepEqual(more(100),{count:1,total:500});
-  assert.deepEqual(more(null),{count:1,total:null},'an Unknown session is not counted as zero tokens');
-});
-
 test('the demo build shows sample project tokens as ok on both computers',async()=>withFolder(async folder=>{
   const file=path.join(folder,'combined.json');
   execFileSync(process.execPath,[fileURLToPath(new URL('../scripts/preview.mjs',import.meta.url))],{env:{...process.env,PREVIEW_OUT:file},stdio:'ignore'});
@@ -471,10 +439,6 @@ test('only the largest subagents are kept, with the count of all of them',async(
   assert.equal(session.subagents.length,MAX_SUBAGENTS);
   assert.equal(session.subagents[0].totalTokens,1000*(MAX_SUBAGENTS+2)+7);
   assert.equal(session.subagentCount,MAX_SUBAGENTS+3);
-  const [top]=projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()})[0].sessions;
-  assert.equal(top.main,200);
-  assert.equal(top.otherSubagents,session.subagentTokens-session.subagents.reduce((sum,agent)=>sum+agent.totalTokens,0));
-  assert.equal(top.main+top.otherSubagents+top.subagents.reduce((sum,agent)=>sum+agent.total,0),top.total,'the parts add up to the session');
 }));
 
 test('a session with an Unknown subagent split lists no subagents',async()=>withFolder(async folder=>{
@@ -503,58 +467,5 @@ test('pulled subagent rows are checked, and a row from an older version still pa
   // A computer on an older version sends neither field: its subagents are Unknown, not none.
   const old=cleanProjectTokens(withSession(session=>Object.fromEntries(Object.entries(session).filter(([key])=>!['subagents','subagentCount'].includes(key)))));
   assert.deepEqual([old.projects[0].sessions[0].subagents,old.projects[0].sessions[0].subagentCount],[[],null]);
-  const [top]=projectsView({timezone:timeZone,projectTokens:[old]},{host:'Mac',now:now.getTime()})[0].sessions;
-  assert.deepEqual([top.subagents,top.otherSubagents],[[],6091],'the subagent tokens are still shown as one part');
 }));
 
-// A model with no price, so every cost here is Unknown.
-const model=tokens=>[{model:'claude-unpriced-9',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}];
-const listed=(id,tokens,provider='claude')=>({id,provider,start:'2026-10-21T13:00:00.000Z',end:'2026-10-21T13:30:00.000Z',totalTokens:tokens,subagentTokens:0,models:model(tokens)});
-const tokensRow=(projects,other=null)=>({host:'Mac',status:'ok',checkedAt:now.toISOString(),date:'2026-10-21',timeZone,providers:['claude','codex'],projects,other});
-const ranked=row=>projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()})[0].sessions;
-
-test('today\'s sessions are ranked across projects and engines, with their share of the day',()=>{
-  const row=tokensRow([
-    {name:'alpha',totalTokens:600,subagentTokens:0,usd:null,sessionCount:2,sessions:[listed('aaaaaaaaaa',500),listed('bbbbbbbbbb',100)]},
-    {name:'beta',totalTokens:400,subagentTokens:0,usd:null,sessionCount:1,sessions:[listed('cccccccccc',400,'codex')]}]);
-  const sessions=ranked(cleanProjectTokens(row));
-  assert.deepEqual(sessions.map(session=>[session.project,session.provider,session.total,session.share]),
-    [['alpha','Claude Code',500,0.5],['beta','Codex',400,0.4],['alpha','Claude Code',100,0.1]]);
-  assert.deepEqual(sessions[0].range,{start:'9:00 AM',end:'9:30 AM'});
-  assert.equal(sessions[0].main,500);
-});
-
-test('the ranking stops at the size a session it cannot see could have',()=>{
-  // alpha lists 2 of its 3 sessions: the third is at most 150 (what is left of the project).
-  const capped=tokensRow([
-    {name:'alpha',totalTokens:850,subagentTokens:0,usd:null,sessionCount:3,sessions:[listed('aaaaaaaaaa',500),listed('bbbbbbbbbb',200)]},
-    {name:'beta',totalTokens:260,subagentTokens:0,usd:null,sessionCount:2,sessions:[listed('cccccccccc',160),listed('dddddddddd',100)]}]);
-  assert.deepEqual(ranked(capped).map(session=>session.total),[500,200,160],'100 could be below the unlisted session');
-  // Projects past the cap are one row: any of their sessions could be as large as that row,
-  // but no larger than the smallest listed project.
-  const other=totalTokens=>({name:null,totalTokens,subagentTokens:0,usd:null,sessionCount:4,sessions:[]});
-  assert.deepEqual(ranked(tokensRow(capped.projects,other(250))).map(session=>session.total),[500]);
-  assert.equal(ranked(tokensRow(capped.projects,other(250)))[0].share,500/1360);
-  assert.deepEqual(ranked(tokensRow(capped.projects,other(900))).map(session=>session.total),[500],'bounded by the smallest listed project, 260');
-  // One session that worked in two projects is a row in each, told apart.
-  const twice=ranked(tokensRow([{...capped.projects[1],name:'gamma'},capped.projects[1]]));
-  assert.equal(new Set(twice.map(session=>session.id)).size,twice.length);
-  const many=tokensRow([{name:'alpha',totalTokens:100*(TOP_SESSIONS+2),subagentTokens:0,usd:null,sessionCount:TOP_SESSIONS+2,
-    sessions:Array.from({length:TOP_SESSIONS+2},(_,index)=>listed(String(index).padStart(10,'0'),100))}]);
-  assert.equal(ranked(many).length,TOP_SESSIONS);
-  const stale=projectsView({timezone:timeZone,projectTokens:[capped]},{host:'Mac',now:now.getTime()+86400000})[0];
-  assert.deepEqual(stale.sessions,[],'a reading from another day ranks nothing');
-});
-
-test('the sample snapshot ranks sessions with subagents on both computers',()=>{
-  const at=Date.parse('2026-11-30T17:00:00Z');
-  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',at)},{host:'Windows',snapshot:ownSnapshot('Windows',at)}],{now:at});
-  const devices=projectsView(combined.view,{host:'All',now:at});
-  assert.deepEqual(devices.map(device=>device.host),['Mac','Windows']);
-  for(const device of devices) {
-    assert.equal(device.sessions[0].project,'field-notes');
-    assert.equal(device.sessions[0].subagents.length,2);
-    assert.ok(device.sessions[0].otherSubagents>0);
-    assert.ok(device.sessions.some(session=>session.provider==='Codex' && session.main===null));
-  }
-});

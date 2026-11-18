@@ -1,6 +1,4 @@
 import { createRoot } from 'react-dom/client';
-import Dashboard from '../viewer/dashboard';
-import '../viewer/base.css';
-import '../viewer/dashboard.css';
+import R2App from '../viewer/r2/App';
 
-createRoot(document.getElementById('root')!).render(<Dashboard />);
+createRoot(document.getElementById('root')!).render(<R2App />);
