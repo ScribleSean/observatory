@@ -41,16 +41,16 @@ export function LimitMeter({ element }: ComponentRenderProps<MeterProps>) {
   // The lead is the stored forecast's sentence (the menu bar's line), read through the view-model and never recomputed here.
   const { engine: engines, headline } = resolveBlock('LimitMeter', { engine: wanted, window: null }, snapshot, scope, { now }) as { engine: LimitsVM['engines'][number] | null; headline: string };
   const overview = wanted === 'claude' && element.props.history !== true;
-  // The Overview's block also carries Codex and Grok when their limits are on and in the scope. A source that is off is
-  // named in one quiet line and never drawn as a meter.
+  // The Overview's block also carries Codex and Grok when their limits are on and in the scope. A source that is off
+  // appears nowhere here (Settings lists it). A source that is on but has nothing in range gets one quiet line.
   const grokOn = limitsOn(snapshot, 'grok'), codexOn = limitsOn(snapshot, 'codex');
   const grok = overview && grokOn && scope.sources.includes('grok') ? resolveBlock('GrokRequests', {}, snapshot, scope, { now }) as GrokRequestsVM | null : null;
   const codexVm = overview && codexOn && scope.sources.includes('codex') ? (resolveBlock('LimitMeter', { engine: 'codex', window: null }, snapshot, scope, { now }) as { engine: LimitsVM['engines'][number] | null }).engine : null;
   // An engine the app reads as off (a free plan with nothing left, unless turned on) is off here too.
   const codex = codexVm && codexVm.windows.some(each => each.state !== 'off') ? codexVm : null;
   const hidden = overview ? [
-    !codex && (codexOn && !codexVm ? 'Codex has no limit in this view' : 'Codex is off'),
-    !grokOn ? 'Grok is off' : !grok ? 'Grok has no requests in this range' : grok.total.value === 0 && 'Grok has no requests in this range',
+    !codex && codexOn && !codexVm && 'Codex has no limit in this view',
+    grokOn && (!grok || grok.total.value === 0) && 'Grok has no requests in this range',
   ].filter(Boolean) : [];
   return (
     <section className="blk" aria-label="Limits now">
