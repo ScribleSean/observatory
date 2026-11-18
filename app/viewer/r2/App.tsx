@@ -11,6 +11,7 @@ import { Overview } from './views/Overview';
 import { MoreView } from './blocks/more';
 import { OVERVIEW, askFor, blockList, fromAddress, pinsWith, savedViewsFrom, scopeFor, type Opened, type Pin } from './pins';
 import { BlockBoundary } from './Boundary';
+import { rememberOpener } from './opener';
 import { Loading } from './Loading';
 import type { Spec } from '@json-render/react';
 import './r2.css';
@@ -123,7 +124,7 @@ export function R2Shell({ snapshot, now, loaded, saved = [], initialHash = '', i
     const fromMenu = menu !== null;
     setOpened(next); setHidden([]); setOpenMetric(null); setSelected(null); closeMenu(fromMenu);
     if (!scope || !base) return;
-    visit('overview', searchOf(scopeFor(next.pin, scope, base.range.anchor))); window.scrollTo(0, 0);
+    visit('overview', searchOf(scopeFor(next.pin, scope, base.range.anchor, base))); window.scrollTo(0, 0);
   };
   const openPin = (next: Pin) => open({ pin: next, question: next.question, missed: false, answer: null });
   const onAsk = (text: string) => open(askFor(text, pins, { now, timeZone: zone }));
@@ -133,7 +134,7 @@ export function R2Shell({ snapshot, now, loaded, saved = [], initialHash = '', i
   const blocks = blockList(pin.spec as Spec);
   const ui: Ui | null = snapshot && ready && scope && base ? {
     snapshot, scope, now, view, today: base.range.anchor, frame: buildFrame(snapshot, scope, { now }), openMetric, selected, setScope,
-    toggleMetric: id => setOpenMetric(current => current === id ? null : id), openSession: setSelected,
+    toggleMetric: id => setOpenMetric(current => current === id ? null : id), openSession: id => { if (id) rememberOpener(); setSelected(id); },
   } : null;
 
   return (
@@ -177,13 +178,13 @@ export function R2Shell({ snapshot, now, loaded, saved = [], initialHash = '', i
           </div>
           <main>
             {view === 'overview' ? <Overview pin={pin} hidden={hidden} question={question} missed={missed} answer={opened.answer} onClear={() => openPin(OVERVIEW)} />
-              : view === 'sessions' ? <BlockBoundary name="Sessions"><Suspense fallback={<Loading />}><Sessions /></Suspense></BlockBoundary> : <MoreView title={title} />}
+              : view === 'sessions' ? <BlockBoundary key="sessions" name="Sessions"><Suspense fallback={<Loading />}><Sessions /></Suspense></BlockBoundary> : <MoreView title={title} />}
           </main>
         </div>
       </R2Context>}
       </div>
       {/* The panel is closed until a session is chosen, so it has nothing to show while its code loads. */}
-      {ui && <R2Context value={ui}><BlockBoundary name="The session panel"><Suspense fallback={null}><SessionPanel /></Suspense></BlockBoundary></R2Context>}
+      {ui && <R2Context value={ui}><BlockBoundary key={selected ?? 'none'} name="The session panel"><Suspense fallback={null}><SessionPanel /></Suspense></BlockBoundary></R2Context>}
     </div>
   );
 }

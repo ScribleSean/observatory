@@ -60,10 +60,12 @@ function sessionDay(source,session,part,{titles}) {
   const usd=values=>unknown?null:round(knownSum(values));
   const apiUsd=usd(requests.map(request=>request.usd));
   const repo=ranIn(session.gitRepo);
+  // A folder the rule refuses still ran the session, so its spend counts under 'other' with its commits.
+  const spendRepo=repo ?? (repoName(session.gitRepo)?'other':null);
   // Shipped, per repository folder. A repository written in that day that git could not read is Unknown.
   const ship=new Map();
   const entry=name=>{
-    if(!ship.has(name))ship.set(name,{repo:name,apiUsd:name===repo?apiUsd:0,commits:0,onMain:0,merges:0,units:new Set()});
+    if(!ship.has(name))ship.set(name,{repo:name,apiUsd:name===spendRepo?apiUsd:0,commits:0,onMain:0,merges:0,units:new Set()});
     return ship.get(name);
   };
   for(const commit of part.commits.filter(commit=>!commit.merge)) {

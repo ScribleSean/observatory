@@ -64,15 +64,18 @@ export type Opened = { pin: Pin; question: string | null; missed: boolean; answe
 export function askFor(text: string, pins: Pin[], { now, timeZone = 'UTC' }: { now?: number; timeZone?: string } = {}): Opened {
   const answer = answerQuestion(text, { savedViews: pins, now, timeZone });
   if (!answer.view) return { pin: OVERVIEW, question: text, missed: true, answer: null };
-  const listed = pins.find(row => row.id === answer.view?.id);
+  const listed = answer.view.id === 'ask' ? undefined : pins.find(row => row.id === answer.view?.id);
   const pin: Pin = listed ? { ...listed, patch: answer.patch ?? listed.patch ?? null } : { ...answer.view, patch: answer.patch };
   return { pin, question: text, missed: false, answer };
 }
 
-/** The scope a pin opens on: its patch over the current scope, with a range that names no day anchored on today. */
-export function scopeFor(pin: Pin, scope: Scope, today: string): Scope {
+/**
+ * The scope a pin opens on: its patch over the current scope, with a range that names no day anchored on today.
+ * A pin with no patch (the Overview, a saved view, Clear) opens on the base scope, so an Ask's filter does not linger.
+ */
+export function scopeFor(pin: Pin, scope: Scope, today: string, base: Scope = scope): Scope {
   const patch = pin.patch;
-  if (!patch) return scope;
+  if (!patch) return base;
   return patchScope(scope, patch.range && !patch.range.anchor ? { ...patch, range: { ...patch.range, anchor: today } } : patch);
 }
 

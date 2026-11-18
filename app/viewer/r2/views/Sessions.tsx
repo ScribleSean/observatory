@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Spec } from '@json-render/react';
 import { UNKNOWN, buildSessions, clock, count, share, useR2, type SessionRow } from '../data';
+import { takeOpener } from '../opener';
 import { SpecView } from '../registry';
 import { SESSIONS } from '../pins';
 import { BarList } from '../blocks/Breakdown';
@@ -40,7 +41,7 @@ export function SessionPanel() {
   // Opening moves focus into the panel and keeps Tab inside it. Closing hands focus back to whatever opened it.
   useEffect(() => {
     if (!shown) return;
-    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const before = takeOpener();
     panel.current?.querySelector<HTMLElement>('.x')?.focus();
     const keepFocus = (event: KeyboardEvent) => {
       if (event.key !== 'Tab' || !panel.current) return;

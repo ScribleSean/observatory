@@ -106,7 +106,8 @@ test('a repository folder name the snapshot refuses is counted as other, so its 
   const shipped=new Map([['claude:odd',{commits:[{repo:odd,sha:'c1',at:NOON+MIN,onMain:true,merge:false},{repo:comma,sha:'c2',at:NOON+2*MIN,onMain:false,merge:false}],branches:[]}]]);
   const {days:[day],commits}=build([s],{joined:{shipped,unread:new Set()}});
   assert.equal(day.sessions[0].repo,null,'the folder it ran in is dropped');
-  assert.deepEqual(day.sessions[0].ship,[{repo:'other',apiUsd:0,commits:2,onMain:1,merges:0}]);
+  assert.deepEqual(day.sessions[0].ship,[{repo:'other',apiUsd:day.sessions[0].apiUsd,commits:2,onMain:1,merges:0}]);
+  assert.ok(day.sessions[0].apiUsd>0,'the session spend is counted under other, so spend by repository is not undercounted');
   assert.deepEqual(day.ship,{commits:2,onMain:1,merges:0});
   assert.deepEqual(commits.map(commit=>commit.repoName),['other','other']);
   const clean=cleanLedgerHistory(wrap([snapshotDay(day,{listSessions:true,titles:true,frozen:false})]),{titles:true});

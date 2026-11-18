@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {sampleR2Combined} from '../lib/sample-r2.mjs';
+import {checkSavedView} from '../lib/r2-catalog.mjs';
 import {BLOCK_TYPES} from '../lib/r2-blocks.mjs';
 import {PINNED_QUESTIONS,VIEW_SPECS} from '../lib/r2-specs.mjs';
 
@@ -205,7 +206,11 @@ test('a pin click opens on its own range from today, and the address is followed
   const earlier=data.scopeFromSearch('?unit=week&anchor=2026-11-03',base);
   const month=scopeFor(PINS[2],earlier,'2026-11-18');
   assert.deepEqual([month.range.unit,month.range.anchor],['month','2026-11-18']);
-  assert.equal(scopeFor(OVERVIEW,earlier,'2026-11-18'),earlier,'the Overview pin keeps the scope');
+  assert.equal(scopeFor(OVERVIEW,earlier,'2026-11-18',base),base,'a pin with no patch opens on the base scope');
+  const asked=askFor('tokens by model on the mac last month',PINS,{now,timeZone:'America/New_York'});
+  const filtered=scopeFor(asked.pin,base,'2026-11-18');
+  assert.notDeepEqual(filtered.devices,base.devices,'the Ask narrowed the devices');
+  assert.equal(scopeFor(OVERVIEW,filtered,'2026-11-18',base),base,'Clear and Reset to Overview restore devices, range and sources');
   assert.deepEqual(fromAddress('#limits','?unit=month'),{view:'limits',search:'?unit=month'});
   assert.deepEqual(fromAddress('','?devices=Linux'),{view:'overview',search:'?devices=Linux'});
   assert.deepEqual(fromAddress('#nothing',''),{view:'overview',search:''});
@@ -218,6 +223,26 @@ test('a new pin draws fresh blocks, so a role or sort chosen under one pin does 
   };
   assert.equal(keyOf({pin:OVERVIEW,question:null}),'overview:');
   assert.equal(keyOf({pin:PINS[2],question:PINS[2].question}),'builders-month:What did Builders ship this month?');
+});
+
+test('a saved view cannot take the id ask, and a composed answer is never replaced by one',()=>{
+  const view={...PINS[2],id:'ask',origin:'composed',savedAt:'2026-11-01T00:00:00.000Z'};
+  delete view.patch;
+  assert.equal(checkSavedView(view).ok,false);
+  assert.equal(checkSavedView({...view,id:'asked'}).ok,true);
+  const result=askFor('tokens by model',[...PINS,view],{now,timeZone:'America/New_York'});
+  assert.deepEqual(blockList(result.pin.spec).map(block=>block.name),['Headline numbers','Where spend went','Over time']);
+});
+
+test('the view and session panel boundaries are keyed, so switching views or reopening recovers',async()=>{
+  // React keeps a boundary's failed state until its key changes, so the keys are what recovery rests on.
+  const src=readFileSync(new URL('../app/viewer/r2/blocks/more.tsx',import.meta.url),'utf8')+readFileSync(new URL('../app/viewer/r2/App.tsx',import.meta.url),'utf8');
+  assert.equal((src.match(/<BlockBoundary key=\{view\}/g) ?? []).length,2,'both More boundaries are keyed by view');
+  assert.ok(src.includes('<BlockBoundary key="sessions"') && src.includes("<BlockBoundary key={selected ?? 'none'} name=\"The session panel\""));
+  const {takeOpener}=await server.ssrLoadModule('/app/viewer/r2/opener.ts');
+  assert.equal(takeOpener(),null);
+  assert.ok(readFileSync(new URL('../app/viewer/r2/App.tsx',import.meta.url),'utf8').includes('if (id) rememberOpener(); setSelected(id)'),'the opener is read before the page goes inert');
+  assert.ok(readFileSync(new URL('../app/viewer/r2/views/Sessions.tsx',import.meta.url),'utf8').includes('takeOpener()'),'the panel restores to it');
 });
 
 test('a block that fails to draw says so in its place, and a view still loading shows the loading state',()=>{

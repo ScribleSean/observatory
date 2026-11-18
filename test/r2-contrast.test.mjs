@@ -37,9 +37,9 @@ test('the light theme from the system setting and the one chosen by hand use the
   for(const name of ['bg','panel','faint','muted','focus'])assert.equal(lightAuto[name],light[name],name);
 });
 
-test('faint text, which carries Unknown, reaches 4.5:1 on the page and on a panel in both themes',()=>{
+test('faint text, which carries Unknown, reaches 4.5:1 on every surface it sits on (page, panel, raised and hover) in both themes',()=>{
   for(const [theme,t] of Object.entries({dark,light}))
-    for(const surface of ['bg','panel'])assert.ok(ratio(t.faint,t[surface])>=4.5,`${theme} --faint on --${surface}: ${ratio(t.faint,t[surface]).toFixed(2)}`);
+    for(const surface of ['bg','panel','raised','hover'])assert.ok(ratio(t.faint,t[surface])>=4.5,`${theme} --faint on --${surface}: ${ratio(t.faint,t[surface]).toFixed(2)}`);
   assert.match(css,/\.unk\{color:var\(--faint\)/,'Unknown is drawn in the faint colour this test checks');
 });
 
@@ -50,4 +50,9 @@ test('the focus ring reaches 3:1 on the page and on a panel in both themes, and 
   // The input itself draws no outline, so the box around it carries the ring while it has focus.
   assert.match(css,/\.askbox input\{[^}]*outline:0/);
   assert.match(css,/\.askbox:focus-within\{[^}]*outline:2px solid var\(--focus\)/);
+});
+
+test('muted text reaches 4.5:1 on every surface token in both themes',()=>{
+  for(const [theme,t] of Object.entries({dark,light}))
+    for(const surface of ['bg','panel','raised','hover'])assert.ok(ratio(t.muted,t[surface])>=4.5,`${theme} --muted on --${surface}: ${ratio(t.muted,t[surface]).toFixed(2)}`);
 });
