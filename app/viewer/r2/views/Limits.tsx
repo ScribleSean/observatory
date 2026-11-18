@@ -6,7 +6,7 @@ import { buildLimits, resolveBlock } from '../../../../lib/view-r2.mjs';
 import { limitHistorySeries } from '../../../../lib/view-limit-history.mjs';
 import { LimitMeter, windowNow, paceWords, type Engine } from '../blocks/LimitMeter';
 import { GrokRequests } from '../blocks/GrokRequests';
-import { Block, BarList, Empty, StateView, Strip, UNKNOWN, addDays, clock, dateIn, dateSpan, dayClock, names, shortDate, span, weekday, type Cell } from './parts';
+import { Block, BarList, Empty, StateView, Strip, Tail, UNKNOWN, addDays, clock, dateIn, dateSpan, dayClock, names, shortDate, span, weekday, type Cell } from './parts';
 import './more.css';
 
 export type Reading = { at: number; used: number };
@@ -148,6 +148,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
           )}
         </Block>
       )}
+      <Tail>
       {weekly && (
         <Block title="This week by device" sub="points of the weekly limit"
           foot={stale.length ? <><span className="dot stale" />{names(stale)} could not be read for every day of this window</> : undefined}>
@@ -165,6 +166,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
           {codex.windows.length ? <LimitMeter engine={codex} now={now} timeZone={timeZone} /> : <Empty title={UNKNOWN} line="Codex has not reported a limit yet." />}
         </Block>
       )}
+      </Tail>
     </div>
   );
 }

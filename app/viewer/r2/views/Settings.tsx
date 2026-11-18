@@ -4,11 +4,11 @@
 import type { ReactNode } from 'react';
 import type { DeviceChip, Scope } from '../../../../lib/scope.mjs';
 import type { Frame, SettingsVM } from '../../../../lib/view-r2.mjs';
-import { buildSettings } from '../../../../lib/view-r2.mjs';
+import { buildSessions, buildSettings } from '../../../../lib/view-r2.mjs';
 import { SOURCE_SETTINGS, WEEK_STARTS_ON } from '../../../../lib/scope.mjs';
 import { SESSION_DAYS } from '../../../../lib/r2-shape.mjs';
 import { ROLES } from '../../../../lib/roles.mjs';
-import { Block, UNKNOWN, clock, dateIn, money, names, plural, shortDate } from './parts';
+import { Block, Side, UNKNOWN, clock, dateIn, money, names, plural, shortDate } from './parts';
 import './more.css';
 
 // How often each computer collects: scripts/collect.mjs writes intervalSeconds 300 and scripts/setup.mjs
@@ -79,12 +79,12 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
             return (
               <tr key={role}><td className="name"><span className="role">[{role}]</span> {week?.example ?? <span className="fa">no session this week</span>}</td>
                 <td>{ROLE_WORK[role]}</td>
-                {/* zero-ok: a role missing from this week's list ran no session this week */}
-                <td className={`r hide-s${roleWeek ? '' : ' fa'}`}>{roleWeek ? `${plural(week?.sessions ?? 0, 'session')} · ${money(week?.spend ?? 0)}` : UNKNOWN}</td></tr>
+                <td className={`r hide-s${roleWeek && week ? '' : ' fa'}`}>{!roleWeek ? UNKNOWN : week ? `${plural(week.sessions, 'session')} · ${money(week.spend)}` : 'None this week'}</td></tr>
             );
           })}</tbody>
         </table></div>
       </Block>
+      <Side>
       {pins && pins.length > 0 && (
         <Block title="Pinned questions" sub="saved arrangements of blocks">
           {pins.map(pin => <div key={pin.id} className="li"><span className="t"><div><b>{pin.title}</b></div><div>{pin.blocks.join(' · ')}</div></span></div>)}
@@ -95,7 +95,8 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
         <Row name="Spend basis" state="Tokens priced at public API rates" value={<span className="mu">API equivalent</span>} />
         <Row name="Week starts" state="Limit windows keep their own reset times" value={<span className="mu">{WEEKDAYS[WEEK_STARTS_ON]}</span>} />
       </Block>
-      <Block span={8} title="Data" sub="monitor only, nothing here can stop or change a session">
+      </Side>
+      <Block span={12} title="Data" sub="monitor only, nothing here can stop or change a session">
         <Row name="Where it lives" state="On each computer" what={<>Every number is read from files on your own computers. Nothing is sent anywhere. The folder is set by <code>dataFolder</code> in {CONFIG_FILE_NAME}, which the hub does not share</>}
           value={<span className="fa">{UNKNOWN}</span>} />
         <Row name="History kept" state={firstDate ? `Since ${shortDate(firstDate)}, ${firstDate.slice(0, 4)}` : 'No history yet'}
@@ -109,7 +110,15 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
 export const firstLedgerDate = (view: { ledgerHistory?: { firstDate: string | null }[] }) =>
   (view.ledgerHistory ?? []).map(row => row.firstDate).filter((date): date is string => Boolean(date)).sort()[0] ?? null;
 
-export function Settings({ snapshot, scope, now, roleWeek = null, pins = null }: { snapshot: { view: { ledgerHistory?: { firstDate: string | null }[] } }; scope: Scope; now: number; roleWeek?: RoleWeek[] | null; pins?: Pin[] | null }) {
+/** Sessions and spend per role this week, with the largest session of each role as its example. */
+export function roleWeekOf(snapshot: object, scope: Scope, now: number): RoleWeek[] {
+  const week = { ...scope, range: { unit: 'week' as const, anchor: scope.range.anchor } };
+  const sessions = buildSessions(snapshot, week, { now, groupBy: 'role', limit: 500 });
+  return (sessions.groups ?? []).map(group => ({ role: group.key, sessions: group.count, spend: group.spend.value, example: group.rows[0]?.name.object ?? null }));
+}
+
+export function Settings({ snapshot, scope, now, pins = null }: { snapshot: { view: { ledgerHistory?: { firstDate: string | null }[] } }; scope: Scope; now: number; pins?: Pin[] | null }) {
   const vm = buildSettings(snapshot, scope, { now });
+  const roleWeek = roleWeekOf(snapshot, scope, now);
   return <SettingsBody vm={vm} firstDate={firstLedgerDate(snapshot.view)} roleWeek={roleWeek} pins={pins} now={now} />;
 }

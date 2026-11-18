@@ -3,7 +3,7 @@
 import type { Frame, TokensVM } from '../../../../lib/view-r2.mjs';
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildTokens } from '../../../../lib/view-r2.mjs';
-import { Block, BarList, Columns, Empty, StateView, Strip, UNKNOWN, bucketWord, dateIn, dayColumns, money, names, partBars, share, tokens, type Cell } from './parts';
+import { Block, BarList, Columns, Tail, Empty, StateView, Strip, UNKNOWN, bucketWord, dateIn, dayColumns, money, names, partBars, share, tokens, type Cell } from './parts';
 import './more.css';
 
 export type TokenKinds = { cacheRead: number | null; cacheWrite: number | null; output: number | null; input: number | null };
@@ -42,6 +42,7 @@ export function TokensBody({ vm, kinds, now }: TokensData) {
       <Block title="Spend by model" sub="API equivalent">
         <div className="bb"><BarList items={partBars(vm.spend.breakdowns.model)} format={money} accent limit={6} /></div>
       </Block>
+      <Tail>
       <Block title="Tokens by kind">
         <div className="bb"><BarList items={KINDS.map(([key, label]) => ({ key, label, value: kinds[key] }))} format={tokens} /></div>
       </Block>
@@ -51,6 +52,7 @@ export function TokensBody({ vm, kinds, now }: TokensData) {
       <Block title="Spend by kind of work" foot={<>Is the top model doing small jobs? See Drift.</>}>
         <div className="bb"><BarList items={partBars(vm.spend.breakdowns.kind)} format={money} accent limit={8} /></div>
       </Block>
+      </Tail>
     </div>
   );
 }

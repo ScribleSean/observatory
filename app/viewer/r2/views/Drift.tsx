@@ -6,7 +6,7 @@ import type { DeviceChip, Scope } from '../../../../lib/scope.mjs';
 import type { ConfigEcho } from '../../../../lib/r2-shape.mjs';
 import type { DriftVM, Frame } from '../../../../lib/view-r2.mjs';
 import { buildDrift } from '../../../../lib/view-r2.mjs';
-import { Block, Empty, Strip, UNKNOWN, clock, plural, span, type Cell } from './parts';
+import { Block, Empty, Side, Strip, UNKNOWN, clock, plural, span, type Cell } from './parts';
 import './more.css';
 
 type Profile = { date: string; model: string; effort: string; speed: string; totalTokens?: number };
@@ -76,7 +76,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
   return (
     <div className="grid more">
       <Strip cells={cells} four />
-      <Block span={8} rows={2} title="Setup drift" sub="is every computer running the same setup?"
+      <Block span={8} title="Setup drift" sub="is every computer running the same setup?"
         foot={stale.length ? <><span className="dot stale" />{stale.map(device => `${device.name} values are from the ${clock(device.since, timeZone)} read`).join('. ')}</> : <>Values from each computer&apos;s observatory.config.json and its latest sessions</>}>
         <div className="tw"><table>
           <thead><tr><th>Setting</th>{devices.map(device => <th key={device.host}>{device.name}</th>)}<th>State</th></tr></thead>
@@ -90,6 +90,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
           ))}</tbody>
         </table></div>
       </Block>
+      <Side>
       <Block title="Model drift" sub="last 30 days">
         {models.length === 0 ? <Empty title={UNKNOWN} line="No replies have been read on any computer yet. This shows when a model answers differently than it used to." /> : (
           <div className="mlist">{models.map(model => (
@@ -104,6 +105,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
             <span className={device.state === 'stale' ? 'fa' : 'mu'}>{device.state === 'stale' && <span className="dot stale" style={{ marginRight: 6 }} />}{clock(device.since, timeZone)}</span></div>
         ))}
       </Block>
+      </Side>
     </div>
   );
 }

@@ -211,4 +211,6 @@ test('every view renders through the real view-models for every range unit, with
   assert.ok(limits.includes('Grok') && limits.includes('64% left'));
   const settings = html(createElement(Settings, { snapshot: combined, scope: base, now: NOW }));
   for (const control of ['<input', '<button', '<select']) assert.ok(!settings.includes(control), control);
+  assert.ok(/\d+ sessions? · \$\d/.test(settings) && settings.includes('Lantern'), 'this week per role, with an example session');
+  assert.ok(settings.includes('None this week'), 'a role with no session this week says so, never $0');
 });

@@ -9,6 +9,7 @@ import { Tokens } from '../views/Tokens';
 import { ScreenTime } from '../views/ScreenTime';
 import { Drift } from '../views/Drift';
 import { Settings } from '../views/Settings';
+import { PINS, blockList } from '../specs';
 import { LimitMeter as MeterRows } from './LimitMeter';
 import { GrokRequests as GrokBlock, GrokRequestsRow } from './GrokRequests';
 
@@ -22,6 +23,7 @@ export function MoreView({ title }: { title: string }) {
   const { view, snapshot, scope, now } = useR2();
   const View = VIEWS[view as keyof typeof VIEWS];
   if (!View) return <div className="grid"><section className="blk"><div className="empty"><b>{title}</b>This view is not part of this build.</div></section></div>;
+  if (view === 'settings') return <Settings snapshot={snapshot as never} scope={scope} now={now} pins={PINS.map(pin => ({ id: pin.id, title: pin.title, blocks: blockList(pin.spec as never).map(block => block.name) }))} />;
   return <View snapshot={snapshot as never} scope={scope} now={now} />;
 }
 

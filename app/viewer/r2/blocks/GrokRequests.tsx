@@ -4,11 +4,11 @@ import type { GrokRequestsVM } from '../../../../lib/view-r2.mjs';
 import { UNKNOWN, dayClock, plural, weekday } from '../views/parts';
 import '../views/more.css';
 
-function Spark({ days, height }: { days: GrokRequestsVM['days']; height?: number }) {
+function Spark({ days, tall = false }: { days: GrokRequestsVM['days']; tall?: boolean }) {
   // zero-ok: bar height scale only, an Unknown day draws hollow
   const top = Math.max(...days.map(day => day.value ?? 0), 1);
   return (
-    <div className="spark" style={height ? { height, marginTop: 0 } : undefined}>
+    <div className={tall ? "spark tall" : "spark"}>
       {days.map(day => day.value === null
         ? <i key={day.date} className="z unk" style={{ height: '100%' }} title={`${weekday(day.date, true)}: Unknown, not read`} />
         : <i key={day.date} className={day.value ? undefined : 'z'} style={{ height: `${day.value ? Math.max(6, 100 * day.value / top) : 3}%` }} title={`${weekday(day.date, true)}: ${plural(day.value, 'request')}`} />)}
@@ -49,7 +49,7 @@ export function GrokRequests({ vm, timeZone, today }: { vm: GrokRequestsVM; time
     <section className="blk s4" aria-label="Grok requests">
       <div className="bh"><h3>Grok</h3><span className="fa">requests per day, last {vm.days.length} days</span></div>
       <div className="bb">
-        <Spark days={vm.days} height={56} />
+        <Spark days={vm.days} tall />
         <div className="kv" style={{ marginTop: 'var(--sp-3)' }}>
           <span>Last 7 days</span>
           <span>{weekUnknown ? `${UNKNOWN}, a day was not read` : `${plural(weekTotal, 'request')}${peak && peak.value ? `, peak ${peak.value} on ${weekday(peak.date, true)}` : ''}`}</span>

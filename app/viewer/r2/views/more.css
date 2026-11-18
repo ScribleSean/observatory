@@ -18,7 +18,7 @@
 .blk>.lim:last-child{padding-bottom:var(--sp-3)}
 
 /* requests per day */
-.spark{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;align-items:end;height:26px;margin:var(--sp-2) 0 6px}
+.spark{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;align-items:end;height:clamp(24px,7cqi,40px);margin:var(--sp-2) 0 6px}
 .spark i{display:block;background:var(--g1);border-radius:1.5px 1.5px 0 0;min-height:1px}
 .spark i.z{background:var(--line-strong)}
 .spark i.unk{background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong)}
@@ -26,7 +26,7 @@
 .kv span:nth-child(odd){color:var(--faint)}
 
 /* will the week last */
-.burn{position:relative;height:clamp(140px,28cqi,220px);margin:var(--sp-2) 0 26px 2.6em}
+.burn{position:relative;height:clamp(140px,22cqi,240px);margin:var(--sp-2) 0 26px 2.6em}
 .burn svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .burn .y{position:absolute;right:calc(100% + .6em);font-size:10.5px;color:var(--faint);transform:translateY(-50%)}
 .burn .x{position:absolute;bottom:-20px;font-size:10.5px;color:var(--faint);transform:translateX(-50%);white-space:nowrap}
@@ -54,7 +54,7 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 .keys code{overflow-wrap:anywhere;text-align:right;max-width:100%}
 
 /* Each block is a size container, so its rows follow the block's width, not the window's. */
-.more>.blk{container-type:inline-size}
+.more .blk{container:blk / inline-size}
 @container (max-width:520px){
   .srow{grid-template-columns:minmax(0,1fr) auto}.srow .what{grid-column:1/-1;grid-row:2}
 }
@@ -69,13 +69,22 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 .more .kv{align-items:first baseline}
 .more .kv span{min-width:0;overflow-wrap:anywhere}
 
-/* spans on these views' own grids: the shell's sections set spans for their children, these views set them per block */
-.grid>.s12{grid-column:span 12}.grid>.s8{grid-column:span 8}.grid>.s6{grid-column:span 6}.grid>.s4{grid-column:span 4}
-.grid>.rows2{grid-row:span 2}.grid>.rows3{grid-row:span 3}
+/* Layout (SPEC-UI.md, Changes Nov 18, items 4 to 6): spans on these views' own grids, no row spans.
+   A span 8 block sits beside a side column of span 4 blocks that share its height. Span 4 blocks that
+   close a view share one tail row. At 1100 and below the grid becomes a wrapping row. */
+.grid.more>.s12{grid-column:span 12}.grid.more>.s8{grid-column:span 8}.grid.more>.s6{grid-column:span 6}.grid.more>.s4{grid-column:span 4}
+.more .side{grid-column:span 4;display:flex;flex-direction:column;gap:var(--gap);min-width:0}
+.more .side>.blk{flex:1 1 auto}
+.more .tail{grid-column:span 12;display:flex;gap:var(--gap);min-width:0}
+.more .tail>.blk{flex:1 1 0;min-width:0}
 @media (max-width:1100px){
-  .grid>.s8,.grid>.s6{grid-column:span 12}.grid>.s4{grid-column:span 6}
-  .grid>.rows2,.grid>.rows3{grid-row:auto}
+  .grid.more{display:flex;flex-wrap:wrap}
+  .grid.more>*,.more .side>*,.more .tail>*{flex:1 1 100%;min-width:0}
+  .more .side,.more .tail{display:contents}
+  .grid.more>.s4,.more .side>.s4,.more .tail>.s4{flex:1 1 calc(50% - var(--gap))}
 }
 @media (max-width:640px){
-  .grid>.s4{grid-column:span 12}
+  .grid.more>.s4,.more .side>.s4,.more .tail>.s4{flex:1 1 100%}
 }
+.spark.tall{height:clamp(40px,12cqi,64px);margin-top:0}
+.more .li .t,.more .li .t div{white-space:normal;overflow:visible;text-overflow:clip}

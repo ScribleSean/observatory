@@ -5,7 +5,7 @@ import type { Frame, Num, ScreenTimeVM } from '../../../../lib/view-r2.mjs';
 import type { ConfigEcho } from '../../../../lib/r2-shape.mjs';
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildScreenTime, metric } from '../../../../lib/view-r2.mjs';
-import { Block, BarList, Columns, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, hours, money, names, partBars, plural, share, type Cell, type Column } from './parts';
+import { Block, BarList, Columns, Side, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, hours, money, names, partBars, plural, share, type Cell, type Column } from './parts';
 import './more.css';
 
 export type ScreenTimeData = { vm: ScreenTimeVM; spend: Num | null; config: ConfigEcho[]; now: number };
@@ -50,12 +50,12 @@ export function ScreenTimeBody({ vm, spend, config, now }: ScreenTimeData) {
   return (
     <div className="grid more">
       <Strip cells={cells} foot={foot} four />
-      <Block span={8} rows={2} title="Hours at the screen" sub={`per ${bucketWord(period.unit)}, ${names(tracked.map(device => device.name))}`}>
+      <Block span={8} title="Hours at the screen" sub={`per ${bucketWord(period.unit)}, ${names(tracked.map(device => device.name))}`}>
         <Columns columns={columns} format={hours} hint={hourly ? 'Hover a bar for its minutes' : 'Hover a bar for its hours'} />
       </Block>
-      <Block span={4} rows={2} title="By kind of app" sub="share of screen time">
+      <Side><Block span={4} title="By kind of app" sub="share of screen time">
         <div className="bb">{categories.length ? <BarList items={partBars(categories)} format={hours} /> : <div className="fa">Not tracked by kind of app on these computers.</div>}</div>
-      </Block>
+      </Block></Side>
     </div>
   );
 }

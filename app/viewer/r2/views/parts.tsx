@@ -94,11 +94,17 @@ export function names(list: string[]) {
 }
 
 type Span = 4 | 6 | 8 | 12;
-export function Block({ span = 4, rows, title, sub, right, foot, className = '', children, label }: {
-  span?: Span; rows?: 2 | 3; title?: ReactNode; sub?: ReactNode; right?: ReactNode; foot?: ReactNode; className?: string; children?: ReactNode; label?: string;
+
+/** A span 4 column beside a span 8 block: its blocks share the spare height, so both bottoms meet. */
+export const Side = ({ children }: { children: ReactNode }) => <div className="side">{children}</div>;
+/** The span 4 blocks that close a view, in one row of equal parts, so no cell is left empty. */
+export const Tail = ({ children }: { children: ReactNode }) => <div className="tail">{children}</div>;
+
+export function Block({ span = 4, title, sub, right, foot, className = '', children, label }: {
+  span?: Span; title?: ReactNode; sub?: ReactNode; right?: ReactNode; foot?: ReactNode; className?: string; children?: ReactNode; label?: string;
 }) {
   return (
-    <section className={`blk s${span}${rows ? ` rows${rows}` : ''}${className ? ` ${className}` : ''}`} aria-label={label}>
+    <section className={`blk s${span}${className ? ` ${className}` : ''}`} aria-label={label}>
       {title !== undefined && <div className="bh"><h3>{title}</h3>{sub !== undefined && <span className="fa">{sub}</span>}
         {right !== undefined && <><span className="fill" />{right}</>}</div>}
       {children}
