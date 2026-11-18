@@ -1,10 +1,9 @@
 import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
 import { freshness, format, readingTime, deviceLabel } from '../../lib/panel-data.mjs';
-import { shiftDemoClock } from '../../lib/demo-clock.mjs';
 import { hasLastWeek } from '../../lib/view-week.mjs';
 import { sessionView } from '../../lib/view-session.mjs';
-import { useSkin } from './skin';
+import R2App from './r2/App';
 
 import { WeekView } from './week/WeekView';
 import { SessionPanel } from './week/SessionPanel';
@@ -20,7 +19,6 @@ export type Combined = Summary & { view: Snapshot };
 /** Week is home. History holds the long view, with the older detail pages under it. A session opens over Week. */
 export type Route = { view: 'week' | 'history'; detail: Detail | null; session: string | null };
 const HOME: Route = { view: 'week', detail: null, session: null };
-const HISTORY_REFRESH_MS = 5 * 60000;
 const isDetail = (value: string | undefined): value is Detail => DETAILS.some(([id]) => id === value);
 
 export function routeFromHash(hash: string): Route {
@@ -45,14 +43,6 @@ export function settledRoute(route: Route, { ready, found }: { ready: boolean; f
 export function hashOf(route: Route): string {
   if (route.view === 'history') return route.detail ? `#history/${route.detail}` : '#history';
   return route.session ? `#session/${route.session}` : '';
-}
-
-async function fetchJson<T>(file: string): Promise<T | null> {
-  try {
-    const response = await fetch(`./local/${file}`, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
-    const body = response.ok ? await response.json() as T : null;
-    return body && typeof body === 'object' ? shiftDemoClock(body) : null;
-  } catch { return null; }
 }
 
 // Shown only when something is wrong: a computer that stopped reporting or could not be reached.
@@ -80,49 +70,9 @@ function SameRepo({ collisions }: { collisions: Collision[] }) {
   );
 }
 
-export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: string }) {
-  const { css, className } = useSkin(initialSkin);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [history, setHistory] = useState<Combined | null>(null);
-  const [historyFailed, setHistoryFailed] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [route, setRoute] = useState<Route>(() => routeFromHash(window.location.hash));
-  const [now, setNow] = useState(() => Date.now());
-
-  const load = useCallback(async () => {
-    const body = await fetchJson<Summary>('summary.json');
-    setSummary(body?.glance ? body : null);
-    setNow(Date.now());
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(() => { void load(); }, 0);
-    const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) void load(); }, 30000);
-    const visible = () => { if (!document.hidden) void load(); };
-    const follow = () => setRoute(routeFromHash(window.location.hash));
-    document.addEventListener('visibilitychange', visible);
-    window.addEventListener('hashchange', follow);
-    return () => { clearTimeout(first); clearInterval(tick); document.removeEventListener('visibilitychange', visible); window.removeEventListener('hashchange', follow); };
-  }, [load]);
-
-  // The full history is large, so it loads only while it is open, and refreshes slowly.
-  const historyOpen = route.view === 'history';
-  useEffect(() => {
-    if (!historyOpen) return;
-    let live = true;
-    const read = async () => { setHistoryFailed(false); const body = await fetchJson<Combined>('combined.json'); if (live) { setHistory(body?.view ? body : null); setHistoryFailed(!body?.view); } };
-    void read();
-    const timer = setInterval(() => { if (!document.hidden) void read(); }, HISTORY_REFRESH_MS);
-    return () => { live = false; clearInterval(timer); };
-  }, [historyOpen]);
-
-  const go = useCallback((next: Route) => {
-    setRoute(next);
-    window.history.replaceState(window.history.state, '', hashOf(next) || `${window.location.pathname}${window.location.search}`);
-  }, []);
-  return <DashboardView summary={summary} history={history} loaded={loaded} now={now} css={css} className={className}
-    route={route} onRoute={go} historyFailed={historyFailed} />;
+/** The dashboard entry is the round 2 app. The Week and History views below stay for their tests until round 2 replaces them. */
+export default function Dashboard() {
+  return <R2App />;
 }
 
 type DashboardViewProps = {
