@@ -116,6 +116,7 @@ export const STRINGS = {
     "iconTip": "{percent} used, {pace}",
     "onPace": "on pace",
     "overPace": "over pace",
+    "paceUnknown": "pace Unknown",
     "iconStale": "Last read {time}"
   },
   "ledger": {

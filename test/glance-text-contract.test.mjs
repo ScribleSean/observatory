@@ -409,17 +409,22 @@ test('a Mac hub with Codex off still shows the Codex card for another computer t
   assert.doesNotMatch(JSON.stringify([combined.glance.lines, limitsVM(combined).engines, limitsPage(combined)]), /Codex/);
 });
 
-// The menu bar and tray icon (lib/glance-icon.mjs) against the dashboard's Limits view for the Claude weekly window:
-// the ring is its percent used, and the center is the meter's own run-out rule (windowNow), stale when the view dates
-// the reading or the forecast, and off when the view has no Claude weekly window to show.
+// The menu bar and tray icon (lib/glance-icon.mjs) against the dashboard's Limits view for the Claude weekly window,
+// read from the view model's own fields: its percent used, whether it dates the reading, and the stored forecast it
+// shows (current only). Room is on pace, runs-out or out is over pace, and anything else is a pace the dashboard does
+// not state, which the icon shows as stale. No Claude weekly window in the view is off.
+const DAY_CLOCK = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d\d\s(AM|PM)$/u;
 function iconFromLimits(combined, at = now) {
   const weekly = limitsVM(combined, at).engines.find(engine => engine.engine === 'claude')?.windows.find(window => window.windowId === 'seven_day');
-  if (!weekly || weekly.state === 'off' || weekly.state === 'absent') return { state: 'off', fraction: null, text: strings.glance.off };
-  const meter = windowNow(weekly, at), used = meter.used === null ? null : Math.round(meter.used);
-  if (weekly.state === 'stale' || weekly.forecastStale) return { state: 'stale', fraction: used === null ? null : used / 100 };
-  return { state: meter.runsOut ? 'over-pace' : 'on-pace', fraction: used / 100, text: `${used}%` };
+  if (!weekly || weekly.state === 'off' || weekly.state === 'absent') return { state: 'off', fraction: null, text: 'Off', tip: 'Off' };
+  const used = weekly.remaining === null ? null : Math.round(100 - weekly.remaining), fraction = used === null ? null : used / 100;
+  if (used === null || weekly.state === 'stale' || weekly.asOf) return { state: 'stale', fraction, text: DAY_CLOCK, tip: /^Last read /u };
+  const status = weekly.forecastStale ? null : weekly.forecast?.status ?? null;
+  const [state, pace] = status === 'room' ? ['on-pace', 'on pace'] : ['runs-out', 'out'].includes(status) ? ['over-pace', 'over pace'] : ['stale', 'pace Unknown'];
+  return { state, fraction, text: `${used}%`, tip: `${used}% used, ${pace}` };
 }
 const iconOf = (combined, at = now) => glanceView(clone(combined), { now: at, timeZone: 'America/New_York' }).icon;
+const edited = (combined, change) => { const copy = clone(combined); change(copy.glance.forecast); return copy; };
 
 test('the menu bar and tray icon shows the Limits view\'s share used and its pace verdict, never its own', () => {
   const cases = [
@@ -427,6 +432,10 @@ test('the menu bar and tray icon shows the Limits view\'s share used and its pac
     { name: 'on pace', combined: fleet({ weeklyRemaining: 80 }), at: now, state: 'on-pace' },
     { name: 'an old reading', combined: fleet({ age: 20 }), at: now, state: 'stale' },
     { name: 'an old snapshot', combined: fleet({ weeklyRemaining: 80 }), at: now + 20 * MINUTE, state: 'stale' },
+    { name: 'a reading the reset has passed', combined: fleet({ weeklyRemaining: 80 }), at: now + 53 * HOUR, state: 'stale' },
+    { name: 'an old forecast over a current reading', combined: edited(fleet({ weeklyRemaining: 80 }), forecast => { forecast.asOf = iso(now - HOUR); }), at: now, state: 'stale' },
+    { name: 'no stored forecast for the window', combined: edited(fleet({ weeklyRemaining: 80 }), forecast => { forecast.windows = forecast.windows.filter(window => window.windowId !== 'seven_day'); }), at: now, state: 'stale' },
+    { name: 'no stored forecast at all', combined: edited(fleet({ weeklyRemaining: 80 }), forecast => { delete forecast.asOf; delete forecast.windows; }), at: now, state: 'stale' },
     { name: 'the Claude limit off', combined: fleet({ sources: { ...CODEX_OFF, claudeLimits: false } }), at: now, state: 'off' },
   ];
   for (const { name, combined, at, state } of cases) {
@@ -434,19 +443,23 @@ test('the menu bar and tray icon shows the Limits view\'s share used and its pac
     assert.equal(icon.state, state, name);
     assert.equal(icon.state, dashboard.state, `${name}: the icon's center and the Limits view`);
     assert.equal(icon.fraction, dashboard.fraction, `${name}: the ring and the Limits view's percent used`);
-    if (dashboard.text) assert.equal(icon.text, dashboard.text, `${name}: the number beside the icon`);
+    for (const key of ['text', 'tip'])
+      if (typeof dashboard[key] === 'string') assert.equal(icon[key], dashboard[key], `${name}: ${key}`);
+      else assert.match(icon[key], dashboard[key], `${name}: ${key}`);
   }
-  // The words: the percent and the verdict lead the tray tip, an old reading says when it was read, off says Off.
   assert.deepEqual([iconOf(fleet()).text, iconOf(fleet()).tip], ['73%', '73% used, over pace']);
-  assert.equal(iconOf(fleet({ weeklyRemaining: 80 })).tip, '20% used, on pace');
   const old = iconOf(fleet({ age: 20 }));
   assert.equal(old.fraction, 0.73);
-  assert.match(old.text, /^7:20\sAM$/u);
-  assert.match(old.tip, /^Last read 7:20\sAM$/u);
+  assert.match(old.text, /^Wed 7:20\sAM$/u);
+  assert.equal(old.tip, `Last read ${old.text}`);
   assert.deepEqual(iconOf(fleet({ sources: { ...CODEX_OFF, claudeLimits: false } })), { state: 'off', fraction: null, text: 'Off', tip: 'Off', stale: null, accent: false });
   // What the apps switch to once glance.json itself goes old: the same ring, frozen, with when it was read.
   const live = iconOf(fleet());
   assert.equal(live.stale.fraction, live.fraction);
-  assert.match(live.stale.text, /^7:39\sAM$/u);
+  assert.match(live.stale.text, /^Wed 7:39\sAM$/u);
+  // A read time ahead of the clock is no read time: it is never shown.
+  const ahead = clone(fleet({ age: 20 }));
+  for (const row of ahead.glance.limits) row.checkedAt = iso(now + HOUR);
+  ahead.generatedAt = iso(now + HOUR);
+  assert.equal(iconOf(ahead).text, 'Unknown');
 });
-

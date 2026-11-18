@@ -138,7 +138,8 @@ function agree(combined) {
   // runs out or is out before the reset.
   const weeklyMeter = limits.engines.find(engine => engine.engine === 'claude').windows.find(row => row.windowId === 'seven_day');
   assert.equal(glance.icon.fraction, Math.round(100 - weeklyMeter.remaining) / 100, 'icon ring');
-  assert.equal(glance.icon.state, ['runs-out', 'out'].includes(weeklyMeter.forecast.status) ? 'over-pace' : 'on-pace', 'icon center');
+  const verdict = weeklyMeter.forecast?.status;
+  assert.equal(glance.icon.state, verdict === 'room' ? 'on-pace' : ['runs-out', 'out'].includes(verdict) ? 'over-pace' : 'stale', 'icon center');
   // The computers' state is decided once, and every surface shows the stored label.
   for (const device of combined.devices) {
     assert.equal(summary.devices.find(row => row.host === device.host).stateLabel, device.stateLabel);
