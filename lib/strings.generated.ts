@@ -1,55 +1,21 @@
 // Generated from lib/strings.json by scripts/build-strings.mjs.
 export const STRINGS = {
-  "app": {
-    "title": "Observatory"
-  },
   "limits": {
-    "resetPending": "Waiting for the reset to be observed.",
-    "sharedFrom": "Shared from {device}",
-    "observed": "Observed {span} ago",
-    "observationUnknown": "Observed: Unknown"
-  },
-  "sections": {
-    "limits": "Limits",
-    "activity": "Screen time",
-    "tokens": "Tokens",
-    "history": "History",
-    "navigation": "Sections",
-    "drift": "Drift",
-    "more": "More"
-  },
-  "periods": {
-    "now": "Now",
-    "day": "Day",
-    "week": "7 days",
-    "month": "30 days",
-    "all": "All",
-    "year": "Year"
+    "resetPending": "Waiting for the reset to be observed."
   },
   "devices": {
     "all": "Both",
     "mac": "Mac",
-    "pc": "PC",
-    "device": "Computer",
-    "period": "Period"
+    "pc": "PC"
   },
   "providers": {
     "claudeCode": "Claude Code",
     "codex": "Codex",
-    "claude": "Claude",
     "grok": "Grok"
   },
   "actions": {
     "refresh": "Refresh",
     "openDashboard": "Open dashboard"
-  },
-  "labels": {
-    "screenTime": "Screen time",
-    "loading": "Loading",
-    "computers": "Computers",
-    "historyFailed": "Could not load the history.",
-    "sameRepo": "Agents in one repository",
-    "sameRepoMore": "and {count} more"
   },
   "status": {
     "unknown": "Unknown",
@@ -87,57 +53,11 @@ export const STRINGS = {
     "usd": "${value}",
     "resetsIn": "Resets in {span}",
     "asOf": "as of {time}",
-    "separator": " · ",
-    "since": "Since {date}"
-  },
-  "charts": {
-    "item": "Item",
-    "value": "Value",
-    "notRecorded": "No records"
-  },
-  "sources": {
-    "statusOk": "Read",
-    "statusNotConnected": "Not connected",
-    "statusPartial": "Partial coverage",
-    "statusUnavailable": "Unavailable",
-    "statusNotFound": "Not found",
-    "statusStale": "Saved reading",
-    "statusNeedsAuth": "Sign in required",
-    "statusUnsupported": "Not supported",
-    "statusRateLimited": "Usage check rate-limited",
-    "privateRefusal": "A private folder check failed, so this source was not read.",
-    "ancestorRefusal": "A private folder check failed at a parent folder, so this source was not read.",
-    "checkedNow": "Checked just now",
-    "checkedAgo": "Checked {age} ago",
-    "checkAhead": "Check time is ahead of this device",
-    "claudeLimits": "Claude Code limits",
-    "codexLimits": "Codex limits",
-    "codexTokens": "Codex tokens",
-    "claudeTokens": "Claude Code tokens",
-    "modelSettings": "Model settings"
+    "separator": " · "
   },
   "tokens": {
-    "input": "Input",
-    "cached": "Cached input",
-    "cacheWrite": "Cache writes",
-    "output": "Output",
-    "total": "Total",
-    "classes": "Token classes",
-    "byModel": "By model",
-    "model": "Model",
-    "chartTitle": "{provider} tokens by day",
     "apiEstimate": "API-equivalent (estimate)",
-    "underCent": "Under $0.01",
-    "pricesChecked": "Prices checked {date}",
-    "pricesUnknown": "Prices checked: Unknown",
-    "partial": "Covers {covered} of {total} tokens. Models without a price are left out.",
-    "settingsTitle": "Codex models",
-    "effort": "Reasoning",
-    "speed": "Speed",
-    "noSettings": "No settings recorded",
-    "breakdown": "Breakdown",
-    "hourlyTitle": "{provider} tokens by hour today",
-    "cost": "Estimate"
+    "underCent": "Under $0.01"
   },
   "activity": {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",
@@ -167,65 +87,10 @@ export const STRINGS = {
   },
   "today": {
     "noSnapshot": "No snapshot",
-    "unreachable": "Last pull failed: {reason}",
     "off": "Off"
   },
   "overview": {
-    "bothNote": "Both computers, not deduplicated",
     "lastSeen": "Last seen {time}"
-  },
-  "limitHistory": {
-    "title": "Limit history",
-    "range": "Range",
-    "fiveHour": "5-hour",
-    "weekly": "weekly",
-    "chartTitle": "{provider} {window} limit left over time",
-    "left": "{value}% left",
-    "noReadings": "No readings in this range",
-    "windowSpan": "{start} to {end}",
-    "time": "Time",
-    "monthly": "30-day"
-  },
-  "firstRun": {
-    "title": "Waiting for the first reading"
-  },
-  "projects": {
-    "title": "By project",
-    "session": "{start} to {end}",
-    "subagents": "Subagents {share}",
-    "other": "Other",
-    "asOf": "as of {time}",
-    "more": "+{count} more",
-    "project": "Project",
-    "where": "Where it went",
-    "sessionHeader": "Session",
-    "shareHeader": "Of today",
-    "engineAndTime": "{provider}, {start} to {end}",
-    "main": "Main conversation",
-    "subagent": "Subagent {number}",
-    "otherSubagents": "Other subagents"
-  },
-  "drift": {
-    "thinking": "Thinking per call",
-    "replySeconds": "Time per call",
-    "outputTokens": "Tokens per call",
-    "toolCalls": "Tool uses per call",
-    "retries": "Retries and errors per 100 calls",
-    "seconds": "{value} s",
-    "perHundred": "{value}",
-    "normal": "normal {value}",
-    "replies": "{count} model calls in {days} days",
-    "standout": "Days that stood out",
-    "noStandout": "No day stood out from this model's normal.",
-    "tooQuiet": "Too few model calls to judge. A day needs {count}.",
-    "learning": "Learning this model's normal. It needs {days} busy days.",
-    "higher": "higher",
-    "lower": "lower",
-    "flag": "{metric} {value}, {direction} than the normal {normal}",
-    "effortShift": "Effort was mostly {now} that day, usually {before}.",
-    "noData": "No Claude Code replies recorded in the last {days} days.",
-    "unavailable": "Could not read Claude Code transcripts.",
-    "chart": "{metric} by day. Shaded band is the normal range."
   },
   "sameRepo": {
     "line": "{count} agents in {repo} {where} ({who})",
@@ -345,58 +210,6 @@ export const STRINGS = {
     "resumedOwn": "Resumed on its own",
     "resumedRest": "after the 5-hour reset and used {share} of the week.",
     "resumedRestSpend": "after the 5-hour reset and spent {usd} in the next 30 minutes."
-  },
-  "session": {
-    "close": "Close",
-    "shareOfWeek": "Share of the week",
-    "shareOfSpend": "Share of spend",
-    "outputTokens": "Output tokens",
-    "apiPrices": "At API prices",
-    "span": "{start} to {end}",
-    "fanout": "Subagents at once",
-    "peak": "Peak {count} at {time}",
-    "where": "Where it went",
-    "work": "Work",
-    "kindSearch": "Search and read",
-    "kindResearch": "Research",
-    "kindReview": "Review passes",
-    "kindDesign": "Design",
-    "kindBuild": "Build",
-    "kindTest": "Tests",
-    "kindWrite": "Writing",
-    "kindMain": "Main thread",
-    "kindOther": "Other",
-    "shippedLine": "{commits} commits, {onMain} on the default branch.",
-    "repos": "In {repos}.",
-    "cacheHit": "Cache hit {value}%.",
-    "flags": "Flags"
-  },
-  "history": {
-    "outputTokens": "Output tokens",
-    "apiPrices": "At API prices",
-    "cacheHit": "Cache hit",
-    "sessions": "Sessions",
-    "sessionsDays": "Sessions, {count} days",
-    "merged": "Branches merged",
-    "mergedDays": "Branches merged, {count} days",
-    "weeksOut": "{name} weeks that ran out",
-    "weeksOutAny": "Weeks that ran out",
-    "ofTotal": "{count} of {total}",
-    "everyDay": "Every day",
-    "less": "Less",
-    "more": "More",
-    "dayValue": "{date}: {value}",
-    "byModel": "By model",
-    "otherModels": "Other",
-    "byHour": "By hour",
-    "blocks": "5-hour blocks",
-    "blocksAside": "Last 7 days, {count} hit the limit",
-    "blockValue": "{day}: {value}% used",
-    "engine": "Engine",
-    "spentShipped": "Spent and shipped",
-    "spentKey": "Spent at API prices",
-    "shippedKey": "Commits on the default branch",
-    "pairValue": "{date}: {spent} spent, {shipped} commits"
   },
   "r2": {
     "allTime": "All time",
