@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {allowedLocalRequest} from './scripts/request-policy.mjs';
 import {loadConfig,localFolder} from './lib/config.mjs';
 import {summaryOf} from './lib/summary.mjs';
+import {listViews,VIEWS_SCHEMA} from './lib/saved-views.mjs';
 
 const types={
   '.html':'text/html; charset=utf-8',
@@ -41,6 +42,13 @@ export function createLocalServer({assets=path.join(here,'dist/dashboard'),dataF
         res.setHeader('Content-Type','application/json');
         res.writeHead(200);
         return res.end(req.method==='HEAD'?undefined:JSON.stringify(summary));
+      }
+      if(url.pathname==='/local/views.json') {
+        // Saved views composed through the optional MCP server. Only views that pass the check are listed.
+        const views=await realpath(dataFolder).then(listViews,error=>{if(error.code==='ENOENT')return [];throw error;});
+        res.setHeader('Content-Type','application/json');
+        res.writeHead(200);
+        return res.end(req.method==='HEAD'?undefined:JSON.stringify({schema:VIEWS_SCHEMA,views}));
       }
       if(url.pathname==='/local/combined.json') {
         file=path.join(await realpath(localFolder({dataFolder})),'combined.json');
