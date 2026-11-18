@@ -1,4 +1,5 @@
 import {retainActivityHistory} from './activity-history.mjs';
+import {fitLedgerHistory,LEDGER_HISTORY_BUDGET} from '../lib/r2-shape.mjs';
 export const snapshotMaximumBytes=16_000_000;
 export const snapshotHistoryBudget=12_000_000;
 
@@ -16,8 +17,11 @@ export function fitLedger(data,{budget=ledgerBudget}={}) {
   data.ledger=data.ledger.map(row=>row?.status==='ok'?{host:row.host,status:'unavailable',collectedAt:row.collectedAt}:row);
 }
 
-export function serializeSnapshot(data,{budget=snapshotHistoryBudget,maximum=snapshotMaximumBytes,ledger=ledgerBudget}={}) {
+// The daily ledger history (lib/r2-shape.mjs) trims itself to LEDGER_HISTORY_BUDGET per computer, the
+// oldest session rows first, before the activity history is touched.
+export function serializeSnapshot(data,{budget=snapshotHistoryBudget,maximum=snapshotMaximumBytes,ledger=ledgerBudget,ledgerHistory=LEDGER_HISTORY_BUDGET}={}) {
   fitLedger(data,{budget:ledger});
+  fitLedgerHistory(data,{budget:ledgerHistory});
   let text=JSON.stringify(data),bytes=Buffer.byteLength(text);
   const history=Array.isArray(data?.activityHistory)?data.activityHistory:null;
   if(!history || bytes<=budget)return {text,bytes};

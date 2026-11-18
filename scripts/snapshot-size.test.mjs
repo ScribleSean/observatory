@@ -108,3 +108,45 @@ test('maximal provider model cardinality alone cannot fit the snapshot limit',t=
   t.diagnostic(`Synthetic maximal provider cardinality: ${size} bytes for two 3660-day sources, before activity or quota`);
   assert.ok(size>snapshotMaximumBytes);
 });
+
+test('a year of ledger history fits its budget, oldest session rows first, and three computers stay under the file limit',async()=>{
+  const {yearOfLedgerHistory}=await import('../test/ledger-fixtures.mjs');
+  const {LEDGER_HISTORY_BUDGET,MIN_SESSION_DAYS,cleanLedgerHistory}=await import('../lib/r2-shape.mjs');
+  const {combine}=await import('../lib/combine.mjs');
+  const {ownSnapshot}=await import('../test/helpers.mjs');
+  const {peerBytes}=await import('./hub.mjs');
+  const now=Date.parse('2026-11-18T15:00:00Z');
+  const hosts=['Mac','Windows','Linux'];
+  const devices=[];
+  for(const host of hosts) {
+    const row=await yearOfLedgerHistory(host,now);
+    assert.ok(Buffer.byteLength(JSON.stringify(row))>4*LEDGER_HISTORY_BUDGET,'the fixture starts well over budget');
+    const snapshot={...ownSnapshot(host==='Linux'?'Mac':host,now),device:{host,name:host},ledgerHistory:[row]};
+    if(host==='Linux')for(const key of ['activity','tokens','settings','providerTokenSources','activityHistory','modelDrift','ledger'])snapshot[key]=[];
+    const {text,bytes}=serializeSnapshot(snapshot,{budget:peerBytes(3),maximum:peerBytes(3)});
+    assert.ok(bytes<=peerBytes(3),`${host} snapshot fits the hub's share`);
+    const [fitted]=JSON.parse(text).ledgerHistory;
+    assert.equal(fitted.status,'ok','never reaches unavailable');
+    assert.ok(Buffer.byteLength(JSON.stringify(fitted))<=LEDGER_HISTORY_BUDGET);
+    assert.equal(fitted.days.length,row.days.length,'every day keeps its totals');
+    assert.ok(fitted.days.every(day=>day.apiUsd!==null && day.ship.commits!==null));
+    const listed=[...new Set(fitted.days.filter(day=>day.sessions.length).map(day=>day.date))];
+    assert.equal(listed.length,MIN_SESSION_DAYS,'session rows go down to MIN_SESSION_DAYS and no further');
+    assert.equal(fitted.sessionsFrom,listed[0]);
+    assert.ok(fitted.days.filter(day=>!day.sessions.length).every(day=>day.other.count===day.sessionCount),'folded sessions keep their count');
+    assert.ok(fitted.days.at(-1).models.length>0,'the newest days keep their breakdowns');
+    assert.deepEqual(cleanLedgerHistory(fitted,{titles:true}),fitted);
+    devices.push({host,snapshot:JSON.parse(text)});
+  }
+  const combined=JSON.stringify(combine(devices,{now,generatedBy:'Mac'}));
+  assert.ok(Buffer.byteLength(combined)<snapshotMaximumBytes,`combined.json is ${Buffer.byteLength(combined)} bytes`);
+  assert.equal(JSON.parse(combined).view.ledgerHistory.filter(row=>row.status==='ok').length,3);
+});
+
+test('a ledger history that cannot fit even as totals reads as unavailable',async()=>{
+  const {yearOfLedgerHistory}=await import('../test/ledger-fixtures.mjs');
+  const {fitLedgerHistory}=await import('../lib/r2-shape.mjs');
+  const data={ledgerHistory:[await yearOfLedgerHistory('Mac',Date.parse('2026-11-18T15:00:00Z'),{days:40})]};
+  fitLedgerHistory(data,{budget:5000});
+  assert.deepEqual([data.ledgerHistory[0].status,data.ledgerHistory[0].days],['unavailable',[]]);
+});

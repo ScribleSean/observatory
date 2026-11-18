@@ -200,3 +200,34 @@ test('an expired Grok limit does not win over a live request count',()=>{
     requests:{timeZone:'UTC',checkedAt:new Date(now).toISOString(),days:[{date:'2026-01-01',count:2}]}};
   assert.equal(combine([{host:'Mac',snapshot:mac},{host:'Windows',snapshot:pc}],{now}).view.grokLimits.observedOn,'Windows');
 });
+
+test('combine passes each computer\'s ledger history and settings echo through, and applies the hub\'s titles setting',async()=>{
+  const {sampleR2Combined}=await import('../lib/sample-r2.mjs');
+  const now=Date.parse('2026-11-18T15:00:00Z');
+  const fixture=sampleR2Combined(now);
+  const withHistory=host=>ownSnapshot(host,now,snapshot=>({...snapshot,
+    ledgerHistory:[fixture.view.ledgerHistory.find(row=>row.host===host),{...fixture.view.ledgerHistory[2],host:'Linux'}],
+    configEcho:{...fixture.view.config.find(row=>row.host===host),dataFolder:'/fictional/private'}}));
+  const combined=combine([{host:'Mac',snapshot:withHistory('Mac')},{host:'Windows',snapshot:withHistory('Windows')}],{now,generatedBy:'Mac'});
+  assert.deepEqual(combined.view.ledgerHistory.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','ok']]);
+  assert.deepEqual(combined.view.ledgerHistory[0],fixture.view.ledgerHistory[0],'kept as that computer wrote it');
+  assert.deepEqual(combined.snapshots.Mac.ledgerHistory.length,1,'another computer\'s row in a snapshot is dropped');
+  assert.deepEqual(combined.view.config.map(row=>row.host),['Mac','Windows']);
+  assert.ok(!JSON.stringify(combined.view.config).includes('/fictional'));
+  const titled=combined.view.ledgerHistory[0].days.flatMap(day=>day.sessions).filter(session=>session.title);
+  assert.ok(titled.length>0);
+  const off=combine([{host:'Mac',snapshot:withHistory('Mac')}],{now,generatedBy:'Mac',titles:false});
+  assert.ok(off.view.ledgerHistory[0].days.flatMap(day=>day.sessions).every(session=>session.title===null),'a hub with titles off shows none');
+  assert.equal(off.view.ledgerHistory[1].status,'not-connected','a computer not set up reads not connected');
+  // A broken row is unavailable, not dropped, and a snapshot without one reads not connected.
+  const broken=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now,snapshot=>({...snapshot,ledgerHistory:[{host:'Mac',status:'ok',days:'many'}]}))}],{now,generatedBy:'Mac'});
+  assert.equal(broken.view.ledgerHistory[0].status,'unavailable');
+  const none=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)}],{now,generatedBy:'Mac'});
+  assert.equal(none.view.ledgerHistory[0].status,'not-connected');
+  assert.deepEqual(none.view.config,[]);
+  // The hub's carried copy of a computer reads back the same.
+  const {carriedDevice:carried}=await import('../lib/combine.mjs');
+  const again=combine([{host:'Mac',snapshot:withHistory('Mac')},carried(combined,'Windows')],{now,generatedBy:'Mac'});
+  assert.deepEqual(again.view.ledgerHistory[1],combined.view.ledgerHistory[1]);
+  assert.deepEqual(again.view.config[1],combined.view.config[1]);
+});

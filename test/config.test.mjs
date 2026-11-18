@@ -82,3 +82,27 @@ test('a Linux computer can be a spoke of a Mac or a Windows hub, once',()=>{
   assert.throws(()=>parseConfig({hub:{spokes:[{ssh:'lx',platform:'linux'}]}},linux),/at most one/);
   assert.throws(()=>parseConfig({hub:{spokes:[{ssh:'lx',platform:'linux',dataFolder:'relative'}]}},mac),/dataFolder/);
 });
+
+test('sessions.roles maps the user\'s own title starts to a known role, and the echo holds no path',async()=>{
+  const {configEcho}=await import('../lib/config.mjs');
+  const parsed=parseConfig({sessions:{roles:{' tidepool notes ':'Researcher',chief:'Chief of staff'}},dataFolder:'/fictional/data',codexPath:'/fictional/bin/codex',
+    grok:{requestLog:'/fictional/grok.jsonl'},hub:{spokes:[{ssh:'tower',platform:'windows',dataFolder:'C:/fictional'}]}},{platform:'darwin'});
+  assert.deepEqual(parsed.sessions.roles,{'tidepool notes':'Researcher',chief:'Chief of staff'});
+  assert.deepEqual(parseConfig({},{platform:'darwin'}).sessions.roles,{});
+  assert.throws(()=>parseConfig({sessions:{roles:{notes:'Wizard'}}},{platform:'darwin'}),/must be one of/);
+  assert.throws(()=>parseConfig({sessions:{roles:['Builder']}},{platform:'darwin'}),/sessions.roles/);
+  assert.throws(()=>parseConfig({sessions:{roles:{'':'Builder'}}},{platform:'darwin'}),/title start/);
+  assert.throws(()=>parseConfig({sessions:{roles:Object.fromEntries(Array.from({length:101},(_,index)=>[`start ${index}`,'Builder']))}},{platform:'darwin'}),/at most/);
+  const echo=configEcho(parsed,'2026-11-18T15:00:00.000Z');
+  assert.deepEqual(Object.keys(echo).sort(),['checkedAt','engines','host','name','role','roleAliases','sources','titles']);
+  assert.equal(echo.role,'hub');
+  assert.deepEqual(echo.roleAliases,parsed.sessions.roles);
+  const text=JSON.stringify(echo);
+  for(const secret of ['/fictional','tower','C:/','codex.exe','grok.jsonl'])assert.ok(!text.includes(secret),secret);
+});
+
+test('the example settings file parses',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const example=JSON.parse(await readFile(new URL('../observatory.config.example.json',import.meta.url),'utf8'));
+  assert.deepEqual(parseConfig(example,{platform:'darwin'}).sessions,{titles:true,roles:{}});
+});
