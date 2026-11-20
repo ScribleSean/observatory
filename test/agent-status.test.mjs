@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
-import {agentStatus, classifyPace, effectiveHeadroom, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
+import {agentStatus, classifyPace, effectiveHeadroom, jobCap, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
 import {countCodexJobs, describe, isCodexJobCommand, main, STALE_MARKER_MS} from '../scripts/status.mjs';
 import {ownSnapshot, withFolder} from './helpers.mjs';
 
@@ -554,4 +554,23 @@ test('an early window never hides a real limit on the other window', () => {
   // windowPace: early is early only with a current reading and a reset time.
   assert.equal(windowPace(97, null, 10000, 10080, {status: 'early'}), 'early');
   assert.equal(windowPace(97, null, null, 10080, {status: 'early'}), 'unknown');
+});
+
+// The recorded case the reviews found: 94% used 3.2% into a Codex week read "Too early to forecast" with the full cap.
+test('a runaway burn early in the week is slow, with a cut cap, not early', () => {
+  const minutes = 10080, resetIn = minutes * 60000 * (1 - 0.032);
+  const status = agentStatus(fixture({claude: [['seven_day', minutes, 80, 100 * hour]], codex: [['primary', 300, 80, 3 * hour], ['secondary', minutes, 6, resetIn, 20]]}), now);
+  const codex = status.engines.codex;
+  assert.equal(codex.windows.weekly.forecast.status, 'runs-out');
+  assert.equal(codex.windows.weekly.pace, 'slow');
+  assert.equal(status.cap.codex, 1);
+});
+
+test('an early engine below the spend margin or a quarter left is never given the full cap', () => {
+  const engine = (headroom, effectiveHeadroom) => ({status: 'ok', pace: 'early', headroom, effectiveHeadroom});
+  const codex = {status: 'ok', pace: 'spend', headroom: 80, effectiveHeadroom: 100};
+  assert.equal(jobCap({claude: engine(97, 100), codex}).claude, MAX_SLOTS.claude);
+  // 25% left: treated as hold, the most times effectiveHeadroom / 100.
+  assert.equal(jobCap({claude: engine(25, 26), codex}).claude, Math.ceil(MAX_SLOTS.claude * 0.26));
+  assert.equal(jobCap({claude: engine(6, 6), codex}).claude, 1);
 });

@@ -60,7 +60,7 @@ For each window, from the stored forecast:
 | Pace | Rule |
 | --- | --- |
 | `out` | `percentLeft` is 0. |
-| `early` | The window is too new to forecast (`forecast.status` is `early`, and the words are "Too early to forecast"): less than a tenth of the window has passed since it opened, a day at most. That is about 17 hours of a weekly window, 30 minutes of a 5-hour window and a day of a 30-day window. A window whose length is unknown needs an hour and three readings of its own. No run-out time, burn rate or share at the reset is given then. |
+| `early` | The window is too new to forecast (`forecast.status` is `early`, and the words are "Too early to forecast"): less than a tenth of the window has passed since it opened, a day at most. That is about 17 hours of a weekly window, 30 minutes of a 5-hour window and a day of a 30-day window. A window whose length is unknown needs an hour and three readings of its own. No run-out time, burn rate or share at the reset is given then. A window with 25% or less left is never `early`, and neither is a runaway burn: at least 20 points used and at least three times the share of the window elapsed. |
 | `slow` | The stored forecast says the window runs out before it resets (`forecast.status` is `runs-out`). |
 | `spend` | The stored forecast expects at least 20 points (`SPEND_MARGIN`) left at the reset, so allowance would go unused. |
 | `hold` | The stored forecast expects less than that left at the reset. |
@@ -85,7 +85,8 @@ An engine is usable when its `status` is `ok` and `effectiveHeadroom` is above 0
 | --- | --- |
 | `out` | 0 |
 | `unknown` | 1 |
-| pace `spend` or `early` | the most: 10 for Claude, 5 for Codex |
+| pace `spend`, or `early` with more than 25% left | the most: 10 for Claude, 5 for Codex |
+| pace `early` with 25% or less left | as `hold` |
 | pace `hold` | the most times `effectiveHeadroom` / 100, rounded up, at least 1 |
 | pace `slow` | 1 |
 

@@ -32,35 +32,38 @@ function assertTime(text, at, label) {
  * One limit window: `remaining` left now, spent at an even pace since it opened, resetting in `resetHours`, with
  * `weeks` earlier windows of the same use before it. Every half hour is a reading in the limit history.
  */
-function readings({ id, minutes, remaining, resetHours, jitter = 0, weeks = 0 }) {
+function readings({ id, minutes, remaining, resetHours, jitter = 0, weeks = 0, provider = 'claude' }) {
   const length = minutes * MINUTE, resetsAt = now + resetHours * HOUR, opened = resetsAt - length;
   const rate = (100 - remaining) / ((now - opened) / HOUR);
   const points = [];
   for (let back = weeks; back >= 0; back--) {
     const start = opened - back * length, reset = resetsAt - back * length;
     for (let at = start, step = 0; at < Math.min(start + length, now); at += HOUR / 2, step++)
-      points.push({ p: 'claude', w: id, o: 'Mac', t: iso(at), x: iso(reset), d: minutes,
+      points.push({ p: provider, w: id, o: 'Mac', t: iso(at), x: iso(reset), d: minutes,
         r: Math.max(0, Math.min(100, 100 - rate * (at - start) / HOUR + ((step * 7) % 11 - 5) * jitter)) });
   }
-  return { window: { bucket: 'claude', window: id, durationMinutes: minutes, remainingPercent: remaining, resetsAt: iso(resetsAt), checkedAt: iso(now - MINUTE) }, points };
+  return { window: { bucket: provider, window: id, durationMinutes: minutes, remainingPercent: remaining, resetsAt: iso(resetsAt), checkedAt: iso(now - MINUTE) }, points };
 }
 
 // The hub's combined.json for a Mac with these Claude windows, a PC the settings turn off, Codex off and no Grok.
-function combinedWith({ weekly, fiveHour = null, timeZone = 'America/New_York' }) {
+// With `codex`, Codex is on with these windows, each { id, minutes, remaining, resetHours }.
+function combinedWith({ weekly, fiveHour = null, codex = null, timeZone = 'America/New_York' }) {
   const parts = [readings({ id: 'seven_day', minutes: 10080, ...weekly }), ...(fiveHour ? [readings({ id: 'five_hour', minutes: 300, ...fiveHour })] : [])];
+  const codexParts = (codex ?? []).map(window => readings({ provider: 'codex', ...window }));
   const mac = ownSnapshot('Mac', now, snapshot => ({ ...snapshot, timezone: timeZone, collectedAt: iso(now - MINUTE),
     // The settings echo the round 2 views read to know which sources are on.
     configEcho: { host: 'Mac', name: 'Studio Mac', role: 'hub', titles: false, roleAliases: {}, checkedAt: null,
-      sources: { claudeCode: true, claudeLimits: true, codex: false, codexLimits: false, grokLimits: false }, engines: { claude: 'auto', codex: 'off', grok: 'auto' } },
+      sources: { claudeCode: true, claudeLimits: true, codex: false, codexLimits: Boolean(codex), grokLimits: false }, engines: { claude: 'auto', codex: codex ? 'auto' : 'off', grok: 'auto' } },
     claudeLimits: { status: 'ok', checkedAt: iso(now - MINUTE), ...(fiveHour ? {} : { notReported: ['five_hour'] }), windows: parts.map(part => part.window) },
     grokLimits: { status: 'not-connected', windows: [] },
-    limitHistory: [{ host: 'Mac', status: 'ok', points: parts.flatMap(part => part.points) }],
+    ...(codex ? { quota: { status: 'ok', checkedAt: iso(now - MINUTE), windows: codexParts.map(part => part.window) } } : {}),
+    limitHistory: [{ host: 'Mac', status: 'ok', points: [...parts, ...codexParts].flatMap(part => part.points) }],
     // Two sessions running now on the Mac, so the menu bar and the Week page each have running sessions to name.
     ledger: snapshot.ledger.map(row => ({ ...row, collectedAt: iso(now - MINUTE), tools: row.tools.map(tool => ({ ...tool, periods: tool.periods.map(period =>
       period.key !== 'current' ? period : { ...period, sessions: period.sessions.map((session, index) => index < 2 ? { ...session, running: true, state: 'working', ratePerHour: 2 - index } : session) }) })) })) }));
   return combine([{ host: 'Mac', name: 'Studio Mac', snapshot: mac }, { host: 'Windows', name: 'Desk PC', off: true,
     snapshot: ownSnapshot('Windows', now - 3 * HOUR, snapshot => ({ ...snapshot, grokLimits: { status: 'not-connected', windows: [] } })) }],
-    { now, generatedBy: 'Mac', engines: { codex: 'off' } });
+    { now, generatedBy: 'Mac', engines: { codex: codex ? 'auto' : 'off' } });
 }
 
 /** What each surface shows from one combined snapshot, at `at`. */
@@ -228,6 +231,51 @@ test('regression: a weekly window under an hour old reads "Too early to forecast
   assert.equal(status.engines.claude.windows.weekly.pace, 'early');
   assert.equal(status.engines.claude.pace, 'early');
   assert.equal(status.cap.claude, 10);
+});
+
+test('an early 5-hour window reads the same on every surface, and leads only as the lowest window', () => {
+  const early = 'Too early to forecast';
+  // 15 minutes after the 5-hour reset, under its 30-minute gate. The weekly window has a verdict and less left: it leads.
+  const behind = agree(combinedWith({ weekly: { remaining: 70, resetHours: 70, jitter: 0.3 }, fiveHour: { remaining: 97, resetHours: 4.75 } }));
+  const fiveHour = behind.stored.windows.find(window => window.windowId === 'five_hour');
+  assert.deepEqual([fiveHour.status, fiveHour.phrase, fiveHour.headline], ['early', early, `Claude: ${early}`]);
+  assert.equal(behind.lead.windowId, 'seven_day');
+  assert.equal(behind.glance.headline.text, 'Claude has room');
+  assert.equal(behind.status.engines.claude.windows.five_hour.pace, 'early');
+  // Both windows just reset and the 5-hour window is the lowest: it leads, in the same words everywhere.
+  const both = agree(combinedWith({ weekly: { remaining: 99, resetHours: 168 - 0.25 }, fiveHour: { remaining: 97, resetHours: 4.75 } }));
+  assert.equal(both.lead.windowId, 'five_hour');
+  assert.equal(both.glance.headline.text, `Claude: ${early}`);
+  assert.equal(both.status.engines.claude.pace, 'early');
+  assert.equal(both.status.cap.claude, 10);
+});
+
+test('an early Codex window reads the same on every surface, with the default Codex cap', () => {
+  const early = `Codex: Too early to forecast`;
+  const combined = combinedWith({ weekly: { remaining: 70, resetHours: 70, jitter: 0.3 }, codex: [
+    // Both Codex windows just reset, and the 5-hour window is the lower.
+    { id: 'primary', minutes: 300, remaining: 96, resetHours: 4.8 }, { id: 'secondary', minutes: 10080, remaining: 99, resetHours: 168 - 0.5 }] });
+  const all = surfaces(combined);
+  const { stored, glance, status, limits } = all;
+  agreeRound2(all);
+  const engine = stored.engines.find(row => row.engine === 'codex'), window = stored.windows.find(row => row.windowId === 'primary');
+  assert.deepEqual([engine.status, engine.headline, window.headline], ['early', early, early]);
+  // The early engine is the one-number spot over Claude's room, so it leads the menu bar, tray and status.
+  assert.equal(stored.scarce.engine, 'codex');
+  assert.equal(glance.headline.text, early);
+  assert.equal(all.tray[0], stored.sentence);
+  assert.ok(stored.sentence.startsWith(`${early}.`), stored.sentence);
+  assert.equal(status.forecast.sentence, stored.sentence);
+  assert.equal(status.engines.codex.forecast.headline, early);
+  assert.equal(status.engines.codex.windows.five_hour.forecast.phrase, 'Too early to forecast');
+  assert.equal(status.engines.codex.windows.five_hour.pace, 'early');
+  assert.equal(status.engines.codex.windows.weekly.forecast.phrase, 'Too early to forecast');
+  assert.equal(status.engines.codex.pace, 'early');
+  assert.equal(status.cap.codex, 5);
+  const meter = limits.engines.find(row => row.engine === 'codex').windows.find(row => row.windowId === 'primary');
+  assert.equal(meter.forecastText, early);
+  // The icon follows the Claude weekly window, which has room.
+  assert.equal(glance.icon.state, 'on-pace');
 });
 
 test('a computer turned off in the settings reads Off everywhere, never the time of its last reading', () => {

@@ -376,12 +376,13 @@ test('a reading weeks old is named by its date, not a weekday', () => {
   assert.equal(when(iso(now - 20 * 24 * HOUR), context), 'Oct 23');
 });
 
-test('a tight window with no length and no history is too early to forecast, and still says when it resets', () => {
+// Also a fresh install with no window length and 10% left: a quarter or less left is never "too early".
+test('without a measured pace a tight window says when it resets, not that it lasts', () => {
   const row = { ...grokRow, remaining: 10 };
   const source = grokSource({ windows: [{ bucket: 'grok', window: 'weekly', remainingPercent: 10, resetsAt: grokRow.resetsAt }] });
   const grok = forecast({ ...codexView({}), grokLimits: source }, [...codexRows, row], context).engines.find(engine => engine.engine === 'grok');
-  assert.equal(grok.phrase, 'Too early to forecast');
-  assert.equal(grok.resetsWhen, 'Mon 10 AM');
+  assert.equal(grok.phrase, 'resets Mon 10 AM');
+  assert.equal(tooEarly({ remaining: 10, resetsAt: grokRow.resetsAt, durationMinutes: null, readings: [], now }), false);
 });
 
 test('a tight window of known length says when it runs out at its average pace', () => {
@@ -512,11 +513,36 @@ test('the early period scales with the window: a tenth of it, a day at most, an 
 
 test('an early window leads the engine over room, but a real run-out or out wins over it', () => {
   const window = (status, remaining, extra = {}) => ({ status, remaining, resetsAt: iso(now + 100 * HOUR), runoutAt: null, earliestAt: null, latestAt: null, confidence: 'low', ratePerHour: null, ...extra });
-  assert.equal(engineForecast('claude', 'Claude', [window('early', 97), window('room', 80)]).status, 'early');
+  // Early leads only as the lowest window: a 5-hour window that just reset does not replace a tight weekly verdict.
+  const tight = engineForecast('codex', 'Codex', [{ ...window('early', 97), windowId: 'primary' }, { ...window('room', 15, { ratePerHour: 0.1 }), windowId: 'secondary' }]);
+  assert.deepEqual([tight.status, tight.windowId, tight.remaining], ['room', 'secondary', 15]);
+  assert.equal(engineForecast('claude', 'Claude', [window('early', 60), window('room', 80)]).status, 'early');
   assert.equal(engineForecast('claude', 'Claude', [window('early', 97), window('runs-out', 30, { runoutAt: iso(now + 2 * HOUR) })]).status, 'runs-out');
   assert.equal(engineForecast('claude', 'Claude', [window('early', 97), window('out', 0)]).status, 'out');
   // In the one-number spot an early engine ranks after one that runs out and before one with room.
   const engines = [{ name: 'Codex', status: 'room', remaining: 40 }, { name: 'Claude', status: 'early', remaining: 97 }];
   assert.equal(scarcest(engines).name, 'Claude');
   assert.equal(scarcest([...engines, { name: 'Grok', status: 'runs-out', remaining: 50, at: iso(now + HOUR) }]).name, 'Grok');
+});
+
+// A runaway burn inside the gate is forecast: Codex weekly windows that ran out 3 to 5% into the week read
+// "Too early to forecast" until the reviews caught it.
+test('a runaway burn inside the gate is forecast, a modest one is not', () => {
+  const week = 10080 * 60000;
+  const at = (used, elapsedPercent) => {
+    const opened = now - week * elapsedPercent / 100, reset = opened + week;
+    const readings = Array.from({ length: 6 }, (_, index) => ({ at: opened + (now - opened) * index / 6, remaining: 100 - used * index / 6, resetsAt: reset }));
+    return { remaining: 100 - used, resetsAt: iso(reset), durationMinutes: WEEK, readings, now };
+  };
+  // 94% used at 3.2% of the week, as recorded: runs out, not "too early".
+  assert.equal(tooEarly(at(94, 3.2)), false);
+  assert.equal(windowForecast(at(94, 3.2)).status, 'runs-out');
+  // 40 used at 5% elapsed: over 20 points and over three times the share elapsed.
+  assert.equal(tooEarly(at(40, 5)), false);
+  assert.equal(windowForecast(at(40, 5)).status, 'runs-out');
+  // Under 20 points, or under three times the share elapsed, stays early.
+  assert.equal(windowForecast(at(15, 2)).status, 'early');
+  assert.equal(windowForecast(at(25, 9)).status, 'early');
+  // A quarter or less left is forecast whatever the time: 76 used at 9.5% is under three times, but tight.
+  assert.equal(tooEarly(at(76, 9.5)), false);
 });
