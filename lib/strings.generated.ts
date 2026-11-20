@@ -117,6 +117,7 @@ export const STRINGS = {
     "onPace": "on pace",
     "overPace": "over pace",
     "paceUnknown": "pace Unknown",
+    "iconTipEarly": "{percent} used. {pace}",
     "iconStale": "Last read {time}"
   },
   "ledger": {
@@ -317,6 +318,9 @@ export const STRINGS = {
     "lastsUntil": "lasts until",
     "resetsWhen": "resets",
     "hasRoom": "has room",
+    "tooEarly": "Too early to forecast",
+    "earlyHeadline": "{name}: {phrase}",
+    "earlySentence": "{name}: {phrase}.",
     "noReading": "has no current reading",
     "resets": "Resets {time}",
     "beforeResetHour": "1 hour before the reset",

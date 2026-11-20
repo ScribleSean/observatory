@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
-import {agentStatus, classifyPace, effectiveHeadroom, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
+import {agentStatus, classifyPace, effectiveHeadroom, jobCap, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
 import {countCodexJobs, describe, isCodexJobCommand, main, STALE_MARKER_MS} from '../scripts/status.mjs';
 import {ownSnapshot, withFolder} from './helpers.mjs';
 
@@ -525,4 +525,52 @@ test('Ultra to Pro: once the 5-hour window is reported again it counts', () => {
   assert.equal(proDay.engines.claude.windows.five_hour.percentLeft, 10);
   assert.equal(proDay.engines.claude.headroom, 10);
   assert.equal(proDay.engines.claude.pace, 'slow');
+});
+
+// The evidence: 97% left under an hour after the weekly reset gave cap.claude 1 and "may run out Sat 11 PM to Sun 2 PM".
+test('regression: a weekly window under an hour old, 97% left, is pace early with the default cap', () => {
+  const minutes = 10080, resetIn = minutes * 60000 - 48 * 60000;
+  const status = agentStatus(fixture({claude: [['seven_day', minutes, 97, resetIn, 4]], codex: [['primary', 300, 80, 3 * hour], ['secondary', 10080, 60, 100 * hour]]}), now);
+  const claude = status.engines.claude;
+  assert.equal(claude.windows.weekly.forecast.status, 'early');
+  assert.equal(claude.windows.weekly.forecast.phrase, 'Too early to forecast');
+  assert.equal(claude.windows.weekly.forecast.runsOutAt, null);
+  assert.equal(claude.windows.weekly.burnPerHour, null);
+  assert.equal(claude.windows.weekly.pace, 'early');
+  assert.equal(claude.pace, 'early');
+  assert.equal(status.cap.claude, MAX_SLOTS.claude);
+  assert.match(status.cap.reason, /claude pace early/);
+  assert.match(describe(status), /weekly 3% used, .*, early/);
+});
+
+test('an early window never hides a real limit on the other window', () => {
+  const week = 10080 * 60000;
+  // The 5-hour window has been running hot for four hours: its own forecast decides the cap.
+  const status = agentStatus(fixture({claude: [['five_hour', 300, 15, hour, 20], ['seven_day', 10080, 92, week - 2 * hour]], codex: [['primary', 300, 80, 3 * hour], ['secondary', 10080, 60, 100 * hour]]}), now);
+  assert.equal(status.engines.claude.windows.weekly.pace, 'early');
+  assert.notEqual(status.engines.claude.windows.five_hour.pace, 'spend');
+  assert.notEqual(status.engines.claude.pace, 'early');
+  assert.ok(status.cap.claude < MAX_SLOTS.claude);
+  // windowPace: early is early only with a current reading and a reset time.
+  assert.equal(windowPace(97, null, 10000, 10080, {status: 'early'}), 'early');
+  assert.equal(windowPace(97, null, null, 10080, {status: 'early'}), 'unknown');
+});
+
+// The recorded case the reviews found: 94% used 3.2% into a Codex week read "Too early to forecast" with the full cap.
+test('a runaway burn early in the week is slow, with a cut cap, not early', () => {
+  const minutes = 10080, resetIn = minutes * 60000 * (1 - 0.032);
+  const status = agentStatus(fixture({claude: [['seven_day', minutes, 80, 100 * hour]], codex: [['primary', 300, 80, 3 * hour], ['secondary', minutes, 6, resetIn, 20]]}), now);
+  const codex = status.engines.codex;
+  assert.equal(codex.windows.weekly.forecast.status, 'runs-out');
+  assert.equal(codex.windows.weekly.pace, 'slow');
+  assert.equal(status.cap.codex, 1);
+});
+
+test('an early engine below the spend margin or a quarter left is never given the full cap', () => {
+  const engine = (headroom, effectiveHeadroom) => ({status: 'ok', pace: 'early', headroom, effectiveHeadroom});
+  const codex = {status: 'ok', pace: 'spend', headroom: 80, effectiveHeadroom: 100};
+  assert.equal(jobCap({claude: engine(97, 100), codex}).claude, MAX_SLOTS.claude);
+  // 25% left: treated as hold, the most times effectiveHeadroom / 100.
+  assert.equal(jobCap({claude: engine(25, 26), codex}).claude, Math.ceil(MAX_SLOTS.claude * 0.26));
+  assert.equal(jobCap({claude: engine(6, 6), codex}).claude, 1);
 });

@@ -5,14 +5,18 @@
 // Compared: no spend at all, a straight line over the last day (the method before this one), a straight line over
 // the last hour (the retired scripts/quota-pace.mjs), the average pace since the window opened, and the forecast in
 // lib/forecast.mjs with its stated range.
+// The early part of each window is scored apart: what the pace alone would have claimed there, by share of the window
+// elapsed, against what happened. That is the evidence for the gate in lib/forecast.mjs (tooEarly).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { projection, windowForecast, lookbackMs, RANGE_SHARE } from '../../lib/forecast.mjs';
+import { projection, windowForecast, lookbackMs, tooEarly, RANGE_SHARE } from '../../lib/forecast.mjs';
 import { LIMIT_SPENT_PERCENT } from '../../lib/glance-limits.mjs';
 
 const MINUTE = 60000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 const HORIZONS = [3, 6, 12, 24];
 const TARGETS = [...HORIZONS, 'reset'];
+// Shares of the window elapsed that the early-window table splits on.
+export const EARLY_EDGES = [0, 0.025, 0.05, 0.1, 0.15, 0.25, 0.5, 1];
 const same = (a, b) => a !== null && b !== null && Math.abs(a - b) <= 5 * MINUTE;
 const stamp = value => typeof value === 'number' ? value : typeof value === 'string' ? Date.parse(value) : NaN;
 
@@ -76,6 +80,10 @@ export function backtest(series, { stepMinutes = 30 } = {}) {
   const first = readings[0].at + Math.min(5 * DAY, durationMinutes * MINUTE * 5);
   const end = readings.at(-1).at, middle = (first + end) / 2;
   const errors = {}, ranges = {}, claims = {};
+  // Per share of the window elapsed, and for the gated period as a whole: run-out claims the pace alone would make, how
+  // many came true, and the miss on the share left at the reset against assuming no more use.
+  const blank = () => ({ moments: 0, runsOut: 0, ranOut: 0, scored: 0, forecastMiss: 0, noneMiss: 0 });
+  const byShare = EARLY_EDGES.slice(1).map(blank), gate = { during: blank(), after: blank() };
   const add = (method, target, record) => ((errors[method] ??= {})[target] ??= []).push(record);
   let index = 0, moments = 0;
   for (let tick = Math.ceil(first / (stepMinutes * MINUTE)) * stepMinutes * MINUTE; tick <= end; tick += stepMinutes * MINUTE) {
@@ -115,7 +123,19 @@ export function backtest(series, { stepMinutes = 30 } = {}) {
 
     // What the sentence would have claimed, against what happened. Windows whose end was not seen are left out.
     if (ranOut === null && !sawReset) continue;
+    const share = (now - (resetsAt - durationMinutes * MINUTE)) / (durationMinutes * MINUTE);
+    if (share >= 0 && share < 1) {
+      const untilReset = (resetsAt - now) / HOUR, endHours = (readings[last].at - now) / HOUR;
+      const said = ahead.after(untilReset).left <= 0;
+      for (const row of [byShare[EARLY_EDGES.findIndex((edge, at) => share >= edge && share < EARLY_EDGES[at + 1])], gate[tooEarly(input) ? 'during' : 'after']]) {
+        row.moments++;
+        if (said) { row.runsOut++; if (ranOut !== null) row.ranOut++; }
+        if (sawReset && endHours > 0) { row.scored++; row.forecastMiss += Math.abs(ahead.after(endHours).left - readings[last].remaining); row.noneMiss += Math.abs(remaining - readings[last].remaining); }
+      }
+    }
     const window = windowForecast(input);
+    if (window.status === 'early') { const row = claims['too early'] ??= { said: 0, ranOut: 0, windows: new Set(), inRange: 0, ranged: 0, hoursOff: [] };
+      row.said++; row.windows.add(resetsAt); if (ranOut !== null) row.ranOut++; continue; }
     const claim = window.status === 'runs-out' ? (window.earliestAt && window.latestAt ? 'may run out, range' : window.earliestAt ? 'may run out, from' : 'runs out, no range')
       : window.earliestAt ? 'likely lasts' : window.confidence === 'high' ? 'lasts' : 'lasts, no range';
     const row = claims[claim] ??= { said: 0, ranOut: 0, windows: new Set(), inRange: 0, ranged: 0, hoursOff: [] };
@@ -158,27 +178,31 @@ export function backtest(series, { stepMinutes = 30 } = {}) {
   }));
   const said = Object.fromEntries(Object.entries(claims).map(([claim, row]) => [claim, { said: row.said, windows: row.windows.size,
     ranOut: round(row.ranOut / row.said), hoursOff: round(mean(row.hoursOff), 1), inRange: row.ranged ? round(row.inRange / row.ranged) : null }]));
+  const early = row => ({ moments: row.moments, runsOut: row.runsOut, cameTrue: row.runsOut ? round(row.ranOut / row.runsOut) : null,
+    resetMiss: row.scored ? round(row.forecastMiss / row.scored, 1) : null, noneMiss: row.scored ? round(row.noneMiss / row.scored, 1) : null });
+  const earlyTable = { during: early(gate.during), after: early(gate.after),
+    byShare: byShare.map((row, at) => ({ from: EARLY_EDGES[at], to: EARLY_EDGES[at + 1], ...early(row) })) };
   return { name: `${series.provider} ${series.window} (${durationMinutes >= 1440 ? `${durationMinutes / 1440}-day` : `${durationMinutes / 60}-hour`})`,
-    moments, days: round((end - first) / DAY, 1), errors: table, daysBetter, range, claims: said };
+    moments, days: round((end - first) / DAY, 1), errors: table, daysBetter, range, claims: said, early: earlyTable };
 }
 
 /**
  * Four weeks of made-up use for one weekly limit: bursts of work on most days, quiet nights and some idle days.
  * The same seed always gives the same readings.
  */
-export function fictionalPoints({ seed = 7, days = 35, start = Date.parse('2026-03-02T00:00:00Z') } = {}) {
+export function fictionalPoints({ seed = 7, days = 35, start = Date.parse('2026-03-02T00:00:00Z'), minutes = 10080 } = {}) {
   let state = seed;
   const random = () => { state = (state * 1664525 + 1013904223) % 4294967296; return state / 4294967296; };
   const points = [];
   let used = 0, opened = start, busyUntil = 0, rate = 0;
   for (let at = start; at < start + days * DAY; at += 10 * MINUTE) {
-    if (at - opened >= 7 * DAY) { opened += 7 * DAY; used = 0; }
+    if (at - opened >= minutes * MINUTE) { opened += minutes * MINUTE; used = 0; }
     const hour = new Date(at).getUTCHours(), weekday = new Date(at).getUTCDay();
     const working = hour >= 13 && hour < 23 && weekday !== 0;
     // A session starts about three times a working day, runs one to four hours and spends 1 to 5 points an hour.
     if (at >= busyUntil && working && random() < 0.05) { busyUntil = at + (1 + random() * 3) * HOUR; rate = 1 + random() * 4; }
     if (at < busyUntil) used = Math.min(100, used + rate / 6);
-    points.push({ p: 'claude', w: 'seven_day', t: new Date(at).toISOString(), r: Math.round(100 - used), x: new Date(opened + 7 * DAY).toISOString(), d: 10080 });
+    points.push({ p: 'claude', w: minutes === 10080 ? 'seven_day' : minutes === 300 ? 'five_hour' : 'window', t: new Date(at).toISOString(), r: Math.round(100 - used), x: new Date(opened + minutes * MINUTE).toISOString(), d: minutes });
   }
   return points;
 }
@@ -198,6 +222,11 @@ export function report(result) {
   lines.push(`${'  forecasts ranged'.padEnd(22)}${TARGETS.map(target => cell(result.range[target].count)).join('')}`);
   for (const [claim, row] of Object.entries(result.claims).sort(([a], [b]) => a.localeCompare(b)))
     lines.push(`said "${claim}" ${row.said} times in ${row.windows} windows: ran out ${Math.round(row.ranOut * 100)}%${row.hoursOff === null ? '' : `, time off by ${row.hoursOff}h`}${row.inRange === null ? '' : `, inside the range ${Math.round(row.inRange * 100)}%`}`);
+  const early = row => `${String(row.moments).padStart(6)}${String(row.runsOut).padStart(10)}${cell(row.cameTrue === null ? null : `${Math.round(row.cameTrue * 100)}%`)}${cell(row.resetMiss)}${cell(row.noneMiss)}`;
+  lines.push(`early window          moments  runs out came true reset miss  no spend`);
+  for (const row of result.early.byShare) lines.push(`${`  ${Math.round(row.from * 1000) / 10}-${Math.round(row.to * 1000) / 10}% elapsed`.padEnd(22)}${early(row)}`);
+  lines.push(`${'  too early (gated)'.padEnd(22)}${early(result.early.during)}`);
+  lines.push(`${'  forecast'.padEnd(22)}${early(result.early.after)}`);
   return lines.join('\n');
 }
 

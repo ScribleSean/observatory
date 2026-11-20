@@ -43,7 +43,7 @@
 - `current` is true when at least one window has a current reading. The exit code is 0 when it is true and 3 when it is false.
 - `percentLeft` uses the menu bar rule in `lib/glance-limits.mjs`. A reading older than 10 minutes, marked stale, or past its reset time is `null`. Unknown is never 0. A stale reading that has not reached its reset keeps its last value in `lastReading` (`percentLeft` and `asOfLabel`), the way the forecast dates an old claim. `lastReading` is `null` otherwise.
 - `resetsAt` and `minutesToReset` are `null` when the reading is not current or the reset time is unknown.
-- `burnPerHour` is percentage points used per hour on average since the window opened, from the one forecast the hub stores in `combined.json` (`glance.forecast`, made by `lib/forecast.mjs`). It is `null` when there is not enough history.
+- `burnPerHour` is percentage points used per hour on average since the window opened, from the one forecast the hub stores in `combined.json` (`glance.forecast`, made by `lib/forecast.mjs`). It is `null` when there is not enough history, and while the window is too new to forecast (pace `early`).
 - `forecast` on each engine and window is that stored forecast, shown as stored. `sentence` and `phrase` are the words the dashboard, menu bar and tray show, worded in the user's time zone with the day always named. `runsOutAt` is when the window runs out at its present pace, and `earliestAt` and `latestAt` are the range past forecasts support. A "may run out from" sentence names `earliestAt`. `leftAtReset` is the share expected to be left at the reset. `resetsLabel` is the label the menu bar shows, such as "Resets Fri 5 PM". The engine's `forecast` also has `headline`, the menu bar's first line, and the `window` it is about. Every field is `null` when the stored forecast does not have it.
 - `forecast` at the top has the stored sentence for all engines and when it was made (`asOf`). The sentence is `null` for a `combined.json` written before the forecast was stored with its words.
 - `devices` has each computer's state, decided once by the hub: `current`, `late` (old snapshot or the last pull failed), `off` (turned off in the settings with `"off": true`) or `missing`. `stateLabel` is what every surface shows: "Off", "No snapshot" or the time of its last reading with its day.
@@ -60,6 +60,7 @@ For each window, from the stored forecast:
 | Pace | Rule |
 | --- | --- |
 | `out` | `percentLeft` is 0. |
+| `early` | The window is too new to forecast (`forecast.status` is `early`, and the words are "Too early to forecast"): less than a tenth of the window has passed since it opened, a day at most. That is about 17 hours of a weekly window, 30 minutes of a 5-hour window and a day of a 30-day window. A window whose length is unknown needs an hour and three readings of its own. No run-out time, burn rate or share at the reset is given then. A window with 25% or less left is never `early`, and neither is a runaway burn: at least 20 points used and at least three times the share of the window elapsed. |
 | `slow` | The stored forecast says the window runs out before it resets (`forecast.status` is `runs-out`). |
 | `spend` | The stored forecast expects at least 20 points (`SPEND_MARGIN`) left at the reset, so allowance would go unused. |
 | `hold` | The stored forecast expects less than that left at the reset. |
@@ -67,7 +68,7 @@ For each window, from the stored forecast:
 
 When the window has no stored forecast, the pace falls back to straight-line budgeting with `leftAtReset = percentLeft - burnPerHour * minutesToReset / 60`: `slow` at 0 or less, `spend` at 20 points or more, or on or under the straight-line budget (`percentLeft >= 100 * minutesToReset / windowMinutes`) with at least 20% left, and `hold` otherwise. The status never says `spend` while the dashboard says the window runs out.
 
-An engine's `pace` is its most limiting window, in the order `out`, `slow`, `unknown`, `hold`, `spend`.
+An engine's `pace` is its most limiting window, in the order `out`, `slow`, `unknown`, `hold`, `early`, `spend`. An early window limits nothing, so a real verdict on the other window decides the pace.
 
 ## Route
 
@@ -84,7 +85,8 @@ An engine is usable when its `status` is `ok` and `effectiveHeadroom` is above 0
 | --- | --- |
 | `out` | 0 |
 | `unknown` | 1 |
-| pace `spend` | the most: 10 for Claude, 5 for Codex |
+| pace `spend`, or `early` with more than 25% left | the most: 10 for Claude, 5 for Codex |
+| pace `early` with 25% or less left | as `hold` |
 | pace `hold` | the most times `effectiveHeadroom` / 100, rounded up, at least 1 |
 | pace `slow` | 1 |
 
