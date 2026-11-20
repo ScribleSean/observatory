@@ -139,7 +139,8 @@ function agree(combined) {
   const weeklyMeter = limits.engines.find(engine => engine.engine === 'claude').windows.find(row => row.windowId === 'seven_day');
   assert.equal(glance.icon.fraction, Math.round(100 - weeklyMeter.remaining) / 100, 'icon ring');
   const verdict = weeklyMeter.forecast?.status;
-  assert.equal(glance.icon.state, verdict === 'room' ? 'on-pace' : ['runs-out', 'out'].includes(verdict) ? 'over-pace' : 'stale', 'icon center');
+  // A window too new to forecast is never over pace.
+  assert.equal(glance.icon.state, verdict === 'room' || verdict === 'early' ? 'on-pace' : ['runs-out', 'out'].includes(verdict) ? 'over-pace' : 'stale', 'icon center');
   // The computers' state is decided once, and every surface shows the stored label.
   for (const device of combined.devices) {
     assert.equal(summary.devices.find(row => row.host === device.host).stateLabel, device.stateLabel);
@@ -194,6 +195,39 @@ test('in another time zone every surface shows the same words in that zone', () 
   assert.equal(stored.timeZone, 'Asia/Kolkata');
   // Sat 10:40 UTC is Sat 4:10 PM in India, a half-hour zone, rounded to the quarter hour.
   assert.equal(glance.headline.resets, 'Resets Sat 4:15 PM');
+});
+
+// The evidence: 97% left under an hour after the weekly reset. The pace since the reset, carried over the week, said
+// "may run out Sat 11 PM to Sun 2 PM" and status cut cap.claude to 1.
+test('regression: a weekly window under an hour old reads "Too early to forecast" on every surface, with the default cap', () => {
+  const combined = combinedWith({ weekly: { remaining: 97, resetHours: 168 - 0.8 } });
+  const { stored, lead, week, glance, status } = agree(combined);
+  const all = surfaces(combined);
+  const early = 'Too early to forecast';
+  assert.equal(lead.status, 'early');
+  assert.equal(lead.phrase, early);
+  for (const record of [lead, ...stored.windows]) assert.deepEqual([record.runoutAt, record.earliestAt, record.latestAt, record.leftAtReset, record.beforeReset], [null, null, null, null, null]);
+  // The words: stored, Week, Limits and its "Limits now" block, the Overview, glance.json, the tray and status.
+  const headline = `Claude: ${early}`;
+  assert.equal(lead.headline, headline);
+  assert.ok(stored.sentence.startsWith(`${headline}.`), stored.sentence);
+  assert.equal(joined(week.headline.say), headline);
+  assert.equal(week.headline.pill, null);
+  assert.equal(all.limits.headline, headline);
+  assert.equal(all.limitsNow.headline, headline);
+  assert.equal(all.overview.limitsHeadline, headline);
+  assert.equal(glance.headline.text, headline);
+  assert.equal(all.tray[0], stored.sentence);
+  assert.equal(status.forecast.sentence, stored.sentence);
+  assert.equal(status.engines.claude.forecast.headline, headline);
+  assert.equal(status.engines.claude.windows.weekly.forecast.phrase, early);
+  // The menu bar and tray icon: the dot, never the over-pace bar, and its tip says why there is no verdict.
+  assert.equal(glance.icon.state, 'on-pace');
+  assert.equal(glance.icon.tip, `3% used. ${early}`);
+  // Status: pace early, and the default cap, never a cut.
+  assert.equal(status.engines.claude.windows.weekly.pace, 'early');
+  assert.equal(status.engines.claude.pace, 'early');
+  assert.equal(status.cap.claude, 10);
 });
 
 test('a computer turned off in the settings reads Off everywhere, never the time of its last reading', () => {

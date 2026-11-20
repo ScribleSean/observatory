@@ -72,3 +72,22 @@ test('the report names every method and the range', () => {
   const text = report(result);
   for (const word of ['no spend', 'straight line', 'last hour', 'window average', 'forecast', 'range, 80% stated', 'days better']) assert.ok(text.includes(word), word);
 });
+
+// The early-window case: each week opens as a work day starts, so the first hour is a burst, the shape that made an
+// hour-old window say it runs out. The pace alone, carried over the week from there, is mostly wrong.
+test('a window too new to forecast says so, because the pace alone is mostly wrong there', () => {
+  const [opensAtWork] = seriesFrom(fictionalPoints({ start: Date.parse('2026-03-02T13:00:00Z') }));
+  for (const { early, claims } of [backtest(opensAtWork), result]) {
+    assert.ok(early.during.moments > 100, 'the early part of each window is scored');
+    // Nothing but "too early" is claimed there.
+    assert.equal(claims['too early'].said, early.during.moments);
+    // Past the gate the forecast misses the share left at the reset by far less than inside it.
+    assert.ok(early.during.resetMiss > early.after.resetMiss * 1.5, `${early.during.resetMiss} inside against ${early.after.resetMiss} after`);
+  }
+  const { early } = backtest(opensAtWork);
+  assert.ok(early.during.runsOut > 50, 'the burst makes the pace say "runs out"');
+  assert.ok(early.during.cameTrue < 0.5, `"runs out" came true ${early.during.cameTrue} of the time`);
+  // Every share of the window inside the gate is early, and none past it.
+  for (const row of early.byShare) if (row.to <= 0.1) assert.ok(row.moments === 0 || row.moments <= early.during.moments);
+  assert.match(report(backtest(opensAtWork)), /too early \(gated\)/);
+});

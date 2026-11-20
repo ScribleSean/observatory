@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readingsFor, windowForecast, engineForecast, scarcest, sentence, when, between, projection, burnAfter, forecast, lookbackMs, offReason } from '../lib/forecast.mjs';
+import { readingsFor, windowForecast, engineForecast, scarcest, sentence, when, between, projection, burnAfter, forecast, lookbackMs, offReason, earlyMs, tooEarly } from '../lib/forecast.mjs';
 import { ENGINE_OFF_MS } from '../lib/freshness.mjs';
 
 const HOUR = 3600000;
@@ -89,12 +89,22 @@ test('with weeks of history the forecast states a range, and an idle weekend ahe
 });
 
 test('a window that has room in every past week says so with high confidence', () => {
+  // Tuesday 1 PM UTC, before the day's work: past the first tenth of the week. These weeks use 80 points, so the range
+  // reaches a run-out on Saturday, but the forecast itself lasts. Monday noon, with nothing spent, is too early (below).
+  const tuesday = Date.parse('2026-11-10T13:00:00Z');
+  const readings = workweeks(tuesday);
+  const result = windowForecast({ remaining: readings.at(-1).remaining, resetsAt: iso(readings.at(-1).resetsAt), durationMinutes: WEEK, readings: readings.slice(0, -1), now: tuesday });
+  assert.equal(result.status, 'room');
+  assert.equal(result.confidence, 'high');
+  assert.ok(Date.parse(result.earliestAt) < Date.parse(result.resetsAt));
+});
+
+test('Monday noon, twelve hours into the week, is too early to forecast', () => {
   const monday = Date.parse('2026-11-09T12:00:00Z');
   const readings = workweeks(monday);
   const result = windowForecast({ remaining: readings.at(-1).remaining, resetsAt: iso(readings.at(-1).resetsAt), durationMinutes: WEEK, readings: readings.slice(0, -1), now: monday });
-  assert.equal(result.status, 'room');
-  assert.equal(result.confidence, 'high');
-  assert.equal(result.earliestAt, null);
+  assert.equal(result.status, 'early');
+  assert.equal(result.runoutAt, null);
 });
 
 test('the range is worded by how sure it is', () => {
@@ -176,7 +186,7 @@ test('readings of a window that changed length under the same name are left out'
 test('too few readings and no window length give no pace and a low confidence', () => {
   const result = windowForecast({ remaining: 50, resetsAt: iso(now + 4 * HOUR), durationMinutes: null,
     readings: [{ at: now - 5 * 60000, remaining: 51, resetsAt: now + 4 * HOUR }], now });
-  assert.equal(result.status, 'room');
+  assert.equal(result.status, 'early');
   assert.equal(result.ratePerHour, null);
   assert.equal(result.confidence, 'low');
 });
@@ -309,7 +319,7 @@ test('a paid plan with a fresh reading keeps its number', () => {
 });
 
 test('off engines come last in the sentence', () => {
-  const result = forecast({ ...codexView({ plan: 'free' }), claudeLimits: { windows: [] } },
+  const result = forecast({ ...codexView({ plan: 'free' }), claudeLimits: { windows: [{ bucket: 'claude', window: 'seven_day', durationMinutes: WEEK, resetsAt: iso(now + 48 * HOUR) }] } },
     [...codexRows, { provider: 'claude', bucket: 'claude', windowId: 'seven_day', window: 'weekly', remaining: 30, stale: false, resetsAt: iso(now + 48 * HOUR) }], context);
   assert.equal(result.sentence, 'Claude has room. Codex has no plan.');
 });
@@ -366,11 +376,12 @@ test('a reading weeks old is named by its date, not a weekday', () => {
   assert.equal(when(iso(now - 20 * 24 * HOUR), context), 'Oct 23');
 });
 
-test('without a measured pace a tight window says when it resets, not that it lasts', () => {
+test('a tight window with no length and no history is too early to forecast, and still says when it resets', () => {
   const row = { ...grokRow, remaining: 10 };
   const source = grokSource({ windows: [{ bucket: 'grok', window: 'weekly', remainingPercent: 10, resetsAt: grokRow.resetsAt }] });
   const grok = forecast({ ...codexView({}), grokLimits: source }, [...codexRows, row], context).engines.find(engine => engine.engine === 'grok');
-  assert.equal(grok.phrase, 'resets Mon 10 AM');
+  assert.equal(grok.phrase, 'Too early to forecast');
+  assert.equal(grok.resetsWhen, 'Mon 10 AM');
 });
 
 test('a tight window of known length says when it runs out at its average pace', () => {
@@ -383,7 +394,9 @@ test('a tight window of known length says when it runs out at its average pace',
 test('a window the provider never named does not hide the ones it did', () => {
   const rows = [{ provider: 'codex', bucket: 'codex', windowId: 'secondary', window: 'weekly', remaining: 60, stale: false, resetsAt: iso(now + 3 * 24 * HOUR) },
     { provider: 'codex', bucket: '', windowId: '', window: '5-hour', remaining: null, stale: false, gap: true }];
-  assert.equal(codexOf(forecast(codexView({}), rows, context)).status, 'room');
+  const view = codexView({});
+  view.quota.windows.push({ bucket: 'codex', window: 'secondary', durationMinutes: WEEK, remainingPercent: 60, resetsAt: iso(now + 3 * 24 * HOUR) });
+  assert.equal(codexOf(forecast(view, rows, context)).status, 'room');
 });
 
 test('today\'s requests use the time zone the log was counted in', () => {
@@ -454,4 +467,56 @@ test('the range from past forecasts does not count a plan change as use', () => 
   const range = readings => projection({ remaining: 60, resetsAt: iso(reset), durationMinutes: WEEK, readings, now }).miss(72);
   assert.ok(range(steady).high < 1);
   assert.ok(range(changed).high < 1, String(range(changed).high));
+});
+
+// The evidence: within an hour of the weekly reset, with 97% left, the forecast said "may run out Sat 11 PM to Sun 2 PM",
+// the last hour's 3 points carried over the week.
+test('regression: 97% left under an hour into the week is too early to forecast, not a run-out', () => {
+  const reset = now + 168 * HOUR - 48 * 60000, opened = reset - 168 * HOUR;
+  // A reading every 5 minutes since the reset, 3 points spent so far.
+  const readings = Array.from({ length: 10 }, (_, index) => ({ at: opened + index * 5 * 60000, remaining: 100 - 3 * index / 9.6, resetsAt: reset }));
+  const input = { remaining: 97, resetsAt: iso(reset), durationMinutes: WEEK, readings, now };
+  // The pace alone says it runs out: this is what the gate stops.
+  assert.ok(projection(input).after(167).left === 0);
+  const result = windowForecast(input);
+  assert.equal(result.status, 'early');
+  assert.deepEqual([result.runoutAt, result.earliestAt, result.latestAt, result.ratePerHour, result.leftAtReset], [null, null, null, null, null]);
+  const engine = engineForecast('claude', 'Claude', [{ ...result, window: 'weekly' }]);
+  assert.equal(sentence([engine], context), 'Claude: Too early to forecast.');
+  // Past the first tenth of the week the same pace is forecast again.
+  assert.equal(tooEarly({ ...input, now: opened + 17 * HOUR }), false);
+});
+
+test('the early period scales with the window: a tenth of it, a day at most, an hour with no length', () => {
+  assert.equal(earlyMs(10080), 16.8 * HOUR);
+  assert.equal(earlyMs(300), 0.5 * HOUR);
+  assert.equal(earlyMs(43200), 24 * HOUR);
+  assert.equal(earlyMs(null), HOUR);
+  const at = (minutes, elapsedMinutes, remaining) => {
+    const reset = now + (minutes - elapsedMinutes) * 60000;
+    return tooEarly({ remaining, resetsAt: iso(reset), durationMinutes: minutes, readings: [], now });
+  };
+  // The 5-hour window: 20 minutes in is early, 40 is not.
+  assert.equal(at(300, 20, 90), true);
+  assert.equal(at(300, 40, 90), false);
+  // The Codex 30-day window: a day, not three.
+  assert.equal(at(43200, 20 * 60, 95), true);
+  assert.equal(at(43200, 25 * 60, 95), false);
+  // With no length, the window's own readings count: three of them over an hour.
+  const unknown = readings => tooEarly({ remaining: 90, resetsAt: iso(now + 2 * HOUR), durationMinutes: null, readings, now });
+  const reading = minutesAgo => ({ at: now - minutesAgo * 60000, remaining: 90 + minutesAgo / 30, resetsAt: now + 2 * HOUR });
+  assert.equal(unknown([reading(70)]), true);
+  assert.equal(unknown([reading(30), reading(20)]), true);
+  assert.equal(unknown([reading(70), reading(35)]), false);
+});
+
+test('an early window leads the engine over room, but a real run-out or out wins over it', () => {
+  const window = (status, remaining, extra = {}) => ({ status, remaining, resetsAt: iso(now + 100 * HOUR), runoutAt: null, earliestAt: null, latestAt: null, confidence: 'low', ratePerHour: null, ...extra });
+  assert.equal(engineForecast('claude', 'Claude', [window('early', 97), window('room', 80)]).status, 'early');
+  assert.equal(engineForecast('claude', 'Claude', [window('early', 97), window('runs-out', 30, { runoutAt: iso(now + 2 * HOUR) })]).status, 'runs-out');
+  assert.equal(engineForecast('claude', 'Claude', [window('early', 97), window('out', 0)]).status, 'out');
+  // In the one-number spot an early engine ranks after one that runs out and before one with room.
+  const engines = [{ name: 'Codex', status: 'room', remaining: 40 }, { name: 'Claude', status: 'early', remaining: 97 }];
+  assert.equal(scarcest(engines).name, 'Claude');
+  assert.equal(scarcest([...engines, { name: 'Grok', status: 'runs-out', remaining: 50, at: iso(now + HOUR) }]).name, 'Grok');
 });
