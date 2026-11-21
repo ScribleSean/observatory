@@ -30,3 +30,13 @@ export function testConfig(dataFolder,overrides={}) {
     sources:{screenTime:true,codex:true,codexLimits:true,claudeCode:true,claudeLimits:true},
     hub:{spokes:[]},role:'spoke',dashboard:{port:5601},dataFolder,...overrides};
 }
+
+// The bar plots in server-rendered markup (BarPlot in app/viewer/r2/views/parts.tsx): one list per <svg class="bars">,
+// one entry per column (a <g> of bar rects, or an Unknown mark with no bars), each bar {cls, x, y, width, height}.
+export function barPlots(markup) {
+  const attrs=tag=>Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([,key,value])=>[key,value]));
+  return [...markup.matchAll(/<svg class="bars"[^>]*>([\s\S]*?)<\/svg>/g)].map(([,body])=>
+    [...body.matchAll(/<g[^>]*>([\s\S]*?)<\/g>|<g[^>]*\/>|<rect class="unk[^>]*>(?:<\/rect>)?/g)].map(([,inner])=>
+      [...(inner??'').matchAll(/<rect [^>]*>/g)].map(([tag])=>attrs(tag)).filter(rect=>rect.class?.startsWith('bar '))
+        .map(rect=>({cls:rect.class.slice(4),x:Number(rect.x),y:Number(rect.y),width:Number(rect.width),height:Number(rect.height)}))));
+}

@@ -1,6 +1,7 @@
 import type { ComponentRenderProps } from '@json-render/react';
 import { UNKNOWN, bucketDates, buildOverview, buildScreenTime, buildTokens, patchScope, useR2 } from '../data';
 import { bucketLabel, bucketName } from './SpendLandedChart';
+import { BarPlot } from '../views/parts';
 
 type Props = import('../../../../lib/r2-blocks.mjs').TimelineProps;
 type Point = { date: string; value: number | null; text: string };
@@ -27,18 +28,13 @@ export function Timeline({ element }: ComponentRenderProps<Props>) {
       {found === null ? <div className="empty"><b className="unk">{UNKNOWN}</b>This series has not been read for {period.label}.</div>
         : found.length === 0 ? <div className="empty"><b>Nothing recorded</b>{period.label} has no values for this series.</div> : (
           <div className="chart">
-            <div className="cols spend">
-              {dates.map(date => {
-                const point = points.get(date);
-                if (!point) return <div key={date} className="col empty" />;
-                return (
-                  <div key={date} className={point.value === null ? 'col empty unknown' : 'col empty'} title={`${bucketName(period, date)}: ${point.text}`}>
-                    <em className={point.value === most ? 'peak' : ''}>{point.value === most || (dates.length <= 8 && point.value) ? point.text : ''}</em>
-                    <i className={series === 'spend' ? 'mac' : 'grey'} style={point.value === null ? undefined : { height: `${100 * point.value / most}%` }} />
-                  </div>
-                );
-              })}
-            </div>
+            <BarPlot max={most} columns={dates.map(date => {
+              const point = points.get(date);
+              if (!point) return { key: date, segments: [], future: true };
+              return { key: date, title: `${bucketName(period, date)}: ${point.text}`, peak: point.value === most,
+                segments: point.value === null ? null : [{ value: point.value, className: series === 'spend' ? 'mac' : 'grey' }],
+                label: point.value === most || (dates.length <= 8 && point.value) ? point.text : undefined };
+            })} unknown="line" />
             <div className="xl">{dates.map(date => <span key={date}>{dates.length > 16 || dates.length <= 8 ? bucketLabel(period, date) : bucketLabel(period, date).slice(0, 1)}</span>)}</div>
           </div>
         )}

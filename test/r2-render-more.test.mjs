@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { sampleR2Combined } from '../lib/sample-r2.mjs';
 import { RANGE_UNITS } from '../lib/scope.mjs';
 import { SESSION_DAYS } from '../lib/r2-shape.mjs';
+import { barPlots } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const { createServer } = await import('vite');
@@ -24,7 +25,7 @@ const { TokensBody, tokenKinds } = await load('/app/viewer/r2/views/Tokens.tsx')
 const { ScreenTimeBody } = await load('/app/viewer/r2/views/ScreenTime.tsx');
 const { DriftBody, setupRows } = await load('/app/viewer/r2/views/Drift.tsx');
 const { SettingsBody, firstLedgerDate, COLLECT_EVERY_MINUTES } = await load('/app/viewer/r2/views/Settings.tsx');
-const { dayColumns } = await load('/app/viewer/r2/views/parts.tsx');
+const { dayColumns, Columns, PLOT } = await load('/app/viewer/r2/views/parts.tsx');
 
 const NOW = Date.parse('2026-11-18T15:00:00Z'), HOUR = 3600000;
 const combined = sampleR2Combined(NOW);
@@ -235,4 +236,48 @@ test('every view renders through the real view-models for every range unit, with
   for (const control of ['<input', '<button', '<select']) assert.ok(!settings.includes(control), control);
   assert.ok(/\d+ sessions? · \$\d/.test(settings) && settings.includes('job queue'), 'this week per role, with its largest row as the example, a recurring run included');
   assert.ok(settings.includes('None this week'), 'a role with no session this week says so, never $0');
+});
+
+test('every bar grows from the baseline with its height in proportion to its value, the max from the data', () => {
+  // The Tokens plot at 1440 px is 176 px tall (11rem), so one plot unit is 1.76 px. Checks are within 1 px.
+  const PX = 176 / PLOT.height, near = (a, b, what) => assert.ok(Math.abs(a - b) * PX <= 1, `${what}: ${a} vs ${b}`);
+  const values = [5.14e9, 2.57e9, 1.285e9, 0, null, 4.0e9, 0.5e9];
+  const columns = values.map((value, index) => ({ key: `w${index}`, label: `W${index}`, full: `Week ${index}`, value }));
+  const markup = html(createElement(Columns, { columns, format: value => String(value), hint: '' }));
+  const [plot] = barPlots(markup);
+  assert.equal(plot.length, values.length, 'one column per value');
+  const max = Math.max(...values.filter(value => value !== null));
+  for (const [index, value] of values.entries()) {
+    if (value === null) { assert.equal(plot[index].length, 0, 'an Unknown week draws no bar'); continue; }
+    if (value === 0) { assert.equal(plot[index].length, 0, 'a week of 0 draws no bar'); continue; }
+    const [bar] = plot[index];
+    near(bar.y + bar.height, PLOT.height, `bar ${index} sits on the baseline`);
+    near(bar.height, PLOT.height * value / max, `bar ${index} height`);
+  }
+  near(plot[0][0].height, PLOT.height, 'the largest bar fills the plot');
+  near(plot[1][0].height, plot[0][0].height / 2, 'half the value is half the height');
+  assert.ok(markup.includes('<rect class="unk outline"'), 'the Unknown week is a dashed outline');
+  // Sean's case: the 5.14B week was a 30 px slab at the top of the plot. Here it reaches the full height.
+  assert.ok(plot[0][0].y === 0 && plot[0][0].height === PLOT.height);
+});
+
+test('the Tokens and Screen time plots draw every bar from the baseline at every range, and a part week says its dates', async () => {
+  const { Tokens } = await load('/app/viewer/r2/views/Tokens.tsx');
+  const { ScreenTime } = await load('/app/viewer/r2/views/ScreenTime.tsx');
+  const { defaultScope } = await import('../lib/scope.mjs');
+  const base = defaultScope(combined, { now: NOW });
+  let bars = 0;
+  for (const unit of ['week', 'month', 'year', 'all']) for (const View of [Tokens, ScreenTime]) {
+    const markup = html(createElement(View, { snapshot: combined, scope: { ...base, range: { unit, anchor: base.range.anchor } }, now: NOW }));
+    for (const plot of barPlots(markup)) for (const column of plot) for (const bar of column) {
+      assert.ok(Math.abs(bar.y + bar.height - PLOT.height) * 1.76 <= 1, `${unit}: a bar sits on the baseline`);
+      bars++;
+    }
+  }
+  assert.ok(bars > 50, `bars were drawn (${bars})`);
+  // periods.all starts on Wednesday Jul 22: its first bucket is Jul 22 to 26, the next the week of Monday Jul 27.
+  const columns = dayColumns(periods.all, new Map(periods.all.dates.map(date => [date, 1])), '2026-11-18');
+  assert.deepEqual(columns.slice(0, 2).map(column => [column.label, column.full, column.partial]),
+    [['Jul 22 to 26', 'Jul 22 to 26, part of a week', true], ['Jul 27', 'Week of Jul 27', false]]);
+  assert.equal(columns.filter(column => column.partial).length, 1);
 });

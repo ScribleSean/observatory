@@ -188,20 +188,23 @@ button.kpi:hover{background:var(--hover)}
 
 /* column charts */
 .chart{padding:var(--sp-2) var(--pad) var(--sp-3);flex:1;display:flex;flex-direction:column;container-type:inline-size}
-.cols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
-.cols.spend{flex:1 0 clamp(7rem,20cqi,11rem);padding-top:1.4em;border-bottom:1px solid var(--line)}
-.cols.cm{flex:0 0 clamp(2.25rem,6cqi,3.25rem);border-bottom:1px solid var(--line);margin-top:var(--sp-3)}
-.col{display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;min-width:0}
-.col>*{flex:none}
-.col:hover i{filter:brightness(1.12)}
-.col em{font-style:normal;font-size:10.5px;line-height:15px;color:var(--faint);text-align:center;white-space:nowrap;overflow:visible}
-.col em.peak{color:var(--text);font-weight:600}
-.col i{display:block;width:100%;max-width:min(100%,2.9rem);margin:0 auto;min-height:0}
-.col i:first-of-type{border-radius:2px 2px 0 0}
-.col i.mac{background:var(--accent)}.col i.pc{background:var(--accent-2)}.col i.ubuntu{background:var(--accent-3)}
-.col i.land{background:var(--g0)}.col i.churn{background:var(--g3)}.col i.grey{background:var(--g1)}
-.col.empty{cursor:default}
-.xl{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;font-size:10.5px;color:var(--faint);text-align:center;margin-top:5px;min-height:1lh}
+/* A bar plot: the bars are one SVG (BarPlot in views/parts.tsx) stretched over the plot, so each bar's height is
+   its value over the data's max of the plot height, from the baseline. The hit layer over it holds the value labels,
+   titles and clicks, one column per bar. */
+.plot{position:relative;border-bottom:1px solid var(--line)}
+.plot.spend{flex:1 0 clamp(7rem,20cqi,11rem);margin-top:1.4em}
+.plot.cm{flex:0 0 clamp(2.25rem,6cqi,3.25rem);margin-top:var(--sp-3)}
+.plot svg.bars{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block}
+.plot rect.grey{fill:var(--g1)}.plot rect.mac{fill:var(--accent)}.plot rect.pc{fill:var(--accent-2)}.plot rect.ubuntu{fill:var(--accent-3)}
+.plot rect.land{fill:var(--g0)}.plot rect.churn{fill:var(--g3)}
+.plot rect.unk.outline{fill:none;stroke:var(--line-strong);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.plot rect.unk.line{fill:var(--line-strong)}
+.plot .hits{position:absolute;inset:0;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.plot .col{position:relative;display:block;cursor:pointer;min-width:0;padding:0;border:0;background:none;font:inherit;color:inherit}
+.plot .col.empty{cursor:default}
+.plot .col em{position:absolute;left:50%;transform:translateX(-50%);font-style:normal;font-size:10.5px;line-height:15px;color:var(--faint);white-space:nowrap}
+.plot .col em.peak{color:var(--text);font-weight:600}
+.xl{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);font-size:10.5px;color:var(--faint);text-align:center;margin-top:5px;min-height:1lh}
 .xl span{white-space:nowrap;overflow:visible}
 .xl span.now{color:var(--text);font-weight:500}
 .lg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:var(--fs-small);color:var(--faint)}
@@ -346,7 +349,6 @@ button.kpi{cursor:pointer}
 .grid>.kpi-blk>.kpi,.cell>.kpi-blk>.kpi{box-shadow:none;width:100%}
 .kpi .l{display:block}
 .drawer .sum{margin-top:var(--sp-2);font-size:var(--fs-small);color:var(--faint)}
-.col.unknown i{height:2px;background:var(--line-strong);border-radius:1px}
 .li.flat{cursor:default}
 .panel .flag{display:flex;gap:var(--sp-2);align-items:baseline;padding:4px 0}
 .panel .flag .flagdot{align-self:center}
@@ -356,7 +358,6 @@ button.kpi{cursor:pointer}
 @media (max-width:1100px){.vbar .pinsel.rel{flex:0 1 auto}}
 @media (prefers-reduced-motion:reduce){.panel,.scrim,.sw i,.sw i:after{transition:none}}
 .li .t.on{color:var(--text)}
-button.col{width:100%;height:100%}
 .shr i{height:4px}
 .blk>.tw{flex:1}
 @media (max-width:640px){.scope{position:static}}

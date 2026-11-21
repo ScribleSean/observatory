@@ -36,8 +36,6 @@
 .burn .tagl b{font-weight:600}
 td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 
-/* a column with an Unknown value: an outline, never a bar of 0 */
-.col i.unk{background:transparent;border:1px dashed var(--line-strong);border-radius:2px}
 
 /* settings rows */
 .srow{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,6fr) minmax(0,2fr);gap:6px var(--sp-4);padding:10px var(--pad);border-top:1px solid var(--line-soft);align-items:first baseline}

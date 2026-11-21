@@ -3,6 +3,7 @@
 // (SPEC-UI.md), so the tokens and base rules in r2.css style them.
 import type { CSSProperties, ReactNode } from 'react';
 import type { Num, Part } from '../../../../lib/view-r2.mjs';
+import { chartBuckets } from '../../../../lib/scope.mjs';
 
 export const UNKNOWN = 'Unknown';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -163,7 +164,76 @@ export function BarList({ items, format, accent = false, limit = 0, max, shares 
 /** Breakdown parts from a Num as bars. */
 export const partBars = (parts: Part[] | undefined): Bar[] => (parts ?? []).map(part => ({ key: part.key, label: part.label, value: part.value }));
 
-export type Column = { key: string; label: string; value: number | null; full: string; now?: boolean; future?: boolean };
+export type Column = { key: string; label: string; value: number | null; full: string; now?: boolean; future?: boolean; partial?: boolean };
+
+/** The bar plot's drawing box. Bars are drawn in these units, and the SVG stretches to fill the plot. */
+export const PLOT = { width: 1000, height: 100 } as const;
+const MAX_BAR = 50; // widest bar in plot units, about 2.9rem at desktop width
+
+export type Segment = { value: number; className: string };
+export type BarBox = { x: number; y: number; width: number; height: number; className: string };
+
+/**
+ * Where each column's bars sit in the PLOT box. A column is a stack of segments drawn from the baseline
+ * (y = PLOT.height) up, each segment's height its value over `max` times the plot height. `max` comes from the
+ * data: the largest column total by default. A null column (Unknown) and a column with no segments draw no bar.
+ */
+export function plotBoxes(columns: (Segment[] | null)[], max?: number): { slot: number; bars: BarBox[][] } {
+  // zero-ok: an Unknown column sets no scale
+  const top = max ?? Math.max(...columns.map(column => (column ?? []).reduce((sum, part) => sum + part.value, 0)), 0);
+  const slot = PLOT.width / Math.max(columns.length, 1), width = Math.min(slot * 0.78, MAX_BAR);
+  const bars = columns.map((column, index) => {
+    let base = PLOT.height;
+    return (column ?? []).filter(part => part.value > 0 && top > 0).map(part => {
+      const height = PLOT.height * part.value / top;
+      base -= height;
+      return { x: index * slot + (slot - width) / 2, y: base, width, height, className: part.className };
+    });
+  });
+  return { slot, bars };
+}
+
+export type PlotColumn = {
+  key: string; segments: Segment[] | null; future?: boolean; title?: string; label?: ReactNode; peak?: boolean;
+  /** Extra props for the column's hit area: a button for a column that opens something. */
+  button?: { onClick: () => void; ariaLabel: string };
+  hover?: { onEnter: () => void; onLeave: () => void };
+  className?: string;
+};
+
+/**
+ * Columns as one SVG of bars that grow from the baseline, with an HTML layer over it for the value labels, the
+ * hover titles and clicks. The bar geometry is SVG coordinates, so it never depends on how a browser resolves a
+ * percentage height inside a flex or grid cell. An Unknown column draws a dashed outline (`unknown: 'outline'`) or
+ * a flat line on the baseline (`unknown: 'line'`), never a bar of 0.
+ */
+export function BarPlot({ columns, max, className = 'spend', unknown = 'outline' }: {
+  columns: PlotColumn[]; max?: number; className?: string; unknown?: 'outline' | 'line';
+}) {
+  const { slot, bars } = plotBoxes(columns.map(column => column.future ? [] : column.segments), max);
+  const unknownHeight = unknown === 'outline' ? 14 : 2;
+  const unknownWidth = Math.min(slot * 0.78, MAX_BAR);
+  return (
+    <div className={`plot ${className}`}>
+      <svg className="bars" viewBox={`0 0 ${PLOT.width} ${PLOT.height}`} preserveAspectRatio="none" aria-hidden="true">
+        {columns.map((column, index) => column.segments === null && !column.future
+          ? <rect key={column.key} className={`unk ${unknown}`} x={index * slot + (slot - unknownWidth) / 2} y={PLOT.height - unknownHeight} width={unknownWidth} height={unknownHeight} />
+          : <g key={column.key} className={column.className}>{bars[index].map((bar, part) => <rect key={part} className={`bar ${bar.className}`} x={bar.x} y={bar.y} width={bar.width} height={bar.height} />)}</g>)}
+      </svg>
+      <div className="hits">
+        {columns.map((column, index) => {
+          const top = bars[index].length ? PLOT.height - Math.min(...bars[index].map(bar => bar.y)) : column.segments === null && !column.future ? unknownHeight : 0;
+          const body = column.label ? <em className={column.peak ? 'peak' : undefined} style={{ bottom: `${top}%` }}>{column.label}</em> : null;
+          const name = `col${column.future || !column.button ? ' empty' : ''}${column.className ? ` ${column.className}` : ''}`;
+          const read = column.hover ? { onMouseEnter: column.hover.onEnter, onMouseLeave: column.hover.onLeave, onFocus: column.hover.onEnter, onBlur: column.hover.onLeave } : {};
+          return column.button
+            ? <button key={column.key} type="button" className={name} aria-label={column.button.ariaLabel} onClick={column.button.onClick} {...read}>{body}</button>
+            : <div key={column.key} className={name} title={column.title} {...read}>{body}</div>;
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** Grey columns with value labels: on every column when there are 12 or fewer, else on the peak only. */
 export function Columns({ columns, format, hint }: { columns: Column[]; format: (value: number | null) => string; hint: string }) {
@@ -172,15 +242,12 @@ export function Columns({ columns, format, hint }: { columns: Column[]; format: 
   const peak = top > 0 ? columns.findIndex(column => column.value === top) : -1;
   return (
     <div className="chart">
-      <div className="cols spend">
-        {columns.map((column, index) => (
-          <div key={column.key} className={`col${column.future ? ' empty' : ''}`} title={column.future ? undefined : `${column.full}: ${format(column.value)}`}>
-            <em className={index === peak ? 'peak' : undefined}>{column.value && (index === peak || columns.length <= 12) ? format(column.value) : ''}</em>
-            {/* zero-ok: a future column draws empty */}
-            {column.value === null && !column.future ? <i className="unk" style={{ height: '14%' }} title="Unknown" /> : <i className="grey" style={{ height: `${top ? 100 * (column.value ?? 0) / top : 0}%` }} />}
-          </div>
-        ))}
-      </div>
+      <BarPlot columns={columns.map((column, index) => ({
+        key: column.key, future: column.future, peak: index === peak,
+        segments: column.value === null ? null : [{ value: column.value, className: 'grey' }],
+        title: column.future ? undefined : `${column.full}: ${format(column.value)}`,
+        label: column.value && (index === peak || columns.length <= 12) ? format(column.value) : undefined,
+      }))} />
       <div className="xl">{columns.map((column, index) => <span key={column.key} className={column.now ? 'now' : undefined}>{label(columns, index)}</span>)}</div>
       <div className="read">{hint}</div>
     </div>
@@ -197,36 +264,21 @@ export const numText = (num: Num | null | undefined) => num ? num.value === null
 
 type PeriodLike = { unit: 'day' | 'week' | 'month' | 'year' | 'all'; first: string; last: string; dates: string[] };
 
-/** The last date of the period's span, past today when the period is current, so future buckets draw empty. */
-export function periodEnd(period: PeriodLike) {
-  if (period.unit === 'week') return addDays(period.first, 6);
-  if (period.unit === 'month') { const day = new Date(`${period.first}T00:00:00Z`); day.setUTCMonth(day.getUTCMonth() + 1, 0); return day.toISOString().slice(0, 10); }
-  if (period.unit === 'year') return `${period.first.slice(0, 4)}-12-31`;
-  return period.last;
-}
-
 /**
- * Daily values as chart columns: days for a week or month, months for a year, weeks (from Monday) for all
- * time. A bucket with an Unknown day is Unknown. Buckets after today draw empty.
+ * Daily values as chart columns, one per bucket of lib/scope.mjs chartBuckets: days for a week or month, months
+ * for a year, calendar weeks from Monday for all time. A bucket with an Unknown day is Unknown. Buckets after
+ * today draw empty. A first week that starts mid-week is labeled with its own dates ("Oct 2 to 4"), never as a week.
  */
 export function dayColumns(period: PeriodLike, values: Map<string, number | null>, today: string): Column[] {
-  const end = periodEnd(period), dates: string[] = [];
-  for (let date = period.first; date <= end && dates.length < 4000; date = addDays(date, 1)) dates.push(date);
-  const keyOf = (date: string) => {
-    if (period.unit === 'year') return date.slice(0, 7);
-    if (period.unit === 'all') { const day = new Date(`${date}T00:00:00Z`).getUTCDay(); return addDays(date, -((day + 6) % 7)); }
-    return date;
-  };
-  const groups = new Map<string, string[]>();
-  for (const date of dates) groups.set(keyOf(date), [...groups.get(keyOf(date)) ?? [], date]);
-  return [...groups].map(([key, list]) => {
+  return chartBuckets(period).map(({ key, dates: list, partial }) => {
     const past = list.filter(date => date <= today);
     // A date with no value at all was not read, so it is Unknown, never 0.
     const known = past.map(date => values.has(date) ? values.get(date)! : null);
     const value = past.length === 0 ? 0 : known.some(item => item === null) ? null : (known as number[]).reduce((sum, item) => sum + item, 0);
-    const label = period.unit === 'year' ? monthLabel(list[0]) : period.unit === 'all' ? shortDate(list[0]) : period.unit === 'month' ? String(Number(list[0].slice(8))) : weekday(list[0]).split(' ')[0];
-    const full = period.unit === 'year' ? `${monthLabel(list[0])} ${list[0].slice(0, 4)}` : period.unit === 'all' ? `Week of ${shortDate(list[0])}` : weekday(list[0], true);
-    return { key, label, value, full, now: list.includes(today), future: past.length === 0 };
+    const days = dateSpan(list[0], list.at(-1)!);
+    const label = period.unit === 'year' ? monthLabel(list[0]) : period.unit === 'all' ? partial ? days : shortDate(list[0]) : period.unit === 'month' ? String(Number(list[0].slice(8))) : weekday(list[0]).split(' ')[0];
+    const full = period.unit === 'year' ? `${monthLabel(list[0])} ${list[0].slice(0, 4)}` : period.unit === 'all' ? partial ? `${days}, part of a week` : `Week of ${shortDate(list[0])}` : weekday(list[0], true);
+    return { key, label, value, full, partial, now: list.includes(today), future: past.length === 0 };
   });
 }
 

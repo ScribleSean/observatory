@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
+import { BarPlot, type PlotColumn, type Segment } from '../views/parts';
 import type { ComponentRenderProps } from '@json-render/react';
 import { HOST_TINTS, UNKNOWN, bucketDates, buildOverview, count, dayLabel, monthLabel, patchScope, useR2, weekdayLabel, type DayPoint, type Period, type RangeUnit } from '../data';
 
@@ -37,15 +38,23 @@ export function SpendLandedChart({ element }: ComponentRenderProps<Props>) {
   const hint = !chart.length ? '' : drill ? `Click a bar to open that ${drill}` : 'Hover a bar for its numbers';
   const open = (date: string) => { if (drill && points.has(date)) setScope({ ...scope, range: { unit: drill, anchor: date } }); };
   const shown = hover && points.get(hover);
-  const column = (date: string, body: (point: DayPoint) => ReactNode, extra = '') => {
+  const columnOf = (date: string, segments: (point: DayPoint) => Segment[] | null, label?: (point: DayPoint) => string): PlotColumn => {
     const point = points.get(date);
-    if (!point) return <div key={date} className="col empty" />;
-    const name = `col${extra}${point.spend.value === null ? ' unknown' : ''}`;
-    const read = { onMouseEnter: () => setHover(date), onMouseLeave: () => setHover(null), onFocus: () => setHover(date), onBlur: () => setHover(null) };
-    return drill
-      ? <button key={date} type="button" className={name} aria-label={`${tip(point)}. Open this ${drill}.`} onClick={() => open(date)} {...read}>{body(point)}</button>
-      : <div key={date} className={`${name} empty`} title={tip(point)} {...read}>{body(point)}</div>;
+    if (!point) return { key: date, segments: [], future: true };
+    const hover = { onEnter: () => setHover(date), onLeave: () => setHover(null) };
+    return {
+      key: date, segments: segments(point), label: label?.(point), peak: date === peak, hover,
+      ...(drill ? { button: { onClick: () => open(date), ariaLabel: `${tip(point)}. Open this ${drill}.` } } : { title: tip(point) }),
+    };
   };
+  // A computer with no part in a bucket draws no segment.
+  const spendSegments = (point: DayPoint): Segment[] | null => point.spend.value === null ? null
+    : stacked ? hosts.map(host => ({ value: (point.spend.breakdowns.device ?? []).find(each => each.key === host)?.value ?? 0, className: HOST_TINTS[host] ?? 'mac' })) // zero-ok: a segment height, not a reading
+    : [{ value: point.spend.value, className: 'mac' }];
+  const spendLabel = (point: DayPoint) => point.spend.value === null ? dates.length <= 12 ? UNKNOWN : ''
+    : point.spend.value >= 0.5 && (point.date === peak || dates.length <= 12) ? `$${count(point.spend.value)}` : '';
+  const commitSegments = (point: DayPoint): Segment[] => point.onMain.value === null || point.onMain.of === null ? []
+    : [{ value: point.onMain.value, className: 'land' }, { value: point.onMain.of - point.onMain.value, className: 'churn' }];
   return (
     <section className="blk wide">
       <div className="bh">
@@ -57,21 +66,8 @@ export function SpendLandedChart({ element }: ComponentRenderProps<Props>) {
       </div>
       {chart.length === 0 ? <div className="empty"><b>No spend</b>Nothing was recorded in {period.label}.</div> : (
         <div className="chart">
-          <div className="cols spend">
-            {dates.map(date => column(date, point => point.spend.value === null ? <><em>{dates.length <= 12 ? UNKNOWN : ''}</em><i /></> : <>
-              <em className={date === peak ? 'peak' : ''}>{point.spend.value >= 0.5 && (date === peak || dates.length <= 12) ? `$${count(point.spend.value)}` : ''}</em>
-              {stacked ? [...hosts].reverse().map(host => {
-                const part = (point.spend.breakdowns.device ?? []).find(each => each.key === host);
-                return <i key={host} className={HOST_TINTS[host] ?? 'mac'} style={{ height: `${part?.value ? 100 * part.value / mostSpend : 0}%` }} />;
-              }) : <i className="mac" style={{ height: `${100 * point.spend.value / mostSpend}%` }} />}
-            </>))}
-          </div>
-          <div className="cols cm">
-            {dates.map(date => column(date, point => point.onMain.value === null || point.onMain.of === null ? null : <>
-              <i className="churn" style={{ height: `${100 * (point.onMain.of - point.onMain.value) / mostCommits}%` }} />
-              <i className="land" style={{ height: `${100 * point.onMain.value / mostCommits}%` }} />
-            </>))}
-          </div>
+          <BarPlot columns={dates.map(date => columnOf(date, spendSegments, spendLabel))} max={mostSpend} unknown="line" />
+          <BarPlot className="cm" columns={dates.map(date => columnOf(date, commitSegments))} max={mostCommits} />
           <div className="xl">{dates.map(date => <span key={date} className={date === today || (monthly && today?.slice(0, 7) === date.slice(0, 7)) ? 'now' : ''}>{bucketLabel(period, date)}</span>)}</div>
           <div className="read" style={shown ? { color: 'var(--text)' } : undefined}>{shown ? tip(shown) : hint}</div>
         </div>
