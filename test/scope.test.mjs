@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   periodOf, stepRange, comparisonOf, patchScope, deviceChips, visibleSources, defaultScope, scopeToSearch, scopeFromSearch,
-  dateIn, datesBetween, addDays, validDate, limitsOn, sourceOn,
+  dateIn, datesBetween, addDays, validDate, limitsOn, sourceOn, chartBuckets, WEEK_STARTS_ON,
 } from '../lib/scope.mjs';
 import { sampleR2Combined, SAMPLE_R2_TIME_ZONE } from '../lib/sample-r2.mjs';
 
@@ -158,4 +158,31 @@ test('a combined file with no settings echo shows every source and limit not lis
   // With the echo there, it decides as before.
   const echoed = { ...snapshot, view: { ...snapshot.view, config: snapshot.view.config.map(row => ({ ...row, sources: { ...row.sources, grokLimits: false } })), sourcesOff: [] } };
   assert.equal(limitsOn(echoed, 'grok'), false);
+});
+
+test('weekly chart buckets are calendar weeks from Monday, and only a first or last week cut by the period is marked partial', () => {
+  const days = (date, count) => Array.from({ length: count }, (_, index) => addDays(date, index));
+  const monday = date => new Date(`${date}T12:00:00Z`).getUTCDay() === WEEK_STARTS_ON;
+  // The first record is on Friday Oct 2: the first bucket holds Oct 2 to 4 and says so, never a week of Oct 2.
+  const all = periodOf({ unit: 'all' }, { ...NY, firstDate: '2026-10-02' });
+  const buckets = chartBuckets(all);
+  assert.deepEqual(buckets[0], { key: '2026-09-28', dates: ['2026-10-02', '2026-10-03', '2026-10-04'], partial: true });
+  assert.deepEqual(buckets[1], { key: '2026-10-05', dates: days('2026-10-05', 7), partial: false });
+  for (const [index, bucket] of buckets.entries()) {
+    assert.ok(monday(bucket.key), `${bucket.key} starts a calendar week`);
+    assert.ok(bucket.dates.every(date => date >= bucket.key && date <= addDays(bucket.key, 6)), 'every date is in its week');
+    if (bucket.partial) assert.ok(index === 0 || index === buckets.length - 1, 'only the first or last bucket can be partial');
+    else assert.deepEqual(bucket.dates, days(bucket.key, 7), `${bucket.key} is 7 days`);
+    if (index) assert.equal(bucket.key, addDays(buckets[index - 1].key, 7), 'buckets are 7 days apart');
+  }
+  // Today's week runs to Sunday, the days after today draw empty, so it is a whole week.
+  assert.deepEqual(buckets.at(-1), { key: '2026-11-16', dates: days('2026-11-16', 7), partial: false });
+  assert.equal(buckets.flatMap(bucket => bucket.dates).length, new Set(buckets.flatMap(bucket => bucket.dates)).size, 'no date is in two buckets');
+  // A first record on a Monday has no partial bucket.
+  assert.ok(chartBuckets(periodOf({ unit: 'all' }, { ...NY, firstDate: '2026-10-05' })).every(bucket => !bucket.partial));
+  // The other units: days of the week and month to their calendar end, months of the year.
+  assert.equal(chartBuckets(periodOf({ unit: 'week', anchor: '2026-11-18' }, NY)).length, 7);
+  assert.equal(chartBuckets(periodOf({ unit: 'month', anchor: '2026-11-18' }, NY)).length, 30);
+  const months = chartBuckets(periodOf({ unit: 'year', anchor: '2026-11-18' }, NY));
+  assert.deepEqual([months.length, months[1].key, months[1].dates.length, months.some(bucket => bucket.partial)], [12, '2026-02-01', 28, false]);
 });
