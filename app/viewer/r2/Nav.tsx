@@ -1,4 +1,8 @@
 import { clock, type ViewId } from './data';
+import { markShapes } from '../../../lib/glance-icon.mjs';
+
+// The header mark, from the one geometry in lib/glance-icon.mjs.
+const HEADER_MARK = markShapes(18, 'on-pace', 0.6);
 
 export const VIEWS: [ViewId, string][] = [['overview', 'Overview'], ['sessions', 'Sessions'], ['limits', 'Limits'], ['tokens', 'Tokens'], ['screen-time', 'Screen time'], ['drift', 'Drift'], ['settings', 'Settings']];
 
@@ -14,7 +18,11 @@ type Props = { view: ViewId; onView: (view: ViewId) => void; readAt: string | nu
 export function Nav({ view, onView, readAt, timeZone, now, onTheme }: Props) {
   return (
     <header className="top"><div className="wrap">
-      <div className="brand"><i aria-hidden="true" /><span>Observatory</span></div>
+      <div className="brand">
+        {/* The Refractor at 18 px, 60% full and on pace, in the accent color. */}
+        <svg aria-hidden="true" viewBox="0 0 18 18" width="18" height="18" dangerouslySetInnerHTML={{ __html: HEADER_MARK }} />
+        <span>Observatory</span>
+      </div>
       <nav className="nav" aria-label="Views">
         {VIEWS.map(([id, name]) => <a key={id} href={`#${id}`} className={view === id ? 'on' : ''} aria-current={view === id ? 'page' : undefined}
           onClick={event => { event.preventDefault(); onView(id); }}>{name}</a>)}

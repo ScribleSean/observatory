@@ -1,4 +1,4 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="glance/icons/png/icon-128-dark.png"><img src="glance/icons/png/icon-128-light.png" width="64" height="64" alt="The Observatory mark: a ring with a dot in the center"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="glance/icons/png/icon-128-dark.png"><img src="glance/icons/png/icon-128-light.png" width="64" height="64" alt="The Observatory mark: a telescope on a tripod pointed at a star"></picture></p>
 
 # Observatory
 
@@ -21,7 +21,7 @@ The dashboard has seven views under one scope bar. The scope bar picks the compu
 - **Limits** leads with the same forecast sentence as the menu bar, then each limit window once, with the computer it was read on, how much of the window is gone, past weeks and Grok requests.
 - **Tokens**, **Screen time**, **Drift** and **Settings** show tokens by model and kind, time at the screen, model settings that differ between computers, and each computer's sources. Settings only shows them: change them in `observatory.config.json` on that computer.
 
-The Ask field and the pinned questions ("Where did today's spend go?", "Will the week last?") rearrange the same blocks. Nothing in the dashboard calls a model. The menu bar and tray icon is a ring that fills for the share of the Claude weekly limit used. A dot in the center means it lasts until the reset at this pace, a bar means it runs out first, a hollow dot means the last read is old and an empty ring means the limit is off. On a Mac the percent used sits beside the icon, and on Windows it leads the tray tooltip. The panel behind it shows the scarcer limit, what is running now and the top flag.
+The Ask field and the pinned questions ("Where did today's spend go?", "Will the week last?") rearrange the same blocks. Nothing in the dashboard calls a model. The menu bar and tray icon is a telescope whose tube fills for the share of the Claude weekly limit used. The star it points at is a dot when the limit lasts until the reset at this pace, a bar when it runs out first and a hollow dot when the last read is old. An empty tube with no star means the limit is off. On a Mac the percent used sits beside the icon, and on Windows it leads the tray tooltip. The panel behind it shows the scarcer limit, what is running now and the top flag.
 
 ## Install
 
@@ -39,7 +39,7 @@ cd observatory
 npm run setup
 ```
 
-Setup writes a settings file if there is none, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the ring and dot icon, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601. It listens on 127.0.0.1 only and accepts only GET and HEAD requests.
+Setup writes a settings file if there is none, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the telescope icon, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601. It listens on 127.0.0.1 only and accepts only GET and HEAD requests.
 
 - Preview the changes first with `npm run setup -- --dry-run`.
 - Update with `git pull`, then `npm run setup`.

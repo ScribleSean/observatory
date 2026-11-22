@@ -440,8 +440,8 @@ test('the menu bar and tray icon shows the Limits view\'s share used and its pac
   for (const { name, combined, at, state } of cases) {
     const icon = iconOf(combined, at), dashboard = iconFromLimits(combined, at);
     assert.equal(icon.state, state, name);
-    assert.equal(icon.state, dashboard.state, `${name}: the icon's center and the Limits view`);
-    assert.equal(icon.fraction, dashboard.fraction, `${name}: the ring and the Limits view's percent used`);
+    assert.equal(icon.state, dashboard.state, `${name}: the icon's star and the Limits view`);
+    assert.equal(icon.fraction, dashboard.fraction, `${name}: the tube and the Limits view's percent used`);
     for (const key of ['text', 'tip'])
       if (typeof dashboard[key] === 'string') assert.equal(icon[key], dashboard[key], `${name}: ${key}`);
       else assert.match(icon[key], dashboard[key], `${name}: ${key}`);
