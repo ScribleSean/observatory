@@ -435,9 +435,9 @@ struct Push: ButtonStyle {
   }
 }
 
-// The ring and dot: the mark, the app icons and the live menu bar icon, from one geometry (lib/glance-icon.mjs).
-// The ring is the share of the Claude weekly limit used, from 12 o'clock clockwise. The center is the state, decided once
-// by lib/glance-view.mjs: a dot on pace, a bar over pace, a hollow dot when stale, nothing when off.
+// The Refractor: the mark, the app icons and the live menu bar icon, from one geometry (lib/glance-icon.mjs).
+// The tube is the share of the Claude weekly limit used, filling from the eyepiece to the lens. The star it points at is
+// the state, decided once by lib/glance-view.mjs: a dot on pace, a bar over pace, a hollow dot when stale, nothing when off.
 // test/glance-icon.test.mjs checks these numbers and formulas against lib/glance-icon.mjs and glance/windows/Glance.cs.
 enum Mark {
   enum State: String { case onPace = "on-pace", overPace = "over-pace", stale, off }
@@ -445,7 +445,8 @@ enum Mark {
   static let trackAlpha: CGFloat = 0.28
   static let staleAlpha: CGFloat = 0.45
   static let textDim: CGFloat = 0.55
-  static let minArc = 0.04
+  static let minFill = 0.04
+  static let appFill = 0.62
   static let gap: CGFloat = 5
   static let fontSize: CGFloat = 13
   static let tileRadius: CGFloat = 0.225
@@ -459,70 +460,84 @@ enum Mark {
     NSColor(srgbRed: CGFloat(hex >> 16 & 255) / 255, green: CGFloat(hex >> 8 & 255) / 255, blue: CGFloat(hex & 255) / 255, alpha: 1)
   }
 
-  // Glance icon of side s: padding round(s/16), diameter s - 2p, stroke round(d/7), centerline radius (d - w)/2.
-  static func glance(_ side: CGFloat) -> (p: CGFloat, d: CGFloat, w: CGFloat, r: CGFloat, c: CGFloat) {
-    let p = (side / 16).rounded(), d = side - 2 * p, w = (d / 7).rounded()
-    return (p, d, w, (d - w) / 2, side / 2)
+  // The mark in a square of side m, origin top left, y down: the seventeen numbers of lib/glance-icon.mjs.
+  // Sizes 12, 16, 18 and 32 are set by hand on the pixel grid; every other size is the 18 row times m/18.
+  struct Geometry { let ax, ay, run, tw, e, ew, px, py, k, lw, sx, sy, dot, barW, barH, ringR, ringW: CGFloat }
+  static let snapped: [CGFloat: [CGFloat]] = [
+    12: [1.5, 8, 6.5, 3, 1, 1.5, 5, 8.5, 1.5, 1, 10, 2, 1, 1, 4, 0.75, 0.5],
+    16: [1.5, 10.5, 9, 3.5, 1.5, 2, 6.5, 10.5, 2, 1.5, 13, 3, 2, 2, 6, 1.5, 1],
+    18: [2.5, 12, 10, 4, 1.5, 2, 7.5, 12, 2.5, 1.5, 15, 4, 2, 2, 6, 1.5, 1],
+    32: [3, 21, 20, 7, 3, 4, 13, 21, 4.5, 3, 27, 6, 3, 4, 10, 2.25, 1.5],
+  ]
+  static func geometry(_ m: CGFloat) -> Geometry {
+    let v = snapped[m] ?? snapped[18]!.map { $0 * m / 18 }
+    return Geometry(ax: v[0], ay: v[1], run: v[2], tw: v[3], e: v[4], ew: v[5], px: v[6], py: v[7], k: v[8], lw: v[9],
+                    sx: v[10], sy: v[11], dot: v[12], barW: v[13], barH: v[14], ringR: v[15], ringW: v[16])
   }
 
-  // App icon on a full tile of side s (Windows .ico): the mark's diameter, stroke and dot radius, whole pixels up to 48.
-  static func app(_ side: CGFloat) -> (d: CGFloat, w: CGFloat, dot: CGFloat) {
-    switch side {
-    case 16: return (12, 2, 2)
-    case 24: return (16, 2, 2)
-    case 32: return (20, 3, 3)
-    case 48: return (28, 4, 4)
-    default: return (side / 2, side / 14, side / 14)
-    }
+  // The app icon's mark on a full tile of side s (Windows .ico): the mark's side and its offset from the tile's corner.
+  static func app(_ side: CGFloat) -> (m: CGFloat, o: CGFloat) {
+    let m: CGFloat = side == 16 ? 12 : side == 24 ? 16 : side == 32 ? 18 : side == 48 ? 32 : side * 5 / 8
+    return (m, (side - m) / 2)
   }
 
   // The macOS app icon at a point size and scale, in pixels: the tile sits 100 of 1024 in from each edge, set in
-  // points and multiplied by the scale, so the icon is the same at 1x and 2x.
-  static func macIcon(points: CGFloat, scale: CGFloat) -> (inset: CGFloat, tile: CGFloat, d: CGFloat, w: CGFloat, dot: CGFloat) {
-    let small: [CGFloat]? = points == 16 ? [1, 10, 2, 2] : points == 32 ? [3, 16, 2, 2] : nil
-    let inset = small?[0] ?? (points * 100 / 1024).rounded(), tile = points - 2 * inset
-    let mark = small.map { Array($0[1...]) } ?? [tile / 2, tile / 14, tile / 14]
-    return (inset * scale, tile * scale, mark[0] * scale, mark[1] * scale, mark[2] * scale)
+  // points and multiplied by the scale, so the icon is the same at 1x and 2x. `base` is the mark's side in points.
+  static func macIcon(points: CGFloat, scale: CGFloat) -> (inset: CGFloat, tile: CGFloat, m: CGFloat, o: CGFloat, base: CGFloat) {
+    let inset = points == 16 ? 1 : points == 32 ? 3 : (points * 100 / 1024).rounded(), tile = points - 2 * inset
+    let m = points == 16 ? 12 : points == 32 ? 18 : tile * 5 / 8
+    return (inset * scale, tile * scale, m * scale, (points - m) / 2 * scale, m)
   }
 
-  static func circle(_ c: CGFloat, _ r: CGFloat) -> NSBezierPath {
-    NSBezierPath(ovalIn: NSRect(x: c - r, y: c - r, width: 2 * r, height: 2 * r))
-  }
+  static func fillShare(_ fraction: Double?) -> CGFloat { CGFloat(min(1, max(minFill, fraction ?? 0))) }
 
-  // The glance icon in a side by side box at the origin. `ink` is the track and the stale marks, `mark` the arc and center.
-  static func drawGlance(side: CGFloat, state: State, fraction: Double?, ink: NSColor, mark: NSColor) {
-    let g = glance(side)
-    let track = circle(g.c, g.r)
-    track.lineWidth = g.w
-    ink.withAlphaComponent(trackAlpha).setStroke()
-    track.stroke()
-    if state == .off { return }
-    let tint = state == .stale ? ink.withAlphaComponent(staleAlpha) : mark
-    if let fraction, fraction > 0 {
-      let share = CGFloat(min(1, max(minArc, fraction)))
-      let arc = share >= 1 ? circle(g.c, g.r) : NSBezierPath()
-      if share < 1 {
-        arc.appendArc(withCenter: NSPoint(x: g.c, y: g.c), radius: g.r, startAngle: 90, endAngle: 90 - 360 * share, clockwise: true)
-      }
-      arc.lineWidth = g.w
-      arc.lineCapStyle = .butt
+  // The mark of side `m`, multiplied by `scale` and moved by `offset`, in a box `height` tall. The drawing is flipped
+  // so its coordinates are the y-down ones of lib/glance-icon.mjs. `ink` is the track, eyepiece and legs, `mark` the
+  // fill and the star. Order: track, fill, eyepiece, legs, star.
+  static func drawMark(m: CGFloat, scale: CGFloat = 1, offset: CGFloat = 0, height: CGFloat, state: State, fraction: Double?, ink: NSColor, mark: NSColor) {
+    let g = geometry(m)
+    NSGraphicsContext.saveGraphicsState()
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    let flip = NSAffineTransform()
+    flip.translateX(by: offset, yBy: height - offset)
+    flip.scaleX(by: scale, yBy: -scale)
+    flip.concat()
+    func line(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat, _ width: CGFloat, _ tint: NSColor, round: Bool = false) {
+      let path = NSBezierPath()
+      path.move(to: NSPoint(x: x1, y: y1))
+      path.line(to: NSPoint(x: x2, y: y2))
+      path.lineWidth = width
+      path.lineCapStyle = round ? .round : .butt
       tint.setStroke()
-      arc.stroke()
+      path.stroke()
     }
+    line(g.ax, g.ay, g.ax + g.run, g.ay - g.run / 2, g.tw, ink.withAlphaComponent(trackAlpha))
+    if state != .off, let fraction, fraction > 0 {
+      let f = fillShare(fraction)
+      line(g.ax, g.ay, g.ax + g.run * f, g.ay - g.run * f / 2, g.tw, state == .stale ? ink.withAlphaComponent(staleAlpha) : mark)
+    }
+    line(g.ax - g.e, g.ay + g.e / 2, g.ax + g.e / 4, g.ay - g.e / 8, g.ew, ink)
+    line(g.px, g.py, g.px - g.k, g.py + 2 * g.k, g.lw, ink, round: true)
+    line(g.px, g.py, g.px + g.k, g.py + 2 * g.k, g.lw, ink, round: true)
     switch state {
     case .onPace:
-      tint.setFill()
-      circle(g.c, g.w).fill()
+      mark.setFill()
+      NSBezierPath(ovalIn: NSRect(x: g.sx - g.dot, y: g.sy - g.dot, width: 2 * g.dot, height: 2 * g.dot)).fill()
     case .overPace:
-      tint.setFill()
-      NSBezierPath(roundedRect: NSRect(x: g.c - g.w / 2, y: g.c - 1.5 * g.w, width: g.w, height: 3 * g.w), xRadius: g.w / 2, yRadius: g.w / 2).fill()
+      mark.setFill()
+      NSBezierPath(roundedRect: NSRect(x: g.sx - g.barW / 2, y: g.sy - g.barH / 2, width: g.barW, height: g.barH), xRadius: g.barW / 4, yRadius: g.barW / 4).fill()
     case .stale:
-      let hollow = circle(g.c, g.w)
-      hollow.lineWidth = g.w / 2
-      tint.setStroke()
+      let hollow = NSBezierPath(ovalIn: NSRect(x: g.sx - g.ringR, y: g.sy - g.ringR, width: 2 * g.ringR, height: 2 * g.ringR))
+      hollow.lineWidth = g.ringW
+      ink.withAlphaComponent(staleAlpha).setStroke()
       hollow.stroke()
     case .off: break
     }
+  }
+
+  // The glance icon in a side by side box at the origin. `ink` is the track and the stale marks, `mark` the fill and star.
+  static func drawGlance(side: CGFloat, state: State, fraction: Double?, ink: NSColor, mark: NSColor) {
+    drawMark(m: side, height: side, state: state, fraction: fraction, ink: ink, mark: mark)
   }
 
   // The menu bar item: the icon at 18 and the number beside it in one style. The template variant is black with alpha
@@ -549,18 +564,14 @@ enum Mark {
     return image
   }
 
-  // The app icon in a canvas of `canvas` pixels: a rounded tile `inset` in from each edge and the mark, light or dark.
-  static func drawApp(canvas: CGFloat, inset: CGFloat, mark: (d: CGFloat, w: CGFloat, dot: CGFloat), light: Bool) {
-    let tile = canvas - 2 * inset, c = canvas / 2
+  // The app icon in a canvas of `canvas` pixels: a rounded tile `inset` in from each edge and the mark of side `base`
+  // times `scale`, `offset` in from the corner, all in the accent color, appFill full, with the dot for a star.
+  static func drawApp(canvas: CGFloat, inset: CGFloat, base: CGFloat, scale: CGFloat, offset: CGFloat, light: Bool) {
+    let tile = canvas - 2 * inset
     color(light ? tileLight : tileDark).setFill()
     NSBezierPath(roundedRect: NSRect(x: inset, y: inset, width: tile, height: tile), xRadius: tile * tileRadius, yRadius: tile * tileRadius).fill()
     let tone = color(light ? accentLight : accentDark)
-    let ring = circle(c, (mark.d - mark.w) / 2)
-    ring.lineWidth = mark.w
-    tone.setStroke()
-    ring.stroke()
-    tone.setFill()
-    circle(c, mark.dot).fill()
+    drawMark(m: base, scale: scale, offset: offset, height: canvas, state: .onPace, fraction: appFill, ink: tone, mark: tone)
   }
 
   // Draws into an exact pixel grid, so 16 and 32 land on whole pixels.
@@ -901,14 +912,14 @@ extension ISO8601DateFormatter {
   for light in [false, true] {
     let theme = light ? "light" : "dark"
     for side in [16, 24, 32, 48, 64, 128, 256] {
-      let mark = Mark.app(CGFloat(side))
-      guard write("full-\(side)-\(theme).png", side, { Mark.drawApp(canvas: CGFloat(side), inset: 0, mark: mark, light: light) }) else { return 1 }
+      let g = Mark.app(CGFloat(side))
+      guard write("full-\(side)-\(theme).png", side, { Mark.drawApp(canvas: CGFloat(side), inset: 0, base: g.m, scale: 1, offset: g.o, light: light) }) else { return 1 }
     }
     for points in [16, 32, 128, 256, 512] {
       for scale in [1, 2] {
         let g = Mark.macIcon(points: CGFloat(points), scale: CGFloat(scale))
         guard write("mac-\(points)@\(scale)x-\(theme).png", points * scale, {
-          Mark.drawApp(canvas: CGFloat(points * scale), inset: g.inset, mark: (g.d, g.w, g.dot), light: light)
+          Mark.drawApp(canvas: CGFloat(points * scale), inset: g.inset, base: g.base, scale: CGFloat(scale), offset: g.o, light: light)
         }) else { return 1 }
       }
     }

@@ -62,8 +62,7 @@ button{background:none;border:0;cursor:pointer}
 .top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
 .top .wrap{display:flex;align-items:center;gap:var(--sp-2);min-height:var(--top-h)}
 .brand{display:flex;align-items:center;gap:var(--sp-2);font-weight:600;font-size:14px;letter-spacing:-.2px;margin-right:var(--sp-4);flex:none}
-.brand i{width:14px;height:14px;border-radius:50%;border:2px solid var(--accent);display:block;position:relative}
-.brand i:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+.brand svg{width:18px;height:18px;display:block;flex:none;color:var(--accent)}
 .nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;align-self:stretch;flex:1;min-width:0}
 .nav::-webkit-scrollbar{display:none}
 .nav a{display:flex;align-items:center;text-decoration:none;padding:0 10px;color:var(--muted);white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px}

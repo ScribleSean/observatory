@@ -7,7 +7,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Install, start now and at login | `npm run setup` | `test/setup.test.mjs` (Mac and Windows parts skip on Linux) |
 | Preview setup | `npm run setup -- --dry-run` | `test/setup.test.mjs` (skips on Linux) |
 | Uninstall | `npm run setup -- --remove` | none |
-| Menu bar panel (Mac) | Click the ring and dot icon | `test/glance-limits.test.mjs` and `test/repo-rules.test.mjs` for shared rules and wording, rendering none |
+| Menu bar panel (Mac) | Click the telescope icon | `test/glance-limits.test.mjs` and `test/repo-rules.test.mjs` for shared rules and wording, rendering none |
 | Tray panel (Windows) | Click the tray icon | `test/windows-dpi.test.mjs` (source text only), rendering none |
 | Menu bar and tray icon: the ring is the Claude weekly share used, the center is on pace, over pace, stale or off | Menu bar (Mac), tray (Windows) | `test/glance-text-contract.test.mjs` (state, percent and words match the Limits view), `test/glance-icon.test.mjs` (geometry in JS, Swift and C# as source text, the committed app icons decoded and checked, favicon), `test/config.test.mjs` and `test/glance-view.test.mjs` (`glance.accent`). Mac rendering checked by hand with `--render-icon`, no test runs it. Windows rendering none |
 | Open dashboard, Refresh, Quit | Panel footer and tray menu | `test/server-lifetime.test.mjs` (server stops with the app), Refresh none |

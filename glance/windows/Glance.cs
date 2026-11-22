@@ -331,61 +331,75 @@ namespace Observatory
         }
     }
 
-    // The ring and dot, from one geometry (lib/glance-icon.mjs), the same as Mark in glance/mac/Glance.swift.
-    // The ring is the share of the Claude weekly limit used, from 12 o'clock clockwise. The center is the state, decided
-    // once by lib/glance-view.mjs: a dot on pace, a bar over pace, a hollow dot when stale, nothing when off.
-    // The tray always uses the accent variant. test/glance-icon.test.mjs checks these numbers against the other two.
+    // The Refractor, from one geometry (lib/glance-icon.mjs), the same as Mark in glance/mac/Glance.swift.
+    // The tube is the share of the Claude weekly limit used, filling from the eyepiece to the lens. The star it points
+    // at is the state, decided once by lib/glance-view.mjs: a dot on pace, a bar over pace, a hollow dot when stale,
+    // nothing when off. The tray always uses the accent variant. test/glance-icon.test.mjs checks these numbers.
     static class Mark
     {
         public static readonly string[] States = { "on-pace", "over-pace", "stale", "off" };
         public const float TrackAlpha = 0.28f;
         public const float StaleAlpha = 0.45f;
-        public const double MinArc = 0.04;
+        public const double MinFill = 0.04;
         public const int AccentDark = 0xd97f57;
         public const int AccentLight = 0xb5562c;
 
         static Color Hex(int value) { return Color.FromArgb(value >> 16 & 255, value >> 8 & 255, value & 255); }
         static Color Alpha(Color color, float alpha) { return Color.FromArgb((int)Math.Round(255 * alpha, MidpointRounding.AwayFromZero), color); }
 
-        // Glance icon of side s: padding round(s/16), diameter s - 2p, stroke round(d/7), centerline radius (d - w)/2.
+        // The mark in a square of side m, origin top left, y down: ax, ay, run, tw, e, ew, px, py, k, lw, sx, sy, dot,
+        // barW, barH, ringR, ringW. Sizes 16, 18 and 32 are set by hand; every other size is the 18 row times m/18.
+        static readonly float[] Snapped16 = { 1.5f, 10.5f, 9, 3.5f, 1.5f, 2, 6.5f, 10.5f, 2, 1.5f, 13, 3, 2, 2, 6, 1.5f, 1 };
+        static readonly float[] Snapped18 = { 2.5f, 12, 10, 4, 1.5f, 2, 7.5f, 12, 2.5f, 1.5f, 15, 4, 2, 2, 6, 1.5f, 1 };
+        static readonly float[] Snapped32 = { 3, 21, 20, 7, 3, 4, 13, 21, 4.5f, 3, 27, 6, 3, 4, 10, 2.25f, 1.5f };
         public static float[] Geometry(int side)
         {
-            float p = (float)Math.Round(side / 16.0, MidpointRounding.AwayFromZero), d = side - 2 * p;
-            float w = (float)Math.Round(d / 7.0, MidpointRounding.AwayFromZero);
-            return new[] { p, d, w, (d - w) / 2, side / 2f };
+            if (side == 16) return Snapped16;
+            if (side == 18) return Snapped18;
+            if (side == 32) return Snapped32;
+            return Array.ConvertAll(Snapped18, v => v * side / 18f);
         }
 
         // The tray icon at `side` pixels (16 at 100%, 32 at 200%), for a light or dark taskbar.
+        // Order: track, fill, eyepiece, legs, star.
         public static void Draw(Graphics g, int side, string state, double? fraction, bool light)
         {
-            float[] geometry = Geometry(side);
-            float w = geometry[2], r = geometry[3], c = geometry[4];
+            float[] v = Geometry(side);
+            float ax = v[0], ay = v[1], run = v[2], tw = v[3], e = v[4], ew = v[5], px = v[6], py = v[7], k = v[8], lw = v[9];
+            float sx = v[10], sy = v[11], dot = v[12], barW = v[13], barH = v[14], ringR = v[15], ringW = v[16];
             Color ink = light ? Color.Black : Color.White, accent = Hex(light ? AccentLight : AccentDark);
-            var ring = new RectangleF(c - r, c - r, 2 * r, 2 * r);
-            using (var track = new Pen(Alpha(ink, TrackAlpha), w)) g.DrawEllipse(track, ring);
-            if (state == "off") return;
-            Color tint = state == "stale" ? Alpha(ink, StaleAlpha) : accent;
-            if (fraction.HasValue && fraction.Value > 0)
+            Line(g, ax, ay, ax + run, ay - run / 2, tw, Alpha(ink, TrackAlpha), false);
+            if (state != "off" && fraction.HasValue && fraction.Value > 0)
             {
-                double share = Math.Min(1, Math.Max(MinArc, fraction.Value));
-                using (var arc = new Pen(tint, w))
-                {
-                    arc.StartCap = arc.EndCap = LineCap.Flat;
-                    if (share >= 1) g.DrawEllipse(arc, ring);
-                    else g.DrawArc(arc, ring, -90, (float)(360 * share));
-                }
+                float f = (float)Math.Min(1, Math.Max(MinFill, fraction.Value));
+                Line(g, ax, ay, ax + run * f, ay - run * f / 2, tw, state == "stale" ? Alpha(ink, StaleAlpha) : accent, false);
             }
-            if (state == "on-pace") using (var brush = new SolidBrush(tint)) g.FillEllipse(brush, c - w, c - w, 2 * w, 2 * w);
-            else if (state == "over-pace") using (var brush = new SolidBrush(tint)) using (var bar = Rounded(new RectangleF(c - w / 2, c - 1.5f * w, w, 3 * w), w / 2)) g.FillPath(brush, bar);
-            else if (state == "stale") using (var hollow = new Pen(tint, w / 2)) g.DrawEllipse(hollow, c - w, c - w, 2 * w, 2 * w);
+            Line(g, ax - e, ay + e / 2, ax + e / 4, ay - e / 8, ew, ink, false);
+            Line(g, px, py, px - k, py + 2 * k, lw, ink, true);
+            Line(g, px, py, px + k, py + 2 * k, lw, ink, true);
+            if (state == "on-pace") using (var brush = new SolidBrush(accent)) g.FillEllipse(brush, sx - dot, sy - dot, 2 * dot, 2 * dot);
+            else if (state == "over-pace") using (var brush = new SolidBrush(accent)) using (var bar = Rounded(new RectangleF(sx - barW / 2, sy - barH / 2, barW, barH), barW / 4)) g.FillPath(brush, bar);
+            else if (state == "stale") using (var hollow = new Pen(Alpha(ink, StaleAlpha), ringW)) g.DrawEllipse(hollow, sx - ringR, sy - ringR, 2 * ringR, 2 * ringR);
         }
 
+        static void Line(Graphics g, float x1, float y1, float x2, float y2, float width, Color color, bool round)
+        {
+            using (var pen = new Pen(color, width))
+            {
+                pen.StartCap = pen.EndCap = round ? LineCap.Round : LineCap.Flat;
+                g.DrawLine(pen, x1, y1, x2, y2);
+            }
+        }
+
+        // A rectangle with all four corners rounded by `radius`.
         static GraphicsPath Rounded(RectangleF r, float radius)
         {
             var path = new GraphicsPath();
             float d = 2 * radius;
-            path.AddArc(r.X, r.Y, d, d, 180, 180);
-            path.AddArc(r.X, r.Bottom - d, d, d, 0, 180);
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
         }
