@@ -91,6 +91,8 @@ test('a day a computer could not read is Unknown, and so is every total that inc
   assert.equal(tokens.value, null);
   for (const part of tokens.breakdowns.model) assert.match(part.text, /^at least /, `tokens by model: ${part.label}`);
   assert.equal(tokens.breakdowns.device.find(part => part.key === 'Windows').text, 'Unknown');
+  for (const metric of ['spend', 'sessions', 'subagents', 'onMain']) for (const part of v.metric(snapshot, metric, day, { now: NOW }).breakdowns.role ?? [])
+    assert.equal(part.atLeast, null, `${metric} by role: a session's role can change on the unread day, so it gets no bound`);
   for (const dim of ['repo', 'kind']) assert.ok(all.breakdowns[dim].some(part => part.atLeast !== null), `spend by ${dim} has a read part`);
   assert.equal(v.metric(snapshot, 'perLanded', day, { now: NOW }).breakdowns.model?.every(part => part.atLeast === null) ?? true, true, 'a rate part has no lower bound');
   // The total stays Unknown, and says what was read beside it.
