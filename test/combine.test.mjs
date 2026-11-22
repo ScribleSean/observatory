@@ -156,9 +156,11 @@ test('a computer that is up and signed out beats an old reading from one that is
   // The menu bar says what to do, in the stale shape: never Off, which means a limit that is switched off.
   const icon=glanceView(combined,{now,timeZone:'UTC'}).icon;
   assert.deepEqual([icon.state,icon.fraction,icon.text],['stale',null,'Sign in']);
-  assert.match(icon.tip,/^Claude signed out on .+: run claude, then \/login$/);
-  // The Windows tray cuts its tooltip at 63 characters.
-  assert.ok(icon.tip.length<=63,icon.tip);
+  // What to do comes first: the Windows tray cuts its tooltip at 63 characters, and a name can run to 64.
+  assert.match(icon.tip,/^Run claude, then \/login\. Claude is signed out on .+\.$/);
+  const longName=signedOutMac();longName.device={...longName.device,name:'M'.repeat(64)};
+  const longTip=glanceView(combine([{host:'Mac',snapshot:longName}],{now}),{now,timeZone:'UTC'}).icon.tip;
+  assert.ok(longTip.slice(0,63).includes('/login'),longTip);
   // Even while the old week had not reset, a reading days old does not hide the sign-in.
   const unexpired=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pcFrom(wednesday,claudeReading(wednesday,now+86400000)),off:true}],{now});
   assert.equal(unexpired.view.claudeLimits.observedOn,'Mac');
@@ -175,6 +177,13 @@ test('a computer that is up keeps its reading through a missed read when another
   // The PC is up and its last reading is 12 minutes old (one missed tick): it still wins over the signed-out Mac.
   const pc=pcFrom(now,claudeReading(now-12*60000,now+86400000));
   assert.equal(combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pc}],{now}).view.claudeLimits.observedOn,'Windows');
+});
+
+test('a current reading from a computer that is up wins even when an off computer has a newer one',()=>{
+  const offNewer=pcFrom(now-60000,claudeReading(now-60000,now+86400000));
+  const upOlder=ownSnapshot('Linux',now,snapshot=>({...snapshot,claudeLimits:claudeReading(now-20*60000,now+86400000)}));
+  const combined=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:offNewer,off:true},{host:'Linux',snapshot:upOlder}],{now});
+  assert.equal(combined.view.claudeLimits.observedOn,'Linux');
 });
 
 test('a signed-out computer that is switched off, or dated ahead, is not up',()=>{
