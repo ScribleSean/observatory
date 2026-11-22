@@ -604,16 +604,19 @@ namespace Observatory
                     }
                 }
 
-                // The footer band: one button and when the data was made.
+                // The footer band: Open dashboard, Refresh (every source read again now) and when the data was made.
                 y += 2;
                 var open = new RectangleF(left, y + 15, Measure(g, "Open dashboard", body) + 26, 30);
-                if (hits != null) hits.Add(Tuple.Create(open, "dashboard"));
+                var refresh = new RectangleF(open.Right + 8, y + 15, Measure(g, "Refresh", body) + 26, 30);
+                if (hits != null) { hits.Add(Tuple.Create(open, "dashboard")); if (!s.Refreshing) hits.Add(Tuple.Create(refresh, "refresh")); }
                 if (draw)
                 {
                     using (var brush = new SolidBrush(p.Footer)) g.FillRectangle(brush, new RectangleF(0, y, Width, FooterHeight));
                     using (var pen = new Pen(p.Hairline)) g.DrawLine(pen, 0, y, Width, y);
                     Box(g, p.Button, p.Hairline, open, 4);
                     Text(g, "Open dashboard", body, p.Text, open.X + 13, open.Y + 7);
+                    Box(g, p.Button, p.Hairline, refresh, 4);
+                    Text(g, "Refresh", body, s.Refreshing ? p.Muted : p.Text, refresh.X + 13, refresh.Y + 7);
                     string status = s.Refreshing ? "Refreshing…" : s.Old && s.Updated.HasValue ? "Updated " + Format.Age(s.Now - s.Updated.Value) : s.UpdatedText;
                     if (status != null) Text(g, status, small, s.Old && !s.Refreshing ? p.Warning : p.Muted, right - Measure(g, status, small), y + 23);
                 }
@@ -779,6 +782,7 @@ namespace Observatory
         Icon icon;
         SynchronizationContext ui;
         DateTime tickStarted = DateTime.MinValue;
+        const int RefreshOnOpenSeconds = 60;
         bool nodeMissing;
         readonly System.Windows.Forms.Timer openTimer = new System.Windows.Forms.Timer();
         int openTries;
@@ -834,6 +838,9 @@ namespace Observatory
         {
             if (panel.Visible || openAtPress) { panel.Hide(); openAtPress = false; return; }
             Show();
+            // Opening the panel on a reading more than a minute old reads every source again.
+            var shown = panel.State;
+            if (shown == null || !shown.Updated.HasValue || (DateTime.UtcNow - shown.Updated.Value).TotalSeconds > RefreshOnOpenSeconds) RunTick();
             panel.Place(true);
             panel.Show();
             panel.Activate();

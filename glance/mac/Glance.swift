@@ -395,8 +395,15 @@ struct PanelView: View {
     HStack(spacing: 8) {
       Button("Open dashboard", action: model.openDashboard)
         .buttonStyle(Push(palette: palette)).keyboardShortcut("d")
+      // Reads every source again now, the same as the five-minute tick. An icon, so the footer keeps room for the
+      // time; the spinner takes its place while a read runs.
+      if state.refreshing {
+        ProgressView().controlSize(.small).scaleEffect(0.7).accessibilityLabel("Refreshing")
+      } else {
+        Button(action: model.refresh) { Image(systemName: "arrow.clockwise") }
+          .buttonStyle(Push(palette: palette)).keyboardShortcut("r").help("Refresh").accessibilityLabel("Refresh")
+      }
       Spacer(minLength: 8)
-      if state.refreshing { ProgressView().controlSize(.small).scaleEffect(0.7) }
       if state.old, let updated = state.updated {
         Text("Updated \(Format.age(state.now.timeIntervalSince(updated)))").foregroundStyle(palette.warning)
       } else if let text = state.updatedText {
@@ -406,10 +413,9 @@ struct PanelView: View {
     .font(.system(size: 12))
   }
 
-  // Refresh and Quit live in the right-click menu. Their keys still work while the panel is open.
+  // Quit lives in the right-click menu. Its key still works while the panel is open.
   var shortcuts: some View {
     ZStack {
-      Button("Refresh", action: model.refresh).keyboardShortcut("r")
       Button("Quit Observatory", action: model.quit).keyboardShortcut("q")
     }
     .opacity(0).frame(width: 0, height: 0).accessibilityHidden(true)
@@ -721,6 +727,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
 
   var tickStarted = Date.distantPast
+  static let refreshOnOpen: TimeInterval = 60
 
   @objc func runTick() {
     if let running = tick, running.isRunning {
@@ -772,6 +779,8 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Clicking the icon while open first takes focus from the panel, which closes it. Don't reopen on that same click.
     if Date().timeIntervalSince(closedAt) < 0.3 { return }
     show()
+    // Opening the panel on a reading more than a minute old reads every source again.
+    if model.state.updated.map({ Date().timeIntervalSince($0) > Self.refreshOnOpen }) ?? true { runTick() }
     if panel == nil {
       let view = NSHostingView(rootView: PanelView(model: model))
       hosting = view
