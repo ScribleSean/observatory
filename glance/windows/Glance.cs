@@ -349,9 +349,9 @@ namespace Observatory
 
         // The mark in a square of side m, origin top left, y down: ax, ay, run, tw, e, ew, px, py, k, lw, sx, sy, dot,
         // barW, barH, ringR, ringW. Sizes 16, 18 and 32 are set by hand; every other size is the 18 row times m/18.
-        static readonly float[] Snapped16 = { 1.5f, 10.5f, 9, 3.5f, 1.5f, 2, 6.5f, 10.5f, 2, 1.5f, 13, 3, 2, 2, 6, 1.5f, 1 };
+        static readonly float[] Snapped16 = { 1.5f, 10.5f, 9, 3.5f, 1, 2, 6.5f, 10.5f, 2, 1.5f, 13, 3, 2, 2, 6, 1.5f, 1 };
         static readonly float[] Snapped18 = { 2.5f, 12, 10, 4, 1.5f, 2, 7.5f, 12, 2.5f, 1.5f, 15, 4, 2, 2, 6, 1.5f, 1 };
-        static readonly float[] Snapped32 = { 3, 21, 20, 7, 3, 4, 13, 21, 4.5f, 3, 27, 6, 3, 4, 10, 2.25f, 1.5f };
+        static readonly float[] Snapped32 = { 3, 21, 20, 7, 2, 4, 13, 21, 4.5f, 3, 27, 6, 3, 4, 10, 2.25f, 1.5f };
         public static float[] Geometry(int side)
         {
             if (side == 16) return Snapped16;
@@ -945,7 +945,7 @@ namespace Observatory
             return combined == null ? null : PanelState.Parse(combined, now);
         }
 
-        // The ring and its center as glance.json says, at the tray's own size, for the taskbar's theme.
+        // The tube and its star as glance.json says, at the tray's own size, for the taskbar's theme.
         void SetIcon(string shape, double? fraction)
         {
             bool light = false;

@@ -1,4 +1,8 @@
 import { clock, type ViewId } from './data';
+import { markShapes } from '../../../lib/glance-icon.mjs';
+
+// The header mark, from the one geometry in lib/glance-icon.mjs.
+const HEADER_MARK = markShapes(18, 'on-pace', 0.6);
 
 export const VIEWS: [ViewId, string][] = [['overview', 'Overview'], ['sessions', 'Sessions'], ['limits', 'Limits'], ['tokens', 'Tokens'], ['screen-time', 'Screen time'], ['drift', 'Drift'], ['settings', 'Settings']];
 
@@ -15,15 +19,8 @@ export function Nav({ view, onView, readAt, timeZone, now, onTheme }: Props) {
   return (
     <header className="top"><div className="wrap">
       <div className="brand">
-        {/* The Refractor at 18 px, 60% full and on pace: lib/glance-icon.mjs markShapes(18, 'on-pace', 0.6). */}
-        <svg aria-hidden="true" viewBox="0 0 18 18" width="18" height="18" stroke="currentColor">
-          <line x1="2.5" y1="12" x2="12.5" y2="7" strokeWidth="4" opacity="0.28" />
-          <line x1="2.5" y1="12" x2="8.5" y2="9" strokeWidth="4" />
-          <line x1="1" y1="12.75" x2="2.875" y2="11.813" strokeWidth="2" />
-          <line x1="7.5" y1="12" x2="5" y2="17" strokeWidth="1.5" strokeLinecap="round" />
-          <line x1="7.5" y1="12" x2="10" y2="17" strokeWidth="1.5" strokeLinecap="round" />
-          <circle cx="15" cy="4" r="2" fill="currentColor" stroke="none" />
-        </svg>
+        {/* The Refractor at 18 px, 60% full and on pace, in the accent color. */}
+        <svg aria-hidden="true" viewBox="0 0 18 18" width="18" height="18" dangerouslySetInnerHTML={{ __html: HEADER_MARK }} />
         <span>Observatory</span>
       </div>
       <nav className="nav" aria-label="Views">

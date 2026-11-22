@@ -22,7 +22,9 @@ test('the live icon is the hand-set mark at 16, 18 and 32, and other sizes scale
     assert.deepEqual(FIELDS.map(key => g[key]), SNAPPED[side], `side ${side}`);
     // Inside the box: the feet, the lens corner and the star.
     assert.ok(g.py + 2 * g.k + g.lw / 2 <= side && g.px - g.k - g.lw / 2 >= 0, `side ${side} feet`);
-    assert.ok(g.sx + g.dot <= side && g.sy - g.barH / 2 >= 0 && g.ax - g.e >= 0, `side ${side} star and eyepiece`);
+    assert.ok(g.sx + g.dot <= side && g.sy - g.barH / 2 >= 0, `side ${side} star`);
+    // The eyepiece's back corner: its end less half its width across a slope of 1 in 2.
+    assert.ok(g.ax - g.e - g.ew / 2 / Math.sqrt(5) >= 0, `side ${side} eyepiece`);
     // The three state shapes differ: the bar is taller than the dot, and the hollow dot's outer edge is the dot's.
     assert.ok(g.barH > 2 * g.dot, `side ${side} bar`);
     assert.equal(g.ringR + g.ringW / 2, g.dot, `side ${side} hollow dot`);
@@ -45,6 +47,8 @@ test('a share of 0 draws no fill, a small one the minimum, and off none at all',
   assert.equal(fills('on-pace', null), 0);
   assert.equal(fills('on-pace', 0.01), 1);
   assert.equal(fills('off', 0.6), 0);
+  assert.doesNotMatch(glanceSvg(18, 'off', 0.6), /<circle|<rect/, 'off has no star');
+  assert.match(glanceSvg(18, 'on-pace', 1.4), /opacity="0.28"\/><line x1="2.5" y1="12" x2="12.5" y2="7"/, 'a share past 1 stops at the lens');
   assert.match(glanceSvg(18, 'on-pace', 0.01), new RegExp(`x2="${2.5 + 10 * ICON.minFill}"`));
 });
 

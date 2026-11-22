@@ -465,9 +465,9 @@ enum Mark {
   struct Geometry { let ax, ay, run, tw, e, ew, px, py, k, lw, sx, sy, dot, barW, barH, ringR, ringW: CGFloat }
   static let snapped: [CGFloat: [CGFloat]] = [
     12: [1.5, 8, 6.5, 3, 1, 1.5, 5, 8.5, 1.5, 1, 10, 2, 1, 1, 4, 0.75, 0.5],
-    16: [1.5, 10.5, 9, 3.5, 1.5, 2, 6.5, 10.5, 2, 1.5, 13, 3, 2, 2, 6, 1.5, 1],
+    16: [1.5, 10.5, 9, 3.5, 1, 2, 6.5, 10.5, 2, 1.5, 13, 3, 2, 2, 6, 1.5, 1],
     18: [2.5, 12, 10, 4, 1.5, 2, 7.5, 12, 2.5, 1.5, 15, 4, 2, 2, 6, 1.5, 1],
-    32: [3, 21, 20, 7, 3, 4, 13, 21, 4.5, 3, 27, 6, 3, 4, 10, 2.25, 1.5],
+    32: [3, 21, 20, 7, 2, 4, 13, 21, 4.5, 3, 27, 6, 3, 4, 10, 2.25, 1.5],
   ]
   static func geometry(_ m: CGFloat) -> Geometry {
     let v = snapped[m] ?? snapped[18]!.map { $0 * m / 18 }
@@ -750,7 +750,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     state.refreshing = tick?.isRunning == true
     model.state = state
     let current = state.notice == .none && !state.old && !state.empty
-    // The ring and its number, as glance.json says. The state is in the icon, so the button is never greyed out.
+    // The icon and its number, as glance.json says. The state is in the icon, so the button is never greyed out.
     let icon = state.shownIcon
     item.button?.image = Mark.menuBar(state: icon.state, fraction: icon.fraction, text: icon.text, accent: state.accent)
     item.button?.title = ""
