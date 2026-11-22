@@ -52,7 +52,7 @@ const chips = (selected = ['Mac', 'Windows', 'Linux']) => combined.devices.map(d
 const frame = (unit = 'week', selected) => ({ scope: { devices: selected ?? ['Mac', 'Windows', 'Linux'], range: { unit, anchor: '2026-11-18' }, sources: ['claude', 'codex', 'grok'] },
   period: periods[unit], comparison: null, devices: chips(selected), sources: [], steps: { back: null, forward: null }, timeZone: TZ, generatedAt: combined.generatedAt, stale: false });
 const num = (value, text, extra = {}) => ({ metric: null, unit: 'count', value, text, of: null, sumLabel: null, previous: null, delta: null, deltaText: null, breakdowns: {}, note: null, ...extra });
-const part = (key, value, text) => ({ key, label: key, value, text, share: null });
+const part = (key, value, text) => ({ key, label: key, value, text, share: null, atLeast: null });
 
 test('the collection interval Settings states is the one the collector writes', async () => {
   const source = await readFile(new URL('../scripts/collect.mjs', import.meta.url), 'utf8');

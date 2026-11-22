@@ -26,8 +26,10 @@ function assertNum(num, metric) {
   if (metric) assert.deepEqual(new Set(Object.keys(num.breakdowns)), new Set(METRIC_DIMS[metric]), `${metric} breakdowns`);
   if (num.value === null) assert.ok(/Unknown|None landed/.test(num.text), `${metric} null reads Unknown, not ${num.text}`);
   for (const parts of Object.values(num.breakdowns)) for (const part of parts) {
-    assert.deepEqual(Object.keys(part).sort(), ['key', 'label', 'share', 'text', 'value']);
-    if (part.value === null) assert.equal(part.text, 'Unknown');
+    assert.deepEqual(Object.keys(part).sort(), ['atLeast', 'key', 'label', 'share', 'text', 'value']);
+    if (part.value !== null) assert.equal(part.atLeast, null, 'a known part has no lower bound');
+    else if (part.atLeast === null) assert.equal(part.text, 'Unknown');
+    else assert.equal(part.text, `at least ${v.formatValue(num.unit, part.atLeast)}`);
   }
 }
 
@@ -76,6 +78,23 @@ test('a day a computer could not read is Unknown, and so is every total that inc
   assert.equal(parts.Windows, null);
   close(parts.Mac, ledgerSum(['Mac'], [windowsUnavailable], d => d.apiUsd));
   for (const part of all.breakdowns.model) assert.equal(part.value, null, 'a part of an Unknown total is Unknown');
+  // Each Unknown part says what was read of it, and a computer with nothing read stays a bare Unknown.
+  const models = all.breakdowns.model;
+  assert.ok(models.length && models.every(part => part.atLeast !== null), 'every model part has its read part');
+  close(models.reduce((sum, part) => sum + part.atLeast, 0), ledgerSum(['Mac', 'Linux'], [windowsUnavailable], d => d.apiUsd));
+  assert.equal(models[0].text, `at least ${v.formatValue('usd', models[0].atLeast)}`);
+  assert.ok(models.every((part, i) => i === 0 || part.key === 'other' || models[i - 1].atLeast >= part.atLeast), 'ranked by what was read');
+  const windowsPart = all.breakdowns.device.find(part => part.key === 'Windows');
+  assert.equal(windowsPart.atLeast, null);
+  assert.equal(windowsPart.text, 'Unknown');
+  const tokens = v.metric(snapshot, 'tokens', day, { now: NOW });
+  assert.equal(tokens.value, null);
+  for (const part of tokens.breakdowns.model) assert.match(part.text, /^at least /, `tokens by model: ${part.label}`);
+  assert.equal(tokens.breakdowns.device.find(part => part.key === 'Windows').text, 'Unknown');
+  for (const metric of ['spend', 'sessions', 'subagents', 'onMain']) for (const part of v.metric(snapshot, metric, day, { now: NOW }).breakdowns.role ?? [])
+    assert.equal(part.atLeast, null, `${metric} by role: a session's role can change on the unread day, so it gets no bound`);
+  for (const dim of ['repo', 'kind']) assert.ok(all.breakdowns[dim].some(part => part.atLeast !== null), `spend by ${dim} has a read part`);
+  assert.equal(v.metric(snapshot, 'perLanded', day, { now: NOW }).breakdowns.model?.every(part => part.atLeast === null) ?? true, true, 'a rate part has no lower bound');
   // The total stays Unknown, and says what was read beside it.
   const read = ledgerSum(['Mac', 'Linux'], [windowsUnavailable], d => d.apiUsd);
   close(all.atLeast.value, read);

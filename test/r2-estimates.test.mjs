@@ -55,13 +55,13 @@ test('a priced model keeps its own cost next to an unpriced one while the day to
   const result = v.buildTokens(mixed(), scope('day'), { now: NOW });
   assert.equal(result.spend.value, null);
   assert.equal(result.agents.find(row => row.agent === 'Opus').usd.value, 5);
-  assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Opus'), { key: 'Opus', label: 'Opus', value: 5, text: '$5.00', share: null });
+  assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Opus'), { key: 'Opus', label: 'Opus', value: 5, text: '$5.00', share: null, atLeast: null });
 });
 
 test('an unpriced model is Unknown in the agent rows and the model breakdown, never $0', () => {
   const result = v.buildTokens(mixed(), scope('day'), { now: NOW });
   assert.equal(result.agents.find(row => row.agent === 'Sonnet').usd.value, null);
-  assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Sonnet'), { key: 'Sonnet', label: 'Sonnet', value: null, text: 'Unknown', share: null });
+  assert.deepEqual(result.spend.breakdowns.model.find(part => part.label === 'Sonnet'), { key: 'Sonnet', label: 'Sonnet', value: null, text: 'Unknown', share: null, atLeast: null });
 });
 
 // A reading another computer made, checked `ageMs` before NOW. No validUntil, so only the age decides.
