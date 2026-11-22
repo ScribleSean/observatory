@@ -18,10 +18,7 @@
 .blk>.lim:last-child{padding-bottom:var(--sp-3)}
 
 /* requests per day */
-.spark{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;align-items:end;height:clamp(24px,7cqi,40px);margin:var(--sp-2) 0 6px}
-.spark i{display:block;background:var(--g1);border-radius:1.5px 1.5px 0 0;min-height:1px}
-.spark i.z{background:var(--line-strong)}
-.spark i.unk{background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong)}
+.plot.spark{height:clamp(24px,7cqi,40px);margin:var(--sp-2) 0 6px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:6px var(--sp-4)}
 .kv span:nth-child(odd){color:var(--faint)}
 
@@ -36,8 +33,6 @@
 .burn .tagl b{font-weight:600}
 td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 
-/* a column with an Unknown value: an outline, never a bar of 0 */
-.col i.unk{background:transparent;border:1px dashed var(--line-strong);border-radius:2px}
 
 /* settings rows */
 .srow{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,6fr) minmax(0,2fr);gap:6px var(--sp-4);padding:10px var(--pad);border-top:1px solid var(--line-soft);align-items:first baseline}
@@ -86,7 +81,7 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 @media (max-width:640px){
   .grid.more>.s4,.more .side>.s4,.more .tail>.s4{flex:1 1 100%}
 }
-.spark.tall{height:clamp(40px,12cqi,64px);margin-top:0}
+.plot.spark.tall{height:clamp(40px,12cqi,64px);margin-top:0}
 .more .li .t,.more .li .t div{white-space:normal;overflow:visible;text-overflow:clip}
 
 /* The stored forecast's line, the same words as the menu bar. */

@@ -1,18 +1,17 @@
 // Grok requests per day and its weekly limit when a reading is cached. Requests are never added to
 // dollars or tokens. A day with no count read is drawn hollow and reads Unknown, never 0.
 import type { GrokRequestsVM } from '../../../../lib/view-r2.mjs';
-import { UNKNOWN, dayClock, plural, weekday } from '../views/parts';
+import { BarPlot, UNKNOWN, dayClock, plural, weekday } from '../views/parts';
 import '../views/more.css';
 
+// Requests per day on the shared bar plot: each bar its count over the busiest day, from the baseline. A day with
+// no count read is a hollow outline the plot's full height, never a bar of 0.
 function Spark({ days, tall = false }: { days: GrokRequestsVM['days']; tall?: boolean }) {
-  // zero-ok: bar height scale only, an Unknown day draws hollow
-  const top = Math.max(...days.map(day => day.value ?? 0), 1);
   return (
-    <div className={tall ? "spark tall" : "spark"}>
-      {days.map(day => day.value === null
-        ? <i key={day.date} className="z unk" style={{ height: '100%' }} title={`${weekday(day.date, true)}: Unknown, not read`} />
-        : <i key={day.date} className={day.value ? undefined : 'z'} style={{ height: `${day.value ? Math.max(6, 100 * day.value / top) : 3}%` }} title={`${weekday(day.date, true)}: ${plural(day.value, 'request')}`} />)}
-    </div>
+    <BarPlot className={tall ? 'spark tall' : 'spark'} unknownHeight={100} columns={days.map(day => ({
+      key: day.date, segments: day.value === null ? null : [{ value: day.value, className: 'grey' }],
+      title: `${weekday(day.date, true)}: ${day.value === null ? 'Unknown, not read' : plural(day.value, 'request')}`,
+    }))} />
   );
 }
 

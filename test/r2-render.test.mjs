@@ -11,6 +11,7 @@ import {sampleR2Combined} from '../lib/sample-r2.mjs';
 import {checkSavedView} from '../lib/r2-catalog.mjs';
 import {BLOCK_TYPES} from '../lib/r2-blocks.mjs';
 import {PINNED_QUESTIONS,VIEW_SPECS} from '../lib/r2-specs.mjs';
+import {barPlots} from './helpers.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
 const load=specifier=>import(specifier);
@@ -105,7 +106,7 @@ test('the scope in the address is followed: one device, a range and a step back'
   assert.ok(earlier.includes('Nov 9 to 15') && earlier.includes('Last week'));
   assert.ok(!earlier.includes('Running now'),'running now is shown for the current period only');
   const all=clean(render({initialSearch:'?unit=all'}));
-  assert.ok(all.includes('All time') && all.includes('per month'));
+  assert.ok(all.includes('All time') && all.includes('per week'),'all time is drawn per week, as on every chart');
   assert.ok(/<button[^>]*disabled=""[^>]*aria-label="Earlier"|aria-label="Earlier"[^>]*disabled=""|disabled="" title="Earlier"/.test(all),'all time cannot step');
 });
 
@@ -351,4 +352,23 @@ test('Limits now on the Overview leads with the stored forecast, then Claude wee
   assert.equal((html.match(/aria-label="Limits now"/g)??[]).length,1);
   // The Limits view keeps its own blocks, so Grok is not drawn twice there.
   assert.ok(!text(firstDraw['#limits']).includes('Codex is off'));
+});
+
+test('the Overview spend and commit bars stack from the baseline, each segment its share of the data max',()=>{
+  const overview=data.buildOverview(combined,data.defaultScope(combined,{now}),{now});
+  const page=render({}),start=page.indexOf('Spend and what landed'),html=page.slice(start,page.indexOf('</section>',start));
+  const plots=barPlots(html).map(plot=>plot.map(column=>column.map(bar=>({y:bar.y,h:bar.height}))));
+  assert.equal(plots.length,2,'a spend plot and a commits plot');
+  const near=(a,b,what)=>assert.ok(Math.abs(a-b)*1.76<=1,`${what}: ${a} vs ${b}`);
+  const most=Math.max(...overview.chart.map(point=>point.spend.value ?? 0));
+  const byDate=new Map(overview.chart.map(point=>[point.date,point]));
+  const dates=data.bucketDates(overview.frame.period);
+  assert.equal(plots[0].length,dates.length);
+  for(const [index,column] of plots[0].entries()) {
+    let base=100;
+    for(const bar of column){near(bar.y+bar.h,base,'a segment sits on the one below');base=bar.y;}
+    const point=byDate.get(dates[index]);
+    if(point?.spend.value)near(100-base,100*point.spend.value/most,`${dates[index]} spend height`);
+  }
+  for(const column of plots[1]){let base=100;for(const bar of column){near(bar.y+bar.h,base,'a commit segment sits on the one below');base=bar.y;}}
 });

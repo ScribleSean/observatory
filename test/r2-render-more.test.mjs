@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { sampleR2Combined } from '../lib/sample-r2.mjs';
 import { RANGE_UNITS } from '../lib/scope.mjs';
 import { SESSION_DAYS } from '../lib/r2-shape.mjs';
+import { barPlots } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const { createServer } = await import('vite');
@@ -24,7 +25,7 @@ const { TokensBody, tokenKinds } = await load('/app/viewer/r2/views/Tokens.tsx')
 const { ScreenTimeBody } = await load('/app/viewer/r2/views/ScreenTime.tsx');
 const { DriftBody, setupRows } = await load('/app/viewer/r2/views/Drift.tsx');
 const { SettingsBody, firstLedgerDate, COLLECT_EVERY_MINUTES } = await load('/app/viewer/r2/views/Settings.tsx');
-const { dayColumns } = await load('/app/viewer/r2/views/parts.tsx');
+const { dayColumns, Columns, PLOT } = await load('/app/viewer/r2/views/parts.tsx');
 
 const NOW = Date.parse('2026-11-18T15:00:00Z'), HOUR = 3600000;
 const combined = sampleR2Combined(NOW);
@@ -99,7 +100,7 @@ test('Limits reads Unknown, never 0, before the app reports a window', () => {
   assert.ok(!/>0%</.test(markup), 'no 0% for a window never read');
   assert.ok(markup.includes('not in the Nov 12, 5:00 AM read'), 'the 5 hour window says which read left it out, with its date');
   assert.ok(markup.includes('requests per day, last 30 days') && markup.includes('36% used'), 'Grok shows requests per day and the share of its weekly limit used');
-  assert.ok(markup.includes('class="z unk"'), 'a day with no count read is drawn hollow');
+  assert.ok(markup.includes('<rect class="unk outline"'), 'a day with no count read is drawn hollow');
   assert.ok(!markup.includes('$'), 'Grok requests are never in dollars');
 });
 
@@ -235,4 +236,77 @@ test('every view renders through the real view-models for every range unit, with
   for (const control of ['<input', '<button', '<select']) assert.ok(!settings.includes(control), control);
   assert.ok(/\d+ sessions? · \$\d/.test(settings) && settings.includes('job queue'), 'this week per role, with its largest row as the example, a recurring run included');
   assert.ok(settings.includes('None this week'), 'a role with no session this week says so, never $0');
+});
+
+test('every bar grows from the baseline with its height in proportion to its value, the max from the data', () => {
+  // The Tokens plot at 1440 px is 176 px tall (11rem), so one plot unit is 1.76 px. Checks are within 1 px.
+  const PX = 176 / PLOT.height, near = (a, b, what) => assert.ok(Math.abs(a - b) * PX <= 1, `${what}: ${a} vs ${b}`);
+  const values = [5.14e9, 2.57e9, 1.285e9, 0, null, 4.0e9, 0.5e9];
+  const columns = values.map((value, index) => ({ key: `w${index}`, label: `W${index}`, full: `Week ${index}`, value }));
+  const markup = html(createElement(Columns, { columns, format: value => String(value), hint: '' }));
+  const [plot] = barPlots(markup);
+  assert.equal(plot.length, values.length, 'one column per value');
+  const max = Math.max(...values.filter(value => value !== null));
+  for (const [index, value] of values.entries()) {
+    if (value === null) { assert.equal(plot[index].length, 0, 'an Unknown week draws no bar'); continue; }
+    if (value === 0) { assert.equal(plot[index].length, 0, 'a week of 0 draws no bar'); continue; }
+    const [bar] = plot[index];
+    near(bar.y + bar.height, PLOT.height, `bar ${index} sits on the baseline`);
+    near(bar.height, PLOT.height * value / max, `bar ${index} height`);
+  }
+  near(plot[0][0].height, PLOT.height, 'the largest bar fills the plot');
+  near(plot[1][0].height, plot[0][0].height / 2, 'half the value is half the height');
+  assert.ok(markup.includes('<rect class="unk outline"'), 'the Unknown week is a dashed outline');
+  // Sean's case: the 5.14B week was a 30 px slab at the top of the plot. Here it reaches the full height.
+  assert.ok(plot[0][0].y === 0 && plot[0][0].height === PLOT.height);
+});
+
+test('the Tokens and Screen time plots draw every bar from the baseline at every range, and a part week says its dates', async () => {
+  const { Tokens } = await load('/app/viewer/r2/views/Tokens.tsx');
+  const { ScreenTime } = await load('/app/viewer/r2/views/ScreenTime.tsx');
+  const { defaultScope } = await import('../lib/scope.mjs');
+  const base = defaultScope(combined, { now: NOW });
+  let bars = 0;
+  for (const unit of ['week', 'month', 'year', 'all']) for (const View of [Tokens, ScreenTime]) {
+    const markup = html(createElement(View, { snapshot: combined, scope: { ...base, range: { unit, anchor: base.range.anchor } }, now: NOW }));
+    for (const plot of barPlots(markup)) for (const column of plot) for (const bar of column) {
+      assert.ok(Math.abs(bar.y + bar.height - PLOT.height) * 1.76 <= 1, `${unit}: a bar sits on the baseline`);
+      bars++;
+    }
+  }
+  assert.ok(bars > 50, `bars were drawn (${bars})`);
+  // periods.all starts on Wednesday Jul 22: its first bucket is Jul 22 to 26, the next the week of Monday Jul 27.
+  const columns = dayColumns(periods.all, new Map(periods.all.dates.map(date => [date, 1])), '2026-11-18');
+  assert.deepEqual(columns.slice(0, 2).map(column => [column.label, column.full, column.partial]),
+    [['Jul 22+', 'Jul 22 to 26, part of a week', true], ['Jul 27', 'Week of Jul 27', false]]);
+  assert.equal(columns.filter(column => column.partial).length, 1);
+});
+
+test('All time buckets the same way on every chart: weeks from Monday, the first one marked partial', async () => {
+  const { buildOverview, buildTokens, resolveBlock } = await import('../lib/view-r2.mjs');
+  const { defaultScope, chartBuckets } = await import('../lib/scope.mjs');
+  const { bucketDates } = await load('/app/viewer/r2/data.ts');
+  const scope = { ...defaultScope(combined, { now: NOW }), range: { unit: 'all' } };
+  const overview = buildOverview(combined, scope, { now: NOW }), { period } = overview.frame;
+  const keys = chartBuckets(period).map(bucket => bucket.key);
+  const tokensVM = buildTokens(combined, scope, { now: NOW });
+  const today = period.last;
+  const tokenColumns = dayColumns(period, new Map(tokensVM.days.map(day => [day.date, day.tokens.value])), today);
+  const timeline = resolveBlock('Timeline', { series: 'tokens' }, combined, scope, { now: NOW });
+  const spendBlock = resolveBlock('SpendLandedChart', {}, combined, scope, { now: NOW });
+  assert.deepEqual(bucketDates(period), keys, 'Overview and Timeline draw the scope\'s buckets');
+  assert.deepEqual(tokenColumns.map(column => column.key), keys, 'Tokens and Screen time draw them too');
+  const past = keys.filter(key => key <= today);
+  assert.deepEqual(overview.chart.map(point => point.date), past, 'the spend chart has a point for each bucket up to today');
+  assert.deepEqual(timeline.points.map(point => point.date), past);
+  assert.deepEqual([spendBlock.bucket, timeline.bucket], ['week', 'week']);
+  const first = new Date(`${period.first}T12:00:00Z`).getUTCDay() !== 1;
+  assert.equal(overview.chart[0].partial, first);
+  assert.equal(timeline.points[0].partial, first);
+  assert.equal(tokenColumns[0].partial, first);
+  assert.ok(overview.chart.slice(1).every(point => !point.partial) && timeline.points.slice(1).every(point => !point.partial), 'only the first week is partial');
+  // The Timeline sums each week from the days, so a week is never one day's value.
+  const days = new Map(tokensVM.days.map(day => [day.date, day.tokens.value]));
+  const second = chartBuckets(period)[1], sum = second.dates.reduce((total, date) => total === null || days.get(date) === null ? null : total + (days.get(date) ?? 0), 0);
+  assert.equal(timeline.points[1].value.value, sum);
 });
