@@ -16,24 +16,45 @@ app.setActivationPolicy(.prohibited)
 let view = WKWebView(frame: NSRect(x: 0, y: 0, width: width, height: height), configuration: WKWebViewConfiguration())
 let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
 window.contentView = view
-view.load(URLRequest(url: url))
 
+func fail(_ message: String) -> Never {
+  print("error: \(message)")
+  FileHandle.standardError.write("webkit: \(message)\n".data(using: .utf8)!)
+  exit(1)
+}
+
+// Measures once the page has finished loading, never on a timer, so a slow machine cannot measure mid-navigation.
 // The script is the body of an async function, so it can wait for the page to draw before it measures.
-DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-  view.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { outcome in
-    switch outcome {
-    case .success(let result): print(result)
-    case .failure(let error): print("error: \(error)")
-    }
-    guard let out else { exit(0) }
-    view.takeSnapshot(with: nil) { image, _ in
-      if let image, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
-         let png = rep.representation(using: .png, properties: [:]) {
-        try? png.write(to: URL(fileURLWithPath: out))
+final class Loader: NSObject, WKNavigationDelegate {
+  let url: URL, script: String, out: String?
+  init(url: URL, script: String, out: String?) { self.url = url; self.script = script; self.out = out }
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    webView.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { outcome in
+      switch outcome {
+      case .success(let result): print(result)
+      case .failure(let error): fail("the script failed: \(error.localizedDescription)")
       }
-      exit(0)
+      guard let out = self.out else { exit(0) }
+      webView.takeSnapshot(with: nil) { image, _ in
+        if let image, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+          try? png.write(to: URL(fileURLWithPath: out))
+        }
+        exit(0)
+      }
     }
   }
+  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    fail("navigation to \(url.absoluteString) failed: \(error.localizedDescription)")
+  }
+  func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+    fail("could not load \(url.absoluteString): \(error.localizedDescription)")
+  }
 }
-DispatchQueue.main.asyncAfter(deadline: .now() + 30) { print("error: timed out"); exit(1) }
+let loader = Loader(url: url, script: script, out: out)
+view.navigationDelegate = loader
+view.load(URLRequest(url: url))
+
+// The script waits at most 15 s for the plots. This stops a page that never finishes loading.
+DispatchQueue.main.asyncAfter(deadline: .now() + 45) { fail("timed out after 45 s") }
 app.run()

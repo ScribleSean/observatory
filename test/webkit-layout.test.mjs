@@ -59,7 +59,8 @@ test('in WebKit every bar stands on the baseline with its height in proportion t
   let bars = 0;
   for (const [address, plotsAtLeast] of [['?unit=all#tokens', 1], ['?unit=all#overview', 2], ['#limits', 1]]) for (const width of [1440, 390]) {
     // Run without blocking: the server answering the page runs in this process.
-    const output = (await run(tool, [base + address, String(width), '900', MEASURE], { encoding: 'utf8', timeout: 60000 })).stdout.trim();
+    const output = (await run(tool, [base + address, String(width), '900', MEASURE], { encoding: 'utf8', timeout: 60000 })
+      .catch(error => assert.fail(`${address} at ${width}: ${(error.stdout || error.message).trim()}`))).stdout.trim();
     assert.ok(!output.startsWith('error'), `${address} at ${width}: ${output}`);
     const plots = JSON.parse(output);
     assert.ok(plots.length >= plotsAtLeast, `${address} at ${width}: ${plots.length} plots`);
