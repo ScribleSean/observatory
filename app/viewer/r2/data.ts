@@ -4,7 +4,8 @@ import { createContext, useContext } from 'react';
 import type { Spec } from '@json-render/react';
 import { readAt, when } from '../../../lib/forecast.mjs';
 
-export { defaultScope, limitsOn, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
+export { chartBuckets, defaultScope, limitsOn, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
+import { chartBuckets } from '../../../lib/scope.mjs';
 export { buildFrame, buildOverview, buildSessions, buildTokens, buildScreenTime, metric, answerQuestion, resolveBlock, formatValue } from '../../../lib/view-r2.mjs';
 
 export type Scope = import('../../../lib/scope.mjs').Scope;
@@ -77,7 +78,6 @@ export const plural = (value: number, word: string) => `${count(value)} ${word}$
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const utc = (date: string) => new Date(`${date}T00:00:00Z`);
-const isoDate = (time: number) => new Date(time).toISOString().slice(0, 10);
 export const dayLabel = (date: string, long = false) => `${long ? `${DAYS[utc(date).getUTCDay()]} ` : ''}${MONTHS[utc(date).getUTCMonth()]} ${utc(date).getUTCDate()}`;
 export const weekdayLabel = (date: string) => `${DAYS[utc(date).getUTCDay()]} ${utc(date).getUTCDate()}`;
 export const monthLabel = (date: string) => MONTHS[utc(date).getUTCMonth()];
@@ -97,14 +97,12 @@ export function dayClock(time: string | number | null | undefined, timeZone: str
   return iso === null ? UNKNOWN : when(iso, { now, timeZone });
 }
 
-/** Every bucket of the period's chart, with the ones still ahead, so a week always draws seven columns. */
+/**
+ * Every bucket key of the period's chart, with the ones still ahead, so a week always draws seven columns. The
+ * buckets are lib/scope.mjs chartBuckets, the ones the view-models and every other chart use.
+ */
 export function bucketDates(period: Period): string[] {
-  const first = utc(period.first), year = first.getUTCFullYear(), month = first.getUTCMonth();
-  if (period.unit === 'week') return Array.from({ length: 7 }, (_, index) => isoDate(first.getTime() + index * 86400000));
-  if (period.unit === 'month') return Array.from({ length: new Date(Date.UTC(year, month + 1, 0)).getUTCDate() }, (_, index) => isoDate(Date.UTC(year, month, index + 1)));
-  if (period.unit === 'year') return Array.from({ length: 12 }, (_, index) => isoDate(Date.UTC(year, index, 1)));
-  if (period.unit === 'all') return [...new Set(period.dates.map(date => `${date.slice(0, 7)}-01`))];
-  return [period.first];
+  return chartBuckets(period).map(bucket => bucket.key);
 }
 
 /** What sits beside the stepper label: "This week", "Yesterday". */

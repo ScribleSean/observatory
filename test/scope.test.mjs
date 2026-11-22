@@ -160,7 +160,7 @@ test('a combined file with no settings echo shows every source and limit not lis
   assert.equal(limitsOn(echoed, 'grok'), false);
 });
 
-test('weekly chart buckets are calendar weeks from Monday, and only a first or last week cut by the period is marked partial', () => {
+test('weekly chart buckets are calendar weeks from Monday, and only a first week cut by the first record is marked partial', () => {
   const days = (date, count) => Array.from({ length: count }, (_, index) => addDays(date, index));
   const monday = date => new Date(`${date}T12:00:00Z`).getUTCDay() === WEEK_STARTS_ON;
   // The first record is on Friday Oct 2: the first bucket holds Oct 2 to 4 and says so, never a week of Oct 2.
@@ -171,7 +171,7 @@ test('weekly chart buckets are calendar weeks from Monday, and only a first or l
   for (const [index, bucket] of buckets.entries()) {
     assert.ok(monday(bucket.key), `${bucket.key} starts a calendar week`);
     assert.ok(bucket.dates.every(date => date >= bucket.key && date <= addDays(bucket.key, 6)), 'every date is in its week');
-    if (bucket.partial) assert.ok(index === 0 || index === buckets.length - 1, 'only the first or last bucket can be partial');
+    if (bucket.partial) assert.equal(index, 0, 'only the first bucket can be partial');
     else assert.deepEqual(bucket.dates, days(bucket.key, 7), `${bucket.key} is 7 days`);
     if (index) assert.equal(bucket.key, addDays(buckets[index - 1].key, 7), 'buckets are 7 days apart');
   }

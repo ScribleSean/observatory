@@ -100,7 +100,7 @@ test('Limits reads Unknown, never 0, before the app reports a window', () => {
   assert.ok(!/>0%</.test(markup), 'no 0% for a window never read');
   assert.ok(markup.includes('not in the Nov 12, 5:00 AM read'), 'the 5 hour window says which read left it out, with its date');
   assert.ok(markup.includes('requests per day, last 30 days') && markup.includes('36% used'), 'Grok shows requests per day and the share of its weekly limit used');
-  assert.ok(markup.includes('class="z unk"'), 'a day with no count read is drawn hollow');
+  assert.ok(markup.includes('<rect class="unk outline"'), 'a day with no count read is drawn hollow');
   assert.ok(!markup.includes('$'), 'Grok requests are never in dollars');
 });
 
@@ -278,6 +278,35 @@ test('the Tokens and Screen time plots draw every bar from the baseline at every
   // periods.all starts on Wednesday Jul 22: its first bucket is Jul 22 to 26, the next the week of Monday Jul 27.
   const columns = dayColumns(periods.all, new Map(periods.all.dates.map(date => [date, 1])), '2026-11-18');
   assert.deepEqual(columns.slice(0, 2).map(column => [column.label, column.full, column.partial]),
-    [['Jul 22 to 26', 'Jul 22 to 26, part of a week', true], ['Jul 27', 'Week of Jul 27', false]]);
+    [['Jul 22+', 'Jul 22 to 26, part of a week', true], ['Jul 27', 'Week of Jul 27', false]]);
   assert.equal(columns.filter(column => column.partial).length, 1);
+});
+
+test('All time buckets the same way on every chart: weeks from Monday, the first one marked partial', async () => {
+  const { buildOverview, buildTokens, resolveBlock } = await import('../lib/view-r2.mjs');
+  const { defaultScope, chartBuckets } = await import('../lib/scope.mjs');
+  const { bucketDates } = await load('/app/viewer/r2/data.ts');
+  const scope = { ...defaultScope(combined, { now: NOW }), range: { unit: 'all' } };
+  const overview = buildOverview(combined, scope, { now: NOW }), { period } = overview.frame;
+  const keys = chartBuckets(period).map(bucket => bucket.key);
+  const tokensVM = buildTokens(combined, scope, { now: NOW });
+  const today = period.last;
+  const tokenColumns = dayColumns(period, new Map(tokensVM.days.map(day => [day.date, day.tokens.value])), today);
+  const timeline = resolveBlock('Timeline', { series: 'tokens' }, combined, scope, { now: NOW });
+  const spendBlock = resolveBlock('SpendLandedChart', {}, combined, scope, { now: NOW });
+  assert.deepEqual(bucketDates(period), keys, 'Overview and Timeline draw the scope\'s buckets');
+  assert.deepEqual(tokenColumns.map(column => column.key), keys, 'Tokens and Screen time draw them too');
+  const past = keys.filter(key => key <= today);
+  assert.deepEqual(overview.chart.map(point => point.date), past, 'the spend chart has a point for each bucket up to today');
+  assert.deepEqual(timeline.points.map(point => point.date), past);
+  assert.deepEqual([spendBlock.bucket, timeline.bucket], ['week', 'week']);
+  const first = new Date(`${period.first}T12:00:00Z`).getUTCDay() !== 1;
+  assert.equal(overview.chart[0].partial, first);
+  assert.equal(timeline.points[0].partial, first);
+  assert.equal(tokenColumns[0].partial, first);
+  assert.ok(overview.chart.slice(1).every(point => !point.partial) && timeline.points.slice(1).every(point => !point.partial), 'only the first week is partial');
+  // The Timeline sums each week from the days, so a week is never one day's value.
+  const days = new Map(tokensVM.days.map(day => [day.date, day.tokens.value]));
+  const second = chartBuckets(period)[1], sum = second.dates.reduce((total, date) => total === null || days.get(date) === null ? null : total + (days.get(date) ?? 0), 0);
+  assert.equal(timeline.points[1].value.value, sum);
 });

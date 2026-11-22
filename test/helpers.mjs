@@ -32,11 +32,18 @@ export function testConfig(dataFolder,overrides={}) {
 }
 
 // The bar plots in server-rendered markup (BarPlot in app/viewer/r2/views/parts.tsx): one list per <svg class="bars">,
-// one entry per column (a <g> of bar rects, or an Unknown mark with no bars), each bar {cls, x, y, width, height}.
+// one entry per column (a <g> of bar paths, or an Unknown mark with no bars), each bar {cls, x, y, width, height}.
+// A bar is a path of absolute x,y pairs, so its box is the min and max of its points.
 export function barPlots(markup) {
   const attrs=tag=>Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([,key,value])=>[key,value]));
+  const box=d=>{
+    const pairs=[...d.matchAll(/(-?[\d.]+(?:e-?\d+)?),(-?[\d.]+(?:e-?\d+)?)/g)].map(([,x,y])=>[Number(x),Number(y)]);
+    const xs=pairs.map(([x])=>x),ys=pairs.map(([,y])=>y);
+    return {x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys)};
+  };
   return [...markup.matchAll(/<svg class="bars"[^>]*>([\s\S]*?)<\/svg>/g)].map(([,body])=>
     [...body.matchAll(/<g[^>]*>([\s\S]*?)<\/g>|<g[^>]*\/>|<rect class="unk[^>]*>(?:<\/rect>)?/g)].map(([,inner])=>
-      [...(inner??'').matchAll(/<rect [^>]*>/g)].map(([tag])=>attrs(tag)).filter(rect=>rect.class?.startsWith('bar '))
-        .map(rect=>({cls:rect.class.slice(4),x:Number(rect.x),y:Number(rect.y),width:Number(rect.width),height:Number(rect.height)}))));
+      [...(inner??'').matchAll(/<path [^>]*>/g)].map(([tag])=>attrs(tag)).filter(path=>path.class?.startsWith('bar '))
+        .map(path=>({cls:path.class.slice(4),...box(path.d)}))));
 }
+

@@ -1,9 +1,9 @@
 // Small pieces the Limits, Tokens, Screen time, Drift and Settings views share: a block frame, a strip of
 // numbers, a bar list, grey columns and the empty and Unknown states. Class names follow the design spec
 // (SPEC-UI.md), so the tokens and base rules in r2.css style them.
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Num, Part } from '../../../../lib/view-r2.mjs';
-import { chartBuckets } from '../../../../lib/scope.mjs';
+import { chartBuckets, type Bucket } from '../../../../lib/scope.mjs';
 
 export const UNKNOWN = 'Unknown';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -166,36 +166,45 @@ export const partBars = (parts: Part[] | undefined): Bar[] => (parts ?? []).map(
 
 export type Column = { key: string; label: string; value: number | null; full: string; now?: boolean; future?: boolean; partial?: boolean };
 
-/** The bar plot's drawing box. Bars are drawn in these units, and the SVG stretches to fill the plot. */
+/** The bar plot's drawing box before the plot is measured, as on the server. After that it is the plot's size in px. */
 export const PLOT = { width: 1000, height: 100 } as const;
-const MAX_BAR = 50; // widest bar in plot units, about 2.9rem at desktop width
+const MAX_BAR_PX = 46; // 2.9rem: the widest bar once the plot is measured
+const MAX_BAR = 50; // the same in PLOT units, about 46 px at desktop width
+const CORNER_PX = 2;
 
 export type Segment = { value: number; className: string };
 export type BarBox = { x: number; y: number; width: number; height: number; className: string };
 
 /**
- * Where each column's bars sit in the PLOT box. A column is a stack of segments drawn from the baseline
- * (y = PLOT.height) up, each segment's height its value over `max` times the plot height. `max` comes from the
+ * Where each column's bars sit in a `width` by `height` box. A column is a stack of segments drawn from the
+ * baseline (y = height) up, each segment's height its value over `max` times the plot height. `max` comes from the
  * data: the largest column total by default. A null column (Unknown) and a column with no segments draw no bar.
  */
-export function plotBoxes(columns: (Segment[] | null)[], max?: number): { slot: number; bars: BarBox[][] } {
+export function plotBoxes(columns: (Segment[] | null)[], max?: number, { width = PLOT.width as number, height = PLOT.height as number, maxBar = MAX_BAR }: { width?: number; height?: number; maxBar?: number } = {}): { slot: number; barWidth: number; top: number; bars: BarBox[][] } {
   // zero-ok: an Unknown column sets no scale
   const top = max ?? Math.max(...columns.map(column => (column ?? []).reduce((sum, part) => sum + part.value, 0)), 0);
-  const slot = PLOT.width / Math.max(columns.length, 1), width = Math.min(slot * 0.78, MAX_BAR);
+  const slot = width / Math.max(columns.length, 1), barWidth = Math.min(slot * 0.78, maxBar);
   const bars = columns.map((column, index) => {
-    let base = PLOT.height;
+    let base = height;
     return (column ?? []).filter(part => part.value > 0 && top > 0).map(part => {
-      const height = PLOT.height * part.value / top;
-      base -= height;
-      return { x: index * slot + (slot - width) / 2, y: base, width, height, className: part.className };
+      const size = height * part.value / top;
+      base -= size;
+      return { x: index * slot + (slot - barWidth) / 2, y: base, width: barWidth, height: size, className: part.className };
     });
   });
-  return { slot, bars };
+  return { slot, barWidth, top, bars };
+}
+
+const n = (value: number) => Number(value.toFixed(3));
+/** A bar with its top corners rounded (radius `rx` across, `ry` down) and a square foot on the baseline. Its bounding box is the bar. */
+export function barPath({ x, y, width, height }: BarBox, rx: number, ry: number) {
+  const a = Math.min(rx, width / 2), b = Math.min(ry, height);
+  return `M${n(x)},${n(y + height)} L${n(x)},${n(y + b)} Q${n(x)},${n(y)} ${n(x + a)},${n(y)} L${n(x + width - a)},${n(y)} Q${n(x + width)},${n(y)} ${n(x + width)},${n(y + b)} L${n(x + width)},${n(y + height)} Z`;
 }
 
 export type PlotColumn = {
   key: string; segments: Segment[] | null; future?: boolean; title?: string; label?: ReactNode; peak?: boolean;
-  /** Extra props for the column's hit area: a button for a column that opens something. */
+  /** A column that opens something is a button. */
   button?: { onClick: () => void; ariaLabel: string };
   hover?: { onEnter: () => void; onLeave: () => void };
   className?: string;
@@ -204,31 +213,52 @@ export type PlotColumn = {
 /**
  * Columns as one SVG of bars that grow from the baseline, with an HTML layer over it for the value labels, the
  * hover titles and clicks. The bar geometry is SVG coordinates, so it never depends on how a browser resolves a
- * percentage height inside a flex or grid cell. An Unknown column draws a dashed outline (`unknown: 'outline'`) or
- * a flat line on the baseline (`unknown: 'line'`), never a bar of 0.
+ * percentage height inside a flex or grid cell. On the server the SVG is drawn in PLOT units and stretched. In the
+ * browser the plot is measured, so bars are drawn in px with a fixed maximum width and round top corners.
+ * An Unknown column draws a dashed outline (`unknown: 'outline'`, `unknownHeight` percent of the plot tall) or a
+ * flat line on the baseline (`unknown: 'line'`), never a bar of 0.
  */
-export function BarPlot({ columns, max, className = 'spend', unknown = 'outline' }: {
-  columns: PlotColumn[]; max?: number; className?: string; unknown?: 'outline' | 'line';
+export function BarPlot({ columns, max, className = 'spend', unknown = 'outline', unknownHeight }: {
+  columns: PlotColumn[]; max?: number; className?: string; unknown?: 'outline' | 'line'; unknownHeight?: number;
 }) {
-  const { slot, bars } = plotBoxes(columns.map(column => column.future ? [] : column.segments), max);
-  const unknownHeight = unknown === 'outline' ? 14 : 2;
-  const unknownWidth = Math.min(slot * 0.78, MAX_BAR);
+  const ref = useRef<SVGSVGElement>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setSize(last => last && last.width === width && last.height === height ? last : { width, height });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const width = size?.width ?? PLOT.width, height = size?.height ?? PLOT.height;
+  const { slot, barWidth, top, bars } = plotBoxes(columns.map(column => column.future ? [] : column.segments), max, { width, height, maxBar: size ? MAX_BAR_PX : MAX_BAR });
+  // Round corners of CORNER_PX on screen. Before the plot is measured, one unit across and down is not one px.
+  const rx = size ? CORNER_PX : CORNER_PX * PLOT.width / 900, ry = size ? CORNER_PX : CORNER_PX * PLOT.height / 176;
+  const unknownTall = height * (unknownHeight ?? (unknown === 'outline' ? 14 : 2)) / 100;
   return (
     <div className={`plot ${className}`}>
-      <svg className="bars" viewBox={`0 0 ${PLOT.width} ${PLOT.height}`} preserveAspectRatio="none" aria-hidden="true">
+      <svg ref={ref} className="bars" viewBox={`0 0 ${n(width)} ${n(height)}`} preserveAspectRatio="none" aria-hidden="true" data-max={top}>
         {columns.map((column, index) => column.segments === null && !column.future
-          ? <rect key={column.key} className={`unk ${unknown}`} x={index * slot + (slot - unknownWidth) / 2} y={PLOT.height - unknownHeight} width={unknownWidth} height={unknownHeight} />
-          : <g key={column.key} className={column.className}>{bars[index].map((bar, part) => <rect key={part} className={`bar ${bar.className}`} x={bar.x} y={bar.y} width={bar.width} height={bar.height} />)}</g>)}
+          ? <rect key={column.key} className={`unk ${unknown}`} x={n(index * slot + (slot - barWidth) / 2)} y={n(height - unknownTall)} width={n(barWidth)} height={n(unknownTall)} />
+          : <g key={column.key} className={[column.className, hovered === column.key ? 'on' : ''].filter(Boolean).join(' ') || undefined}
+              data-value={column.future ? undefined : (column.segments ?? []).reduce((sum, part) => sum + part.value, 0)}>
+              {bars[index].map((bar, part) => <path key={part} className={`bar ${bar.className}`} d={barPath(bar, part === bars[index].length - 1 ? rx : 0, part === bars[index].length - 1 ? ry : 0)} />)}
+            </g>)}
       </svg>
       <div className="hits">
         {columns.map((column, index) => {
-          const top = bars[index].length ? PLOT.height - Math.min(...bars[index].map(bar => bar.y)) : column.segments === null && !column.future ? unknownHeight : 0;
-          const body = column.label ? <em className={column.peak ? 'peak' : undefined} style={{ bottom: `${top}%` }}>{column.label}</em> : null;
+          const reach = bars[index].length ? height - Math.min(...bars[index].map(bar => bar.y)) : column.segments === null && !column.future ? unknownTall : 0;
+          const body = column.label ? <em className={column.peak ? 'peak' : undefined} style={{ bottom: `${100 * reach / height}%` }}>{column.label}</em> : null;
           const name = `col${column.future || !column.button ? ' empty' : ''}${column.className ? ` ${column.className}` : ''}`;
-          const read = column.hover ? { onMouseEnter: column.hover.onEnter, onMouseLeave: column.hover.onLeave, onFocus: column.hover.onEnter, onBlur: column.hover.onLeave } : {};
+          const enter = () => { setHovered(column.key); column.hover?.onEnter(); }, leave = () => { setHovered(null); column.hover?.onLeave(); };
+          const read = column.future ? {} : { onMouseEnter: enter, onMouseLeave: leave, onFocus: enter, onBlur: leave };
           return column.button
-            ? <button key={column.key} type="button" className={name} aria-label={column.button.ariaLabel} onClick={column.button.onClick} {...read}>{body}</button>
-            : <div key={column.key} className={name} title={column.title} {...read}>{body}</div>;
+            ? <button key={column.key} type="button" className={name} aria-label={column.button.ariaLabel} title={column.title} onClick={column.button.onClick} {...read}>{body}</button>
+            : <div key={column.key} className={name} title={column.title} role={column.title ? 'img' : undefined} aria-label={column.title} {...read}>{body}</div>;
         })}
       </div>
     </div>
@@ -236,7 +266,7 @@ export function BarPlot({ columns, max, className = 'spend', unknown = 'outline'
 }
 
 /** Grey columns with value labels: on every column when there are 12 or fewer, else on the peak only. */
-export function Columns({ columns, format, hint }: { columns: Column[]; format: (value: number | null) => string; hint: string }) {
+export function Columns({ columns, format, hint, className }: { columns: Column[]; format: (value: number | null) => string; hint?: string; className?: string }) {
   // zero-ok: column height scale only
   const top = Math.max(...columns.map(column => column.value ?? 0), 0);
   const peak = top > 0 ? columns.findIndex(column => column.value === top) : -1;
@@ -244,18 +274,18 @@ export function Columns({ columns, format, hint }: { columns: Column[]; format: 
     <div className="chart">
       <BarPlot columns={columns.map((column, index) => ({
         key: column.key, future: column.future, peak: index === peak,
-        segments: column.value === null ? null : [{ value: column.value, className: 'grey' }],
+        segments: column.value === null ? null : [{ value: column.value, className: className ?? 'grey' }],
         title: column.future ? undefined : `${column.full}: ${format(column.value)}`,
         label: column.value && (index === peak || columns.length <= 12) ? format(column.value) : undefined,
       }))} />
-      <div className="xl">{columns.map((column, index) => <span key={column.key} className={column.now ? 'now' : undefined}>{label(columns, index)}</span>)}</div>
-      <div className="read">{hint}</div>
+      <div className="xl">{columns.map((column, index) => <span key={column.key} className={column.now ? 'now' : undefined}>{thinLabel(columns, index)}</span>)}</div>
+      {hint !== undefined && <div className="read">{hint}</div>}
     </div>
   );
 }
 
-// Every label when they fit, else every few, always keeping the current one.
-function label(columns: Column[], index: number) {
+/** Every label when they fit, else every few, always keeping the current one. */
+export function thinLabel(columns: { label: string; now?: boolean }[], index: number) {
   const every = columns.length <= 14 ? 1 : columns.length <= 31 ? 3 : Math.ceil(columns.length / 10);
   return index % every === 0 || columns[index].now ? columns[index].label : '';
 }
@@ -265,20 +295,34 @@ export const numText = (num: Num | null | undefined) => num ? num.value === null
 type PeriodLike = { unit: 'day' | 'week' | 'month' | 'year' | 'all'; first: string; last: string; dates: string[] };
 
 /**
- * Daily values as chart columns, one per bucket of lib/scope.mjs chartBuckets: days for a week or month, months
- * for a year, calendar weeks from Monday for all time. A bucket with an Unknown day is Unknown. Buckets after
- * today draw empty. A first week that starts mid-week is labeled with its own dates ("Oct 2 to 4"), never as a week.
+ * A bucket's short label under its column and its full name for the title. A part week says where it starts
+ * ("Jul 22+") and its title gives its dates ("Jul 22 to 26, part of a week"), so it never reads as a whole week.
  */
+export function bucketText(unit: PeriodLike['unit'], { key, dates, partial }: Bucket): { label: string; full: string } {
+  if (unit === 'year') return { label: monthLabel(key), full: `${monthLabel(key)} ${key.slice(0, 4)}` };
+  if (unit === 'all') return partial
+    ? { label: `${shortDate(dates[0])}+`, full: `${dateSpan(dates[0], dates.at(-1)!)}, part of a week` }
+    : { label: shortDate(key), full: `Week of ${shortDate(key)}` };
+  return { label: unit === 'month' ? String(Number(key.slice(8))) : weekday(key).split(' ')[0], full: weekday(key, true) };
+}
+
+/**
+ * Chart columns, one per bucket of lib/scope.mjs chartBuckets: days for a week or month, months for a year,
+ * calendar weeks from Monday for all time. `valueOf` gets the bucket and its dates up to today. Buckets after today
+ * draw empty.
+ */
+export function bucketColumns(period: PeriodLike, today: string, valueOf: (bucket: Bucket, past: string[]) => number | null): Column[] {
+  return chartBuckets(period).map(bucket => {
+    const past = bucket.dates.filter(date => date <= today);
+    return { key: bucket.key, ...bucketText(period.unit, bucket), value: past.length ? valueOf(bucket, past) : 0, partial: bucket.partial, now: bucket.dates.includes(today), future: past.length === 0 };
+  });
+}
+
+/** Daily values as chart columns. A bucket with an Unknown day is Unknown. A date with no value was not read, so it is Unknown, never 0. */
 export function dayColumns(period: PeriodLike, values: Map<string, number | null>, today: string): Column[] {
-  return chartBuckets(period).map(({ key, dates: list, partial }) => {
-    const past = list.filter(date => date <= today);
-    // A date with no value at all was not read, so it is Unknown, never 0.
+  return bucketColumns(period, today, (_, past) => {
     const known = past.map(date => values.has(date) ? values.get(date)! : null);
-    const value = past.length === 0 ? 0 : known.some(item => item === null) ? null : (known as number[]).reduce((sum, item) => sum + item, 0);
-    const days = dateSpan(list[0], list.at(-1)!);
-    const label = period.unit === 'year' ? monthLabel(list[0]) : period.unit === 'all' ? partial ? days : shortDate(list[0]) : period.unit === 'month' ? String(Number(list[0].slice(8))) : weekday(list[0]).split(' ')[0];
-    const full = period.unit === 'year' ? `${monthLabel(list[0])} ${list[0].slice(0, 4)}` : period.unit === 'all' ? partial ? `${days}, part of a week` : `Week of ${shortDate(list[0])}` : weekday(list[0], true);
-    return { key, label, value, full, partial, now: list.includes(today), future: past.length === 0 };
+    return known.some(item => item === null) ? null : (known as number[]).reduce((sum, item) => sum + item, 0);
   });
 }
 
