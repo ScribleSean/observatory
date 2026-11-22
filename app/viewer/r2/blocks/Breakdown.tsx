@@ -10,12 +10,14 @@ const TAB_ORDER: Dim[] = ['role', 'model', 'kind', 'repo', 'device', 'category',
 /** A ranked list: label, bar, amount and share. Terracotta marks spend, grey marks everything else. */
 export function BarList({ parts, accent, limit }: { parts: Part[]; accent: boolean; limit?: number }) {
   const shown = limit ? parts.slice(0, limit) : parts;
-  const most = Math.max(...shown.map(part => part.value ?? -Infinity), 0.0001);
+  // An Unknown part draws the part that was read, when there is one.
+  const drawn = (part: Part) => part.value ?? part.atLeast;
+  const most = Math.max(...shown.map(part => drawn(part) ?? -Infinity), 0.0001);
   return (
     <div className="bl">
       {shown.map((part, index) => [
         <span key={`${part.key} t`} className={index === 0 ? 't t1' : 't'} title={part.label}>{part.label}</span>,
-        <span key={`${part.key} b`} className="bar"><i className={accent ? 'a' : ''} style={{ width: `${part.value ? Math.max(1.5, 100 * part.value / most) : 0}%` }} /></span>,
+        <span key={`${part.key} b`} className="bar"><i className={accent ? 'a' : ''} style={{ width: `${drawn(part) ? Math.max(1.5, 100 * drawn(part)! / most) : 0}%` }} /></span>,
         <span key={`${part.key} n`} className={part.value === null ? 'n unk' : 'n'}>{part.text}</span>,
         <span key={`${part.key} p`} className="p">{share(part.share)}</span>,
       ])}

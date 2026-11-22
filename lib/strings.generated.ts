@@ -291,6 +291,7 @@ export const STRINGS = {
     "metricSessions": "sessions",
     "metricSubagents": "subagents",
     "atLeast": "at least {value}, {missing}",
+    "atLeastPart": "at least {value}",
     "dayNotRead": "1 day not read on {name}",
     "daysNotRead": "{count} days not read on {name}"
   },
