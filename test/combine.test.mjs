@@ -156,7 +156,9 @@ test('a computer that is up and signed out beats an old reading from one that is
   // The menu bar says what to do, in the stale shape: never Off, which means a limit that is switched off.
   const icon=glanceView(combined,{now,timeZone:'UTC'}).icon;
   assert.deepEqual([icon.state,icon.fraction,icon.text],['stale',null,'Sign in']);
-  assert.match(icon.tip,/^Claude Code is signed out on .+\. Run claude in a terminal there, then \/login\.$/);
+  assert.match(icon.tip,/^Claude signed out on .+: run claude, then \/login$/);
+  // The Windows tray cuts its tooltip at 63 characters.
+  assert.ok(icon.tip.length<=63,icon.tip);
   // Even while the old week had not reset, a reading days old does not hide the sign-in.
   const unexpired=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pcFrom(wednesday,claudeReading(wednesday,now+86400000)),off:true}],{now});
   assert.equal(unexpired.view.claudeLimits.observedOn,'Mac');
@@ -167,6 +169,20 @@ test('a fresh reading from another computer that is up still beats a signed-out 
   const combined=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pc}],{now});
   assert.equal(combined.view.claudeLimits.status,'ok');
   assert.equal(combined.view.claudeLimits.observedOn,'Windows');
+});
+
+test('a computer that is up keeps its reading through a missed read when another is signed out',()=>{
+  // The PC is up and its last reading is 12 minutes old (one missed tick): it still wins over the signed-out Mac.
+  const pc=pcFrom(now,claudeReading(now-12*60000,now+86400000));
+  assert.equal(combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pc}],{now}).view.claudeLimits.observedOn,'Windows');
+});
+
+test('a signed-out computer that is switched off, or dated ahead, is not up',()=>{
+  const reading=ownSnapshot('Mac',now,snapshot=>({...snapshot,claudeLimits:claudeReading(now-30*60000,now+86400000)}));
+  const off=pcFrom(now,{provider:'Claude Code',scope:'account',status:'needs-auth',windows:[]});
+  assert.equal(combine([{host:'Mac',snapshot:reading},{host:'Windows',snapshot:off,off:true}],{now}).view.claudeLimits.observedOn,'Mac');
+  const ahead=pcFrom(now+86400000,{provider:'Claude Code',scope:'account',status:'needs-auth',windows:[]});
+  assert.equal(combine([{host:'Mac',snapshot:reading},{host:'Windows',snapshot:ahead}],{now}).view.claudeLimits.observedOn,'Mac');
 });
 
 test('a reading whose windows have all reset is no current limit',()=>{

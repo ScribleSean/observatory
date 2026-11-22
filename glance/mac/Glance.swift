@@ -395,11 +395,15 @@ struct PanelView: View {
     HStack(spacing: 8) {
       Button("Open dashboard", action: model.openDashboard)
         .buttonStyle(Push(palette: palette)).keyboardShortcut("d")
-      // Reads every source again now, the same as the five-minute tick.
-      Button("Refresh", action: model.refresh)
-        .buttonStyle(Push(palette: palette)).keyboardShortcut("r").disabled(state.refreshing)
+      // Reads every source again now, the same as the five-minute tick. An icon, so the footer keeps room for the
+      // time; the spinner takes its place while a read runs.
+      if state.refreshing {
+        ProgressView().controlSize(.small).scaleEffect(0.7).accessibilityLabel("Refreshing")
+      } else {
+        Button(action: model.refresh) { Image(systemName: "arrow.clockwise") }
+          .buttonStyle(Push(palette: palette)).keyboardShortcut("r").help("Refresh").accessibilityLabel("Refresh")
+      }
       Spacer(minLength: 8)
-      if state.refreshing { ProgressView().controlSize(.small).scaleEffect(0.7) }
       if state.old, let updated = state.updated {
         Text("Updated \(Format.age(state.now.timeIntervalSince(updated)))").foregroundStyle(palette.warning)
       } else if let text = state.updatedText {

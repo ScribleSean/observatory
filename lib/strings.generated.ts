@@ -121,7 +121,7 @@ export const STRINGS = {
     "iconStale": "Last read {time}",
     "signIn": "Sign in",
     "thisComputer": "this computer",
-    "signInTip": "Claude Code is signed out on {name}. Run claude in a terminal there, then /login."
+    "signInTip": "Claude signed out on {name}: run claude, then /login"
   },
   "ledger": {
     "fanout": "{title} fanned out to {count} subagents and took {share} of the week. No branch merged.",
