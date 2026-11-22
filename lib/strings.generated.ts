@@ -118,7 +118,10 @@ export const STRINGS = {
     "overPace": "over pace",
     "paceUnknown": "pace Unknown",
     "iconTipEarly": "{percent} used. {pace}",
-    "iconStale": "Last read {time}"
+    "iconStale": "Last read {time}",
+    "signIn": "Sign in",
+    "thisComputer": "this computer",
+    "signInTip": "Claude Code is signed out on {name}. Run claude in a terminal there, then /login."
   },
   "ledger": {
     "fanout": "{title} fanned out to {count} subagents and took {share} of the week. No branch merged.",

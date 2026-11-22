@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {combine,ownRows,carriedDevice,sum,SUM_LABEL} from '../lib/combine.mjs';
 import {ownSnapshot} from './helpers.mjs';
+import {glanceView} from '../lib/glance-view.mjs';
 
 const now=Date.parse('2026-10-21T17:00:00Z');
 
@@ -137,6 +138,42 @@ test('sum is Unknown when any part is Unknown',()=>{
 
 test('two entries for the same host are refused',()=>{
   assert.throws(()=>combine([{host:'Mac',snapshot:null},{host:'Mac',snapshot:null}],{now}),/distinct host/);
+});
+
+// Nov 22: the PC was off with a Claude reading from Wednesday whose week had reset, and the Mac was up and signed out.
+// The panel showed "no reading since Wed" and Off, when the Mac needed a sign-in.
+const claudeReading=(at,resetsAt)=>({provider:'Claude Code',scope:'account',status:'ok',checkedAt:new Date(at).toISOString(),
+  windows:[{bucket:'claude',window:'seven_day',durationMinutes:10080,remainingPercent:42,resetsAt:new Date(resetsAt).toISOString(),checkedAt:new Date(at).toISOString()}]});
+const pcFrom=(at,claudeLimits)=>ownSnapshot('Windows',at,snapshot=>({...snapshot,claudeLimits}));
+const signedOutMac=()=>ownSnapshot('Mac',now,snapshot=>({...snapshot,claudeLimits:{provider:'Claude Code',scope:'account',status:'needs-auth',windows:[]}}));
+
+test('a computer that is up and signed out beats an old reading from one that is off',()=>{
+  const wednesday=now-4*86400000;
+  const pc=pcFrom(wednesday,claudeReading(wednesday,now-2*86400000));
+  const combined=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pc,off:true}],{now});
+  assert.equal(combined.view.claudeLimits.status,'needs-auth');
+  assert.equal(combined.view.claudeLimits.observedOn,'Mac');
+  // The menu bar says what to do, in the stale shape: never Off, which means a limit that is switched off.
+  const icon=glanceView(combined,{now,timeZone:'UTC'}).icon;
+  assert.deepEqual([icon.state,icon.fraction,icon.text],['stale',null,'Sign in']);
+  assert.match(icon.tip,/^Claude Code is signed out on .+\. Run claude in a terminal there, then \/login\.$/);
+  // Even while the old week had not reset, a reading days old does not hide the sign-in.
+  const unexpired=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pcFrom(wednesday,claudeReading(wednesday,now+86400000)),off:true}],{now});
+  assert.equal(unexpired.view.claudeLimits.observedOn,'Mac');
+});
+
+test('a fresh reading from another computer that is up still beats a signed-out one',()=>{
+  const pc=pcFrom(now,claudeReading(now-60000,now+86400000));
+  const combined=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pc}],{now});
+  assert.equal(combined.view.claudeLimits.status,'ok');
+  assert.equal(combined.view.claudeLimits.observedOn,'Windows');
+});
+
+test('a reading whose windows have all reset is no current limit',()=>{
+  // Two old readings: the newer one's week has reset, the older one's has not.
+  const reset=pcFrom(now-3600000,claudeReading(now-3600000,now-60000));
+  const live=ownSnapshot('Mac',now,snapshot=>({...snapshot,claudeLimits:claudeReading(now-7200000,now+86400000)}));
+  assert.equal(combine([{host:'Mac',snapshot:live},{host:'Windows',snapshot:reset}],{now}).view.claudeLimits.observedOn,'Mac');
 });
 
 test('a limit reading dated in the future does not win',()=>{
