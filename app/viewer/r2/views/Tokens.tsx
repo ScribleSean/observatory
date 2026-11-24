@@ -3,7 +3,7 @@
 import type { Frame, TokensVM } from '../../../../lib/view-r2.mjs';
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildTokens } from '../../../../lib/view-r2.mjs';
-import { Block, BarList, Columns, Tail, Empty, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, money, names, partBars, share, tokens, type Cell } from './parts';
+import { Block, BarList, Columns, Tail, Empty, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, labelSteps, money, names, partBars, share, tokenAxis, tokens, type Cell } from './parts';
 import './more.css';
 
 export type TokenKinds = { cacheRead: number | null; cacheWrite: number | null; output: number | null; input: number | null };
@@ -37,7 +37,7 @@ export function TokensBody({ vm, kinds, now }: TokensData) {
       <Block span={8} title="Tokens over time" sub={`per ${bucketWord(period.unit)}, all token kinds`}>
         {period.unit === 'day'
           ? <Empty title="Kept per day" line="Tokens are recorded per day, so one day has no hourly chart. Pick Week or Month to see the days." />
-          : <Columns columns={columns} format={tokens} hint="Hover a bar for its numbers" />}
+          : <Columns columns={columns} format={tokens} axis={tokenAxis} steps={labelSteps(period.unit)} hint="Hover a bar for its numbers" />}
       </Block>
       <Block title="Spend by model" sub="API equivalent">
         <div className="bb"><BarList items={partBars(vm.spend.breakdowns.model)} format={money} accent limit={6} /></div>

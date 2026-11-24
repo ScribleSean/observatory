@@ -8,7 +8,7 @@ import '../views/more.css';
 // no count read is a hollow outline the plot's full height, never a bar of 0.
 function Spark({ days, tall = false }: { days: GrokRequestsVM['days']; tall?: boolean }) {
   return (
-    <BarPlot className={tall ? 'spark tall' : 'spark'} unknownHeight={100} columns={days.map(day => ({
+    <BarPlot className={tall ? 'spark tall' : 'spark'} unknownHeight={100} unknownLabel={false} columns={days.map(day => ({
       key: day.date, segments: day.value === null ? null : [{ value: day.value, className: 'grey' }],
       title: `${weekday(day.date, true)}: ${day.value === null ? 'Unknown, not read' : plural(day.value, 'request')}`,
     }))} />

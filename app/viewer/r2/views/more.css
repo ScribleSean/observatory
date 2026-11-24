@@ -25,12 +25,17 @@
 /* will the week last */
 .burn{position:relative;height:clamp(140px,22cqi,240px);margin:var(--sp-2) 0 26px 2.6em}
 .burn svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.burn .y{position:absolute;right:calc(100% + .6em);font-size:10.5px;color:var(--faint);transform:translateY(-50%)}
+/* Scale values end on one edge beside the plot, like a bar chart's. */
+.burn .y{position:absolute;right:calc(100% + var(--sp-2));font-size:10.5px;line-height:1;color:var(--faint);text-align:right;white-space:nowrap;transform:translateY(-50%)}
 .burn .x{position:absolute;bottom:-20px;font-size:10.5px;color:var(--faint);transform:translateX(-50%);white-space:nowrap}
+.burn .x i{font-style:normal}
 .burn .x.now{color:var(--text)}
 .burn .pt{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--text);border:2px solid var(--panel);transform:translate(-50%,-50%)}
-.burn .tagl{position:absolute;font-size:var(--fs-small);white-space:nowrap}
+/* A tag has the card's colour behind it, so no line runs through its words. */
+.burn .tagl{position:absolute;font-size:var(--fs-small);white-space:nowrap;background:var(--panel);padding:0 4px;border-radius:var(--r-1)}
 .burn .tagl b{font-weight:600}
+/* A flag's dot stays on the line of its word. */
+td .flagged{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 
 
@@ -54,9 +59,17 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
   .srow{grid-template-columns:minmax(0,1fr) auto}.srow .what{grid-column:1/-1;grid-row:2}
 }
 
+/* In a narrow card a table's columns sit closer, so a name keeps whole words and nothing leaves the card. */
+@container (max-width:420px){.more td:not(:first-child),.more th:not(:first-child){padding-left:5px}.more td:not(:last-child),.more th:not(:last-child){padding-right:5px}}
+/* In the narrowest cards the type steps down and a flag is its coloured word alone. */
+@container (max-width:360px){.more td,.more th{font-size:var(--fs-small)}.more td.name{min-width:3.25rem}td .flagged .flagdot{display:none}
+  .more td:not(:first-child),.more th:not(:first-child){padding-left:3px}.more td:not(:last-child),.more th:not(:last-child){padding-right:3px}
+  .more td:last-child,.more th:last-child{padding-right:var(--sp-2)}}
+/* The line chart's day labels drop the date where the days are close together. */
+@container (max-width:400px){.burn .x i{display:none}}
 /* Tables: text columns wrap, numbers stay on one line. Cells in a row share the first baseline. */
 .more td,.more th{white-space:normal;min-width:0;vertical-align:baseline}
-.more td.name{max-width:none;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.more td.name{width:auto;max-width:none;min-width:5rem;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .more td.r,.more th.r,.more td.num{white-space:nowrap}
 .more .bl .t{white-space:normal;overflow-wrap:normal;hyphens:auto}
 .more .kpi .l,.more .kpi .c{white-space:normal;overflow:visible;text-overflow:clip}

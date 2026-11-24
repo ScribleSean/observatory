@@ -105,7 +105,7 @@ function Burn({ window, readings, now, timeZone }: { window: LimitWindowVM; read
         <path d={path} fill="none" stroke="var(--text)" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
       <span className="y" style={{ top: 0 }}>100%</span><span className="y" style={{ top: '50%' }}>50%</span><span className="y" style={{ top: '100%' }}>0</span>
-      {ticks.map(tick => <span key={tick.date} className={`x${tick.date === today ? ' now' : ''}`} style={{ left: `${100 * tick.left}%` }}>{weekday(tick.date)}</span>)}
+      {ticks.map(tick => <span key={tick.date} className={`x${tick.date === today ? ' now' : ''}`} style={{ left: `${100 * tick.left}%` }}>{weekday(tick.date).split(' ')[0]}<i> {weekday(tick.date).split(' ')[1]}</i></span>)}
       {end.used !== null && <i className="pt" style={{ left: `${nowX / 10}%`, top: `${y(last.used)}%` }} />}
       <span className="tagl" style={{ left: `${nowX / 10}%`, top: `${tags.now}%`, transform: nowX > 150 ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)' }}><b>{end.used === null ? UNKNOWN : pct(end.used)}</b> <span className="fa">{end.tag}</span></span>
       {tags.reset !== null && <span className="tagl" style={{ right: 0, top: `${tags.reset}%` }}><b className="mu">{pct(state.projected!)}</b> <span className="fa">at the reset</span></span>}
