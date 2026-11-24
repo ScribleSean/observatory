@@ -40,13 +40,13 @@ const title = el => { const card = cardOf(el); const head = card && (card.queryS
 const clipped = (el, stop) => { for (let node = el.parentElement; node && node !== stop; node = node.parentElement) if (getComputedStyle(node).overflowX !== 'visible') return true; return false; };
 
 const doc = document.documentElement;
-if (doc.scrollWidth > innerWidth + 1) say('page', 'the page is ' + doc.scrollWidth + ' px wide in a ' + innerWidth + ' px window');
+if (doc.scrollWidth > doc.clientWidth + 1) say('page', 'the page is ' + doc.scrollWidth + ' px wide in a ' + doc.clientWidth + ' px window');
 
 for (const card of document.querySelectorAll('main .blk')) {
   if (!seen(card)) continue;
   counts.cards++;
   const edge = box(card);
-  if (edge.right > innerWidth + 1 || edge.left < -1) say('page', title(card) + ' reaches ' + px(edge.right) + ' px in a ' + innerWidth + ' px window');
+  if (edge.right > doc.clientWidth + 1 || edge.left < -1) say('page', title(card) + ' reaches ' + px(edge.right) + ' px in a ' + doc.clientWidth + ' px window');
   for (const el of card.querySelectorAll('*')) {
     if (el.closest('svg') && el.tagName !== 'svg') continue;
     if (!seen(el) || el.closest('.off')) continue;
@@ -207,11 +207,11 @@ export const RANGES = [
 export const PAGES = [...VIEWS, ...RANGES];
 export const WIDTHS = [375, 390, 430, 1280];
 /**
- * What the layout test loads: every view at every width in dark, every view at a phone and a desktop width in light
+ * What the layout test loads: every view at every width in dark, and at 320 px, the narrowest phone, every view at a phone and a desktop width in light
  * (the themes differ only in colour), and the ranges at the narrowest and the widest width.
  */
 export const JOBS = [
-  ...WIDTHS.flatMap(width => VIEWS.map(address => ({ address, width, scheme: 'dark' }))),
+  ...[320, ...WIDTHS].flatMap(width => VIEWS.map(address => ({ address, width, scheme: 'dark' }))),
   ...[390, 1280].flatMap(width => VIEWS.map(address => ({ address, width, scheme: 'light' }))),
   ...[375, 1280].flatMap(width => RANGES.map(address => ({ address, width, scheme: 'dark' }))),
 ];

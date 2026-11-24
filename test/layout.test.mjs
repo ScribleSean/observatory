@@ -89,7 +89,7 @@ test('in Chromium every view is in line at every width, range and theme', { skip
   judgeBroken('Chromium', JSON.parse(await page.evaluate(BROKEN)));
 });
 
-test('in WebKit every view is in line at every width, range and theme', { skip: skipWebKit, timeout: 600000 }, async () => {
+test('in WebKit every view is in line at every width, range and theme', { skip: skipWebKit, timeout: 900000 }, async () => {
   const { base, work } = await serve();
   const tool = path.join(work, 'webkit');
   execFileSync('swiftc', ['-O', '-o', tool, path.join(root, 'scripts/harness/webkit.swift')], { stdio: 'pipe' });
@@ -97,7 +97,7 @@ test('in WebKit every view is in line at every width, range and theme', { skip: 
   const batch = async (jobs, script) => {
     const file = path.join(work, `jobs-${jobs.length}.json`);
     await writeFile(file, JSON.stringify(jobs.map(job => ({ url: base + job.address, width: job.width, height: 900, scheme: job.scheme }))));
-    const { stdout } = await run(tool, ['--batch', file, script], { encoding: 'utf8', timeout: 540000, maxBuffer: 64e6 })
+    const { stdout } = await run(tool, ['--batch', file, script], { encoding: 'utf8', timeout: 840000, maxBuffer: 64e6 })
       .catch(error => assert.fail(`WebKit: ${(error.stdout || error.message).trim().split('\n').at(-1)}`));
     const lines = stdout.trim().split('\n');
     assert.equal(lines.length, jobs.length, `WebKit: ${lines.length} of ${jobs.length} pages answered`);

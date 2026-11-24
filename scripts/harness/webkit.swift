@@ -29,6 +29,19 @@ final class Loader: NSObject, WKNavigationDelegate {
   let url: URL, script: String, out: String?, done: () -> Void
   init(url: URL, script: String, out: String?, done: @escaping () -> Void) { self.url = url; self.script = script; self.out = out; self.done = done }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    // The width asked for is the page's layout width, as on a phone. Where the system draws scroll bars that take
+    // room (a Mac with a mouse), the view is widened by what they take before anything is measured.
+    webView.evaluateJavaScript("document.documentElement.clientWidth") { value, _ in
+      let asked = webView.frame.width
+      if let inner = value as? Double, inner > 0, inner < asked, asked - inner < 64 {
+        let frame = NSRect(x: 0, y: 0, width: asked + (asked - inner), height: webView.frame.height)
+        webView.window?.setContentSize(frame.size)
+        webView.frame = frame
+      }
+      self.measure(webView)
+    }
+  }
+  func measure(_ webView: WKWebView) {
     webView.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { outcome in
       switch outcome {
       case .success(let result): print(result)

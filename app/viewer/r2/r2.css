@@ -261,7 +261,7 @@ tbody tr.row{cursor:pointer}
 tbody tr.row:hover{background:var(--hover)}
 tbody tr.sel{background:var(--raised)}
 /* The name takes the width the other columns leave and is cut with an ellipsis, so a table is never wider than its card. */
-td.name{width:100%;max-width:0;min-width:7rem;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+td.name{width:100%;max-width:0;min-width:5.5rem;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
 /* Columns step aside by the table's own width, wherever its card sits in the grid. */
 @container (max-width:860px){.tw .hide-m{display:none}}
 @container (max-width:560px){.tw .hide-s{display:none}}
