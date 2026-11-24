@@ -157,10 +157,17 @@ test('a computer that is up and signed out beats an old reading from one that is
   const icon=glanceView(combined,{now,timeZone:'UTC'}).icon;
   assert.deepEqual([icon.state,icon.fraction,icon.text],['stale',null,'Sign in']);
   // What to do comes first: the Windows tray cuts its tooltip at 63 characters, and a name can run to 64.
-  assert.match(icon.tip,/^Run claude, then \/login\. Claude is signed out on .+\.$/);
+  assert.match(icon.tip,/^Sign in from the panel\. Claude is signed out on .+\.$/);
   const longName=signedOutMac();longName.device={...longName.device,name:'M'.repeat(64)};
   const longTip=glanceView(combine([{host:'Mac',snapshot:longName}],{now}),{now,timeZone:'UTC'}).icon.tip;
-  assert.ok(longTip.slice(0,63).includes('/login'),longTip);
+  assert.ok(longTip.slice(0,63).includes('Sign in from the panel'),longTip);
+  // The panel offers the Sign in to Claude button only on the computer that is signed out.
+  const here=glanceView(combined,{now,timeZone:'UTC',settings:{host:'Mac'}}).signIn;
+  assert.deepEqual({here:here.here,button:here.button,command:here.command},{here:true,button:'Sign in to Claude',command:'claude auth login --claudeai'});
+  const elsewhere=glanceView(combined,{now,timeZone:'UTC',settings:{host:'Windows'}}).signIn;
+  assert.equal(elsewhere.here,false);
+  assert.match(elsewhere.text,/^Claude Code is signed out on Test Mac\./);
+  assert.equal(glanceView(combine([{host:'Windows',snapshot:pcFrom(now,claudeReading(now-60000,now+86400000))}],{now}),{now,timeZone:'UTC',settings:{host:'Windows'}}).signIn,null);
   // Even while the old week had not reset, a reading days old does not hide the sign-in.
   const unexpired=combine([{host:'Mac',snapshot:signedOutMac()},{host:'Windows',snapshot:pcFrom(wednesday,claudeReading(wednesday,now+86400000)),off:true}],{now});
   assert.equal(unexpired.view.claudeLimits.observedOn,'Mac');

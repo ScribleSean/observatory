@@ -15,6 +15,8 @@ import {fileURLToPath} from 'node:url';
 import {REPO,CONFIG_FILE,loadConfig,parseConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
 import {importHistory} from './import-history.mjs';
+import {certificateFile,shellCertificateFile} from '../lib/claude-env.mjs';
+import {runDoctor} from './doctor.mjs';
 
 const execute=promisify(execFile);
 export const LABEL='io.github.observatory.glance';
@@ -143,6 +145,27 @@ const shellWord=value=>"'"+String(value).replace(/'/g,"'\\''")+"'";
 // For a computer with no systemd user session: the one line to add with `crontab -e`.
 export function crontabLine(node,repo=REPO,configFile=CONFIG_FILE) {
   return `*/5 * * * * cd ${shellWord(repo)} && OBSERVATORY_CONFIG=${shellWord(configFile)} ${shellWord(node)} scripts/tick.mjs >/dev/null 2>&1`;
+}
+
+// A network with its own certificate authority: the certificate file this shell points claude or OpenSSL at, recorded
+// in the user's settings file (claude.caCertificates) so the apps' claude processes, started without this shell, trust
+// it too (lib/claude-env.mjs). Only a file that exists and holds a certificate is recorded. The path is never printed.
+export async function recordCertificates(configFile,{source=process.env,platform=process.platform,dryRun=false,step=()=>{},log=()=>{}}={}) {
+  const raw=JSON.parse(await readFile(configFile,'utf8'));
+  const recorded=raw?.claude?.caCertificates;
+  const found=shellCertificateFile(source,platform);
+  if(found && found!==recorded) {
+    step(`${dryRun?'would record':'recorded'} this shell's certificate file for Claude Code in the settings file (claude.caCertificates)`);
+    if(dryRun)return 'would-record';
+    raw.claude={...raw.claude,caCertificates:found};
+    await writeFile(configFile,JSON.stringify(raw,null,2)+'\n');
+    return 'recorded';
+  }
+  if(typeof recorded==='string' && !certificateFile(recorded,platform)) {
+    log('  Note: the certificate file under claude.caCertificates is missing. Set NODE_EXTRA_CA_CERTS to your network\'s certificate file and run setup again.');
+    return 'missing';
+  }
+  return found?'kept':'none';
 }
 
 export function glanceSettings(config,node=process.execPath,repo=REPO,configFile=CONFIG_FILE) {
@@ -378,6 +401,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       writeFile(configFile,JSON.stringify(example,null,2)+'\n',{flag:'wx'}));
     config=dryRun?parseConfig(example,{platform}):await loadConfig(configFile,{platform});
   } else config=await loadConfig(configFile,{platform});
+  if(existsSync(configFile) && await recordCertificates(configFile,{platform,dryRun,step,log})==='recorded')config=await loadConfig(configFile,{platform});
   step(`Settings: ${config.device.name}, ${config.role==='hub'?`combining with ${config.hub.spokes.map(spoke=>spoke.name).join(', ')}`:'this computer'}, sources on: ${Object.entries(config.sources).filter(([,on])=>on).map(([key])=>key).join(', ') || 'none'}`);
 
   if(platform!=='linux' && config.dataFolder===defaultDataFolder(platform) && await oldAppRunning(platform)) {
@@ -397,6 +421,8 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
   if(platform==='linux') {
     await setupLinux(config,configFile,{dryRun,login,start,step,act,log,hasSystemd,lingerIsOff});
     if(dryRun) {log('Dry run: nothing was changed.');return;}
+    log('Checking this computer:');
+    try {await runDoctor({log,configFile});}catch {}
     log('Done. This computer collects every 5 minutes. A Mac or Windows hub reads it over SSH once it is listed under hub.spokes there.');
     return;
   }
@@ -468,6 +494,8 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     if(!start)log(`  Start it now by opening ${target.executable}, or sign out and back in.`);
   }
   if(dryRun) {log('Dry run: nothing was changed.');return;}
+  log('Checking this computer:');
+  try {await runDoctor({log,configFile});}catch {}
   log(`Done. Dashboard: http://127.0.0.1:${config.dashboard.port} (use Open dashboard in the ${platform==='darwin'?'menu bar':'tray'} menu).`);
 }
 

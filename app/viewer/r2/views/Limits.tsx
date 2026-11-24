@@ -157,6 +157,11 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
   return (
     <div className="grid more">
       <p className="sayline" aria-label="Forecast">{vm.headline}</p>
+      {claude?.signIn && (
+        <Block span={12} title={`Claude Code is signed out on ${claude.signIn.on}`}>
+          <Empty title="Sign in to read its limits" line={claude.signIn.line} />
+        </Block>
+      )}
       <Strip cells={cells} />
       {weekly && (
         <Block span={8} title="Will the week last?" sub={`Claude Code weekly${state?.reset && state.length ? `, ${dateSpan(dateIn(state.reset - state.length, timeZone), dateIn(state.reset, timeZone))}` : ''}${readOn ? `, ${readOn}` : ''}`}

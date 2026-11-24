@@ -17,6 +17,7 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "status": "node scripts/status.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "icons": "node scripts/make-icons.mjs",
     "check:build": "node scripts/harness/stale-build.mjs . --url http://127.0.0.1:5601",
     "check:numbers": "node scripts/harness/numbers.mjs",

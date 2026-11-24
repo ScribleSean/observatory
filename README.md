@@ -62,11 +62,27 @@ Every five minutes the app collects one snapshot of this computer:
 
 The snapshots and the dashboard hold no prompts, responses, commands, window titles, paths or credentials. Session titles are kept so the dashboard can name sessions. With several computers they travel to the hub over your own SSH connection. Set `"sessions": { "titles": false }` to keep only a short hash instead, keyed with a secret that never leaves the computer. Each session also keeps whether it ran interactively or headless, the kind of its first prompt (such as review or build, never the prompt itself) and the folder name of the git repository it ran in. A working folder that is not a git repository is not kept. These three are kept with titles off too, and name untitled sessions. The daily history behind the views keeps, per computer, tool and day, the totals, the spend split by model, kind of work, how sessions ran and repository folder name, and the 30 largest sessions with a hashed id. Commit ids stay in a private store on that computer and never enter a snapshot. A private cache in the data folder holds file locations so the collector can resume reading where it stopped. It never leaves the computer. [SECURITY.md](SECURITY.md) has the details. A value that could not be read shows as Unknown, not as zero. Each computer works out the forecast once per reading, and the dashboard, menu bar, tray and status all show those same stored words. The forecast uses each limit's pace over the last hour and its average pace since the limit last reset. Once a few days of readings are stored, it also gives a range, taken from how far its own earlier forecasts missed, for example "Claude may run out Thu 3–6 PM." `node scripts/harness/forecast-backtest.mjs --fictional` replays the forecast over made-up readings and prints how far it missed, and `--db` does the same over your own stored readings. Dollar figures are estimates at public API prices, not a bill.
 
-An engine reads **Off** instead of showing an old number when its client is signed out, when the account reports a free plan, or when it has had no reading for a day. When Claude Code is signed out, the menu bar icon reads **Sign in** and names the computer. A reading from a computer that is off never stands in for one that is up. **Refresh** in the panel reads every source again, and opening the panel on a reading more than a minute old does the same.
+An engine reads **Off** instead of showing an old number when its client is signed out, when the account reports a free plan, or when it has had no reading for a day. When Claude Code is signed out, the menu bar icon reads **Sign in** and names the computer (see [Signing in](#signing-in)). A reading from a computer that is off never stands in for one that is up. **Refresh** in the panel reads every source again, and opening the panel on a reading more than a minute old does the same.
 
 History goes back to the first day each source has data and is kept until you delete the data folder. Token counts are saved per day, so a day stays counted after Claude Code deletes its old transcripts.
 
 **Several computers.** A Mac, a Windows PC and a Linux computer can share one view. The hub reads each other computer's snapshot over your own SSH alias and sends the combined view back, so every computer shows all of them. A Linux computer, such as a headless server where agents run, collects tokens, limits and sessions and has no screen time or tray app. Limits are account-wide and are not added across computers. Token and screen time sums are labeled "not deduplicated". To turn a computer off, set `"off": true` on its entry under `hub.spokes`: the hub stops reaching it and every surface shows it as Off. See [Several computers](docs/SEVERAL-COMPUTERS.md).
+
+## Signing in
+
+Observatory reads Claude limits through the Claude Code you already use, so Claude Code has to be signed in with a Claude subscription on the computer that reads them.
+
+- **Sign in to Claude.** When Claude Code is signed out, the menu bar or tray panel shows **Sign in to Claude**. It runs `claude auth login --claudeai`, and Claude Code opens your browser. The panel shows how it is going, then reads your limits again. The dashboard's Limits view says which computer is signed out.
+- **From a terminal.** The same works by hand: `claude auth login --claudeai`. On Linux, which has no panel, this is the way.
+- **A subscription, not a Console account.** Observatory shows a Claude subscription's limits. An Anthropic Console (API) sign-in has none, so sign in with `--claudeai`.
+
+**Check a computer.** `npm run doctor` lists what stands between this computer and a reading, one line each with its fix: Claude Code missing, signed out, a Console account instead of a subscription, or a certificate it cannot trust. It only reads: it never signs in or changes a file. Setup runs it at the end.
+
+```bash
+npm run doctor
+```
+
+**A network with its own certificate authority.** Some workplace and school networks inspect encrypted traffic with their own certificate, and Claude Code then cannot sign in or renew its sign-in ("unable to get local issuer certificate"). Claude Code trusts an extra certificate file only through `NODE_EXTRA_CA_CERTS`. Set it in your shell profile to that network's PEM file, then run `npm run setup` again. The menu bar and tray apps start at login without your shell, so setup records the file under `claude.caCertificates` in your settings file and passes it to every Claude Code process Observatory starts. Observatory never changes your shell profile or the system's trusted certificates.
 
 ## Settings
 
@@ -85,7 +101,7 @@ History goes back to the first day each source has data and is kept until you de
 }
 ```
 
-A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, `codexPath`, and `"glance": { "accent": true }` to draw the Mac menu bar icon in the accent color instead of the system's monochrome.
+A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, `codexPath`, `claude.caCertificates` (written by setup, see [Signing in](#signing-in)), and `"glance": { "accent": true }` to draw the Mac menu bar icon in the accent color instead of the system's monochrome.
 
 **Engines.** `engines` sets each tile to `"auto"` (the default), `"off"`, or `"on"` (keep a free plan's own allowance on screen): `"engines": { "codex": "off" }`. With several computers, set it in each settings file: each one draws its own tiles.
 

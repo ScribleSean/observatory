@@ -156,11 +156,11 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
-export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage,enabled=false}={}) {
+export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage,enabled=false,environment}={}) {
   if(enabled!==true)return claudeLimitsSource(null,{enabled:false,now});
   let usageCommand='failed';
   try {
-    const result=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
+    const result=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now,...(environment?{environment}:{})});
     if(isObject(result) && ['read','not-found','failed','timed-out','unrecognized','signed-out'].includes(result.status)) {
       if(result.status==='read') {
         usageCommand='unrecognized';

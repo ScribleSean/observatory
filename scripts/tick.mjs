@@ -25,7 +25,7 @@ export async function writeGlance(config,combined,{now=Date.now(),flags=glanceFl
   const file=path.join(await privateFolder(config.dataFolder,'public','local'),'glance.json');
   try {
     const timeZone=combined.view?.timezone ?? TIME_ZONE;
-    const view=glanceView(combined,{now,timeZone,flags:await flags(combined,{now,timeZone}),settings:{titles:config.sessions?.titles!==false,accent:config.glance?.accent===true}});
+    const view=glanceView(combined,{now,timeZone,flags:await flags(combined,{now,timeZone}),settings:{titles:config.sessions?.titles!==false,accent:config.glance?.accent===true,host:config.host}});
     await writeJsonAtomic(file,view);
     return 'ok';
   } catch(error) {

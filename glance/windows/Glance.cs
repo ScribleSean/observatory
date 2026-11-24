@@ -73,6 +73,13 @@ namespace Observatory
         // one, or the combined.json fallback) nothing is known: the stale shape and Unknown, never Off.
         public string IconState = "stale", IconText = "Unknown", IconTip = "Unknown", StaleText, StaleTip;
         public double? IconFraction, StaleFraction;
+        // Claude Code reads signed out (glance.json "signIn", lib/glance-view.mjs). On this computer the panel offers its
+        // button, which runs scripts/claude-sign-in.mjs. SignInMessage is that script's line from sign-in.json while it
+        // runs, or how a recent one failed.
+        public bool HasSignIn, SignInHere, SigningIn;
+        public string SignInText = "", SignInButton = "Sign in to Claude", SignInRunning = "Signing in\u2026", SignInMessage;
+        // A failed sign-in's line stays this long, unless a later tick finds Claude signed in.
+        public const double SignInShownMinutes = 15;
         // Read only from combined.json, the fallback.
         public string Sentence, Menu;
         public DateTime? Updated;
@@ -215,7 +222,31 @@ namespace Observatory
                 state.StaleTip = Get(stale, "tip") as string ?? state.StaleText;
                 state.StaleFraction = Share(Get(stale, "fraction"));
             }
+            var sign = Get(json, "signIn") as Dictionary<string, object>;
+            var signText = Get(sign, "text") as string;
+            if (signText != null)
+            {
+                object here = Get(sign, "here");
+                state.HasSignIn = true;
+                state.SignInHere = here is bool && (bool)here;
+                state.SignInText = signText;
+                state.SignInButton = Get(sign, "button") as string ?? state.SignInButton;
+                state.SignInRunning = Get(sign, "running") as string ?? state.SignInRunning;
+            }
             return state;
+        }
+
+        // sign-in.json (scripts/claude-sign-in.mjs) and whether the panel's sign-in is running now.
+        public void ApplySignIn(Dictionary<string, object> status, bool running)
+        {
+            SigningIn = running;
+            if (running && !HasSignIn) { HasSignIn = true; SignInHere = true; }
+            var message = Get(status, "message") as string;
+            DateTime? at = Date(Get(status, "updatedAt"));
+            if (message == null || !at.HasValue) return;
+            double age = (Now - at.Value).TotalMinutes;
+            bool recent = age < SignInShownMinutes && age > -FutureSlackMinutes;
+            if (running || (recent && (Get(status, "state") as string) == "failed")) SignInMessage = message;
         }
 
         // combined.json, when glance.json is missing: the forecast and the limit rows, no sessions or flag.
@@ -481,6 +512,32 @@ namespace Observatory
             return cy + lineHeight;
         }
 
+        // Signed out: what to do, and on this computer the Sign in to Claude button, disabled while a sign-in runs. Returns the new y.
+        static float SignIn(Graphics g, PanelState s, Palette p, bool draw, List<Tuple<RectangleF, string>> hits, Font body, Font small, StringFormat wrap, float left, float right, float y)
+        {
+            if (!s.HasSignIn) return y;
+            string line = s.SignInMessage ?? s.SignInText;
+            if (line.Length > 0)
+            {
+                float h = (float)Math.Ceiling(g.MeasureString(line, small, (int)(right - left), wrap).Height);
+                if (draw) using (var brush = new SolidBrush(p.Muted)) g.DrawString(line, small, brush, new RectangleF(left, y, right - left, h + 2), wrap);
+                y += h + 8;
+            }
+            if (s.SignInHere || s.SigningIn)
+            {
+                string label = s.SigningIn ? s.SignInRunning : s.SignInButton;
+                var button = new RectangleF(left, y, Measure(g, label, body) + 26, 30);
+                if (hits != null && !s.SigningIn) hits.Add(Tuple.Create(button, "signin"));
+                if (draw)
+                {
+                    Box(g, p.Button, p.Hairline, button, 4);
+                    Text(g, label, body, s.SigningIn ? p.Muted : p.Text, button.X + 13, button.Y + 7);
+                }
+                y += 30;
+            }
+            return y + 14;
+        }
+
         public static int Paint(Graphics g, PanelState s, Palette p, bool draw, List<Tuple<RectangleF, string>> hits)
         {
             using (var body = new Font("Segoe UI", 13, GraphicsUnit.Pixel))
@@ -505,6 +562,7 @@ namespace Observatory
                     float h = Inner * 2 + 18;
                     if (draw) { Box(g, p.Surface, p.Hairline, new RectangleF(left, y, right - left, h), 6); Text(g, notice, body, p.Muted, left + Inner, y + Inner); }
                     y += h + Gap;
+                    y = SignIn(g, s, p, draw, hits, body, small, wrap, left, right, y);
                 }
                 else
                 {
@@ -523,6 +581,7 @@ namespace Observatory
                     Color tone = s.Old ? p.Muted : engine.Status == "out" ? p.Error : engine.Status == "runs-out" ? p.Warning : p.Provider(engine.Id);
                     if (draw) Bar(g, p, new RectangleF(left, y, right - left, 6), s.Fraction, tone);
                     y += 6 + 14;
+                    y = SignIn(g, s, p, draw, hits, body, small, wrap, left, right, y);
 
                     // Every other limit window, any engine.
                     if (s.Limits.Count > 0)
@@ -779,6 +838,8 @@ namespace Observatory
         readonly Settings settings;
         Process tick;
         Process server;
+        Process signIn;
+        readonly System.Windows.Forms.Timer signInTimer = new System.Windows.Forms.Timer();
         Icon icon;
         SynchronizationContext ui;
         DateTime tickStarted = DateTime.MinValue;
@@ -808,8 +869,12 @@ namespace Observatory
             {
                 if (name == "dashboard") { panel.Hide(); OpenDashboard(); }
                 else if (name == "refresh") RunTick();
+                else if (name == "signin") StartSignIn();
                 else if (name == "quit") Quit();
             };
+            // The panel reads sign-in.json every second while a sign-in runs.
+            signInTimer.Interval = 1000;
+            signInTimer.Tick += (sender, e) => Show();
             tickTimer.Interval = 5 * 60 * 1000;
             tickTimer.Tick += (sender, e) => RunTick();
             tickTimer.Start();
@@ -893,6 +958,19 @@ namespace Observatory
             Show();
         }
 
+        // Runs scripts/claude-sign-in.mjs once at a time. Claude Code opens the browser, and the script reads every source
+        // again once Claude is signed in.
+        void StartSignIn()
+        {
+            if (signIn != null && !signIn.HasExited) return;
+            signIn = Node(Path.Combine("scripts", "claude-sign-in.mjs"), false);
+            if (signIn == null) { Show(); return; }
+            signIn.EnableRaisingEvents = true;
+            signIn.Exited += (s, e) => ui.Post(_ => { signInTimer.Stop(); Show(); }, null);
+            signInTimer.Start();
+            Show();
+        }
+
         static void StopTree(Process process)
         {
             try
@@ -928,6 +1006,7 @@ namespace Observatory
             }
             if (nodeMissing) state.Notice = "Node was not found. Run npm run setup again.";
             state.Refreshing = tick != null && !tick.HasExited;
+            if (settings != null) state.ApplySignIn(ReadJson(Path.Combine(settings.dataFolder, "public", "local", "sign-in.json")), signIn != null && !signIn.HasExited);
             panel.State = state;
             if (panel.Visible) panel.Place(false);
             bool current = state.Notice == null && !state.Old && !state.Empty;
@@ -1029,6 +1108,8 @@ namespace Observatory
             tickTimer.Stop();
             readTimer.Stop();
             openTimer.Stop();
+            signInTimer.Stop();
+            StopTree(signIn);
             StopTree(tick);
             StopTree(server);
             panel.Hide();
@@ -1053,8 +1134,8 @@ namespace Observatory
             try { SetProcessDPIAware(); } catch { }
         }
 
-        // `ObservatoryGlance.exe --render glance.json|combined.json out.png light|dark [now]` draws the panel to a PNG
-        // without a tray, for checking the layout and for documentation screenshots.
+        // `ObservatoryGlance.exe --render glance.json|combined.json out.png light|dark [now] [--sign-in sign-in.json] [--signing-in]`
+        // draws the panel to a PNG without a tray, for checking the layout and for documentation screenshots.
         static int Render(string[] args)
         {
             int at = Array.IndexOf(args, "--render");
@@ -1063,6 +1144,8 @@ namespace Observatory
             if (json == null) return 2;
             DateTime now = args.Length > at + 4 && PanelState.Date(args[at + 4]).HasValue ? PanelState.Date(args[at + 4]).Value : DateTime.UtcNow;
             var state = (PanelState.Get(json, "schema") as string) == PanelState.GlanceSchema ? PanelState.ParseGlance(json, now) : PanelState.Parse(json, now);
+            int status = Array.IndexOf(args, "--sign-in");
+            state.ApplySignIn(status >= 0 && status + 1 < args.Length ? ReadJson(args[status + 1]) : null, Array.IndexOf(args, "--signing-in") >= 0);
             using (var image = Painter.Render(state, args[at + 3] == "dark", 2)) image.Save(args[at + 2], System.Drawing.Imaging.ImageFormat.Png);
             return 0;
         }
