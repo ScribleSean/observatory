@@ -38,8 +38,10 @@ test('the environment keeps the allowlist, and the process\'s own certificate va
   const recorded=await bundle(folder,'recorded.pem'),own=await bundle(folder,'own.pem');
   const config={claude:{caCertificates:recorded}};
   const source={HOME:'/synthetic/home',PATH:'/synthetic/bin',ANTHROPIC_API_KEY:'synthetic',CLAUDECODE:'1',SSL_CERT_FILE:own,NODE_OPTIONS:'--use-openssl-ca'};
-  assert.deepEqual(claudeEnvironment(config,source,'darwin'),{HOME:'/synthetic/home',PATH:'/synthetic/bin',NODE_EXTRA_CA_CERTS:recorded});
-  assert.equal(claudeEnvironment(config,{...source,NODE_EXTRA_CA_CERTS:own},'darwin').NODE_EXTRA_CA_CERTS,own);
+  // The real platform: the files are real, and a Windows path is not absolute on POSIX.
+  const kept=process.platform==='win32'?{PATH:'/synthetic/bin'}:{HOME:'/synthetic/home',PATH:'/synthetic/bin'};
+  assert.deepEqual(claudeEnvironment(config,source,process.platform),{...kept,NODE_EXTRA_CA_CERTS:recorded});
+  assert.equal(claudeEnvironment(config,{...source,NODE_EXTRA_CA_CERTS:own},process.platform).NODE_EXTRA_CA_CERTS,own);
   assert.deepEqual(certificateSource(config,{},process.platform),{file:recorded,from:'settings',missing:false});
   // No settings: only the process's own variable, as the limits read always had.
   assert.deepEqual(usageEnvironment({PATH:'/synthetic/bin',NODE_EXTRA_CA_CERTS:own},'darwin'),{PATH:'/synthetic/bin',NODE_EXTRA_CA_CERTS:own});
@@ -242,13 +244,15 @@ test('the check names each problem with one fix, and never signs in', async () =
   await withFolder(async folder => {
     const file=await bundle(folder);
     let given=null;
-    const lines=await run({source:{SSL_CERT_FILE:file},probe:async(host,extra)=>{given=extra;return 'trusted';}});
+    // The real platform from here: the files are real.
+    const real={platform:process.platform};
+    const lines=await run({...real,source:{SSL_CERT_FILE:file},probe:async(host,extra)=>{given=extra;return 'trusted';}});
     assert.match(text(lines),/fix\s+This shell trusts an extra certificate file.*\n\s+Run npm run setup again/);
     assert.ok(!text(lines).includes(file),'the path is not printed');
-    const recorded=await run({config:{...config,claude:{caCertificates:file}},probe:async(host,extra)=>{given=extra;return 'trusted';}});
+    const recorded=await run({...real,config:{...config,claude:{caCertificates:file}},probe:async(host,extra)=>{given=extra;return 'trusted';}});
     assert.match(text(recorded),/ok\s+Claude Code gets the certificate file recorded by setup/);
     assert.equal(given,PEM,'the probe trusts what claude would');
-    assert.match(text(await run({config:{...config,claude:{caCertificates:path.join(folder,'gone.pem')}}})),/fix\s+The certificate file recorded by setup is missing/);
+    assert.match(text(await run({...real,config:{...config,claude:{caCertificates:path.join(folder,'gone.pem')}}})),/fix\s+The certificate file recorded by setup is missing/);
   });
 });
 
