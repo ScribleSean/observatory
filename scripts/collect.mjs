@@ -17,6 +17,7 @@ import {serializeSnapshot,snapshotMaximumBytes} from './snapshot-size.mjs';
 import {collectQuota,findCodexExecutable} from './collect-quota.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource,attachProviderTokenEstimates} from './provider-token-sources.mjs';
+import {claudeEnvironment} from '../lib/claude-env.mjs';
 import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime} from './claude-limits.mjs';
 import {readGrokUsage,notConnected as grokNotConnected} from './grok-usage.mjs';
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
@@ -123,7 +124,7 @@ export function defaultReaders(config) {
     grokLimits:()=>readGrokUsage({appFolder:config.grok?.appFolder ?? null,requestLog:config.grok?.requestLog ?? null,timeZone:TIMEZONE}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
-      return withinTime(readClaudeLimits(config.dataFolder,{enabled:true}),20000);
+      return withinTime(readClaudeLimits(config.dataFolder,{enabled:true,environment:claudeEnvironment(config)}),20000);
     },
   };
 }

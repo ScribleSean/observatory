@@ -40,6 +40,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Screen time from ActivityWatch on Windows | Screen time view | `scripts/windows-aggregate-activity.test.mjs` (Windows only) |
 | Sources on or off | `sources` in `observatory.config.json` | `test/collect.test.mjs`, `test/config.test.mjs` |
 | Off engines (signed out, free plan, no reading for a day, `engines` setting); Claude signed out reads Sign in on the icon | Dashboard Limits, menu bar and tray | `test/forecast.test.mjs`, `scripts/quota-history.test.mjs`, `test/collect.test.mjs`, `test/combine.test.mjs` (a computer that is up and signed out beats an off computer's old reading) |
+| Sign in to Claude from the panel, certificate file passed to every claude process, `npm run doctor` | Menu bar and tray panel, dashboard Limits, setup | `test/claude-sign-in.test.mjs`, `test/combine.test.mjs` |
 | Grok engine from local files (`sources.grokLimits`, `grok.appFolder`, `grok.requestLog`) | Dashboard Limits, menu bar and tray | `scripts/grok-usage.test.mjs`, `test/forecast.test.mjs` |
 | `dashboard.port`, `dataFolder`, `codexPath` | `observatory.config.json` | `test/config.test.mjs` (parsing only) |
 | WSL logs counted on the PC | `"wsl": true` | `test/token-roots.test.mjs` |

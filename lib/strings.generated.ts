@@ -121,7 +121,8 @@ export const STRINGS = {
     "iconStale": "Last read {time}",
     "signIn": "Sign in",
     "thisComputer": "this computer",
-    "signInTip": "Run claude, then /login. Claude is signed out on {name}."
+    "signInTip": "Sign in from the panel. Claude is signed out on this computer.",
+    "signInTipElsewhere": "Run claude auth login --claudeai on {name}. Claude is signed out there."
   },
   "ledger": {
     "fanout": "{title} fanned out to {count} subagents and took {share} of the week. No branch merged.",
@@ -332,6 +333,31 @@ export const STRINGS = {
     "beforeResetDays": "{count} days before the reset",
     "asOf": "{text}, as of {time}",
     "sentenceAsOf": "{sentence} As of {time}."
+  },
+  "claudeSignIn": {
+    "button": "Sign in to Claude",
+    "running": "Signing in…",
+    "here": "Claude Code is signed out on this computer, so its limits cannot be read.",
+    "elsewhere": "Claude Code is signed out on {name}. Sign in there to read its limits.",
+    "command": "claude auth login --claudeai",
+    "starting": "Starting sign-in…",
+    "waiting": "Your browser should open. Finish signing in to Claude there.",
+    "checking": "Checking the sign-in…",
+    "refreshing": "Signed in. Reading your limits again…",
+    "done": "Signed in to Claude.",
+    "limitsUnread": "Signed in to Claude. Your limits will show at the next reading.",
+    "noLimits": "The account signed in, but it has no Claude plan limits to read. If it has a Claude plan, the sign-in did not stick, so try again.",
+    "certificate": "Your network uses its own certificate. Set NODE_EXTRA_CA_CERTS to its PEM file and run npm run setup again.",
+    "certificateMissing": "The certificate file recorded by setup is missing. Set NODE_EXTRA_CA_CERTS to your network's certificate file and run npm run setup again.",
+    "console": "This is an Anthropic Console account. Observatory reads Claude subscription limits, so sign in with your Claude subscription: claude auth login --claudeai",
+    "notSubscription": "This sign-in is not a Claude subscription. Sign in with: claude auth login --claudeai",
+    "notFound": "Claude Code was not found. Install Claude Code, run claude once in a terminal, then try again.",
+    "timedOut": "Sign-in timed out. Try again.",
+    "terminal": "Sign-in needs a terminal here. Run claude auth login --claudeai in a terminal.",
+    "failed": "Sign-in did not finish. Try again, or run claude auth login --claudeai in a terminal.",
+    "panelMac": "Use Sign in to Claude in the menu bar panel, or run claude auth login --claudeai in a terminal.",
+    "panelWindows": "Use Sign in to Claude in the tray panel, or run claude auth login --claudeai in a terminal.",
+    "panelLinux": "Run claude auth login --claudeai in a terminal on {name}."
   }
 } as const;
 

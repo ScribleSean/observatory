@@ -4,6 +4,7 @@ import {constants} from 'node:fs';
 import {homedir} from 'node:os';
 import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import path from 'node:path';
+import {claudeEnvironment} from '../lib/claude-env.mjs';
 
 const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const lines={five_hour:/^Current session: (\d{1,3})% used(?: · resets (.+))?$/m,seven_day:/^Current week \(all models\): (\d{1,3})% used(?: · resets (.+))?$/m};
@@ -87,18 +88,10 @@ export async function findClaude(environment=process.env,platform=process.platfo
   return null;
 }
 
-const keep={
-  posix:['HOME','USER','LOGNAME','SHELL','PATH','TMPDIR','LANG','LC_ALL','CLAUDE_CONFIG_DIR'],
-  win32:['SystemRoot','SystemDrive','USERPROFILE','HOMEDRIVE','HOMEPATH','USERNAME','APPDATA','LOCALAPPDATA','TEMP','TMP','PATH','Path','PATHEXT','COMSPEC','CLAUDE_CONFIG_DIR'],
-};
-
-// A collector started from
-// another Claude session inherits that session's variables, and passing them
-// on made the command hang.
+// The command's environment: lib/claude-env.mjs, with no settings (only this process's own certificate variable).
+// Callers that have the settings pass claudeEnvironment(config) instead.
 export function usageEnvironment(source=process.env,platform=process.platform) {
-  const result={};
-  for(const name of platform==='win32'?keep.win32:keep.posix)if(typeof source[name]==='string')result[name]=source[name];
-  return result;
+  return claudeEnvironment(null,source,platform);
 }
 
 function forceStop(child,platform) {

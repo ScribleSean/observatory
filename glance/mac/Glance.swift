@@ -45,6 +45,16 @@ struct EngineRow: Identifiable, Equatable {
   var resets: String? = nil
 }
 
+// Claude Code reads signed out (glance.json "signIn", lib/glance-view.mjs). On this computer the panel offers its button,
+// which runs scripts/claude-sign-in.mjs. That script reports its progress in sign-in.json.
+struct SignInRow: Equatable {
+  let here: Bool
+  let text: String
+  let button: String
+  let running: String
+  static let fallback = SignInRow(here: true, text: "", button: "Sign in to Claude", running: "Signing in…")
+}
+
 // What the icon shows once glance.json is old: its last value and when it was read.
 struct StaleIcon: Equatable {
   let fraction: Double?
@@ -77,6 +87,10 @@ struct PanelState: Equatable {
   var iconTip = "Unknown"
   var iconStale: StaleIcon?
   var accent = false
+  var signIn: SignInRow?
+  // The sign-in's own line from sign-in.json while it runs, or how a recent one failed.
+  var signInMessage: String?
+  var signingIn = false
   // Read only from combined.json, the fallback.
   var sentence: String?
   var menu: String?
@@ -174,7 +188,23 @@ struct PanelState: Equatable {
       }
       state.accent = icon["accent"] as? Bool == true
     }
+    if let sign = json["signIn"] as? [String: Any], let text = sign["text"] as? String {
+      state.signIn = SignInRow(here: sign["here"] as? Bool == true, text: text, button: sign["button"] as? String ?? SignInRow.fallback.button,
+                               running: sign["running"] as? String ?? SignInRow.fallback.running)
+    }
     return state
+  }
+
+  // A failed sign-in's line stays this long, unless a later tick finds Claude signed in.
+  static let signInShown: TimeInterval = 15 * 60
+
+  // sign-in.json (scripts/claude-sign-in.mjs) and whether the panel's sign-in is running now.
+  mutating func applySignIn(_ status: [String: Any]?, running: Bool) {
+    signingIn = running
+    if running && signIn == nil { signIn = SignInRow.fallback }
+    guard let status, let message = status["message"] as? String, let at = Self.date(status["updatedAt"]) else { return }
+    let recent = now.timeIntervalSince(at) < Self.signInShown && now.timeIntervalSince(at) > -Self.futureSlack
+    if running || (recent && status["state"] as? String == "failed") { signInMessage = message }
   }
 
   // combined.json, when glance.json is missing: the forecast and the limit rows, no sessions or flag.
@@ -259,6 +289,7 @@ struct Palette {
 final class PanelModel: ObservableObject {
   @Published var state = PanelState()
   var refresh: () -> Void = {}
+  var signIn: () -> Void = {}
   var openDashboard: () -> Void = {}
   var quit: () -> Void = {}
 }
@@ -300,10 +331,11 @@ struct PanelView: View {
       switch state.notice {
       case .setupMissing: message("Settings are missing. Run npm run setup again.", palette)
       case .nodeMissing: message("Node was not found. Run npm run setup again.", palette)
-      case .collecting: message("Collecting the first reading…", palette)
+      case .collecting: message("Collecting the first reading…", palette); signInView(state, palette)
       case .none:
         if state.empty {
           message("Collecting the first reading…", palette)
+          signInView(state, palette)
         } else {
           content(state, palette).opacity(state.old ? 0.6 : 1)
         }
@@ -333,6 +365,7 @@ struct PanelView: View {
       bar(state.fraction, tone(state, palette), palette, height: 6).padding(.top, 3)
     }
     .accessibilityElement(children: .combine)
+    signInView(state, palette)
     if !state.limits.isEmpty {
       Divider()
       VStack(alignment: .leading, spacing: 7) {
@@ -384,6 +417,25 @@ struct PanelView: View {
       }
       .fixedSize(horizontal: false, vertical: true)
       .accessibilityElement(children: .combine)
+    }
+  }
+
+  // Signed out: what to do, and on this computer the button. It is disabled while a sign-in runs, and its line then
+  // follows the sign-in.
+  @ViewBuilder func signInView(_ state: PanelState, _ palette: Palette) -> some View {
+    if let sign = state.signIn {
+      VStack(alignment: .leading, spacing: 8) {
+        let line = state.signInMessage ?? sign.text
+        if !line.isEmpty {
+          Text(line).font(.system(size: 12)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
+        }
+        if sign.here || state.signingIn {
+          Button(state.signingIn ? sign.running : sign.button, action: model.signIn)
+            .buttonStyle(Push(palette: palette)).disabled(state.signingIn).opacity(state.signingIn ? 0.6 : 1)
+            .accessibilityLabel(state.signingIn ? sign.running : sign.button)
+        }
+      }
+      .padding(.top, 4)
     }
   }
 
@@ -636,6 +688,8 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
   var settings: Settings?
   var tick: Process?
   var server: Process?
+  var signInProcess: Process?
+  var signInTimer: Timer?
   var panel: FloatingPanel?
   var hosting: NSHostingView<PanelView>?
 
@@ -653,6 +707,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     item.button?.action = #selector(toggle)
     item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
     model.refresh = { [weak self] in self?.runTick() }
+    model.signIn = { [weak self] in self?.startSignIn() }
     model.openDashboard = { [weak self] in self?.closePanel(); self?.openDashboard() }
     model.quit = { NSApp.terminate(nil) }
     show()
@@ -667,6 +722,11 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
   func stopProcesses() {
     server?.terminate()
+    // The sign-in script stops claude and everything claude started when it gets SIGTERM, so wait for it to finish that.
+    if let signing = signInProcess, signing.isRunning {
+      signing.terminate()
+      signing.waitUntilExit()
+    }
     if let running = tick, running.isRunning {
       running.terminate()
       running.waitUntilExit()
@@ -744,6 +804,25 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     show()
   }
 
+  // Runs scripts/claude-sign-in.mjs once at a time. Claude Code opens the browser. The panel reads sign-in.json every
+  // second while it runs, and the script reads every source again once Claude is signed in.
+  func startSignIn() {
+    if signInProcess?.isRunning == true { return }
+    guard let settings else { return }
+    signInProcess = node([settings.repo + "/scripts/claude-sign-in.mjs"]) { [weak self] finished in
+      guard let self else { return }
+      if self.signInProcess === finished { self.signInProcess = nil }
+      self.signInTimer?.invalidate()
+      self.signInTimer = nil
+      self.show()
+    }
+    if signInProcess != nil {
+      signInTimer?.invalidate()
+      signInTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.show() }
+    }
+    show()
+  }
+
   func show() {
     var state: PanelState
     if settings == nil {
@@ -755,6 +834,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     if nodeMissing { state.notice = .nodeMissing }
     state.refreshing = tick?.isRunning == true
+    state.applySignIn(Self.json(localFile("sign-in.json")), running: signInProcess?.isRunning == true)
     model.state = state
     let current = state.notice == .none && !state.old && !state.empty
     // The icon and its number, as glance.json says. The state is in the icon, so the button is never greyed out.
@@ -842,8 +922,8 @@ extension ISO8601DateFormatter {
   }()
 }
 
-// `Observatory --render glance.json|combined.json out.png light|dark [now-iso]` draws the panel to a PNG
-// without a menu bar, for checking the layout and for documentation screenshots.
+// `Observatory --render glance.json|combined.json out.png light|dark [now-iso] [--sign-in sign-in.json] [--signing-in]`
+// draws the panel to a PNG without a menu bar, for checking the layout and for documentation screenshots.
 @MainActor func render(_ arguments: [String]) -> Int32 {
   guard arguments.count >= 4, let data = FileManager.default.contents(atPath: arguments[1]),
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -853,6 +933,9 @@ extension ISO8601DateFormatter {
   let now = arguments.count > 4 ? PanelState.date(arguments[4]) ?? Date() : Date()
   let model = PanelModel()
   model.state = Glance.state(glance: json, combined: { json }, now: now) ?? PanelState(notice: .collecting)
+  let all = CommandLine.arguments
+  let status = all.firstIndex(of: "--sign-in").flatMap { $0 + 1 < all.count ? Glance.json(URL(fileURLWithPath: all[$0 + 1])) : nil }
+  model.state.applySignIn(status, running: all.contains("--signing-in"))
   let scheme: ColorScheme = arguments[3] == "dark" ? .dark : .light
   let renderer = ImageRenderer(content: PanelView(model: model, opaque: true).environment(\.colorScheme, scheme))
   renderer.scale = 2
