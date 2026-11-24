@@ -186,33 +186,53 @@ button.kpi:hover{background:var(--hover)}
 .bl .t.t1{color:var(--text)}
 
 /* column charts */
-.chart{padding:var(--sp-2) var(--pad) var(--sp-3);flex:1;display:flex;flex-direction:column;container-type:inline-size}
+/* A chart (BarChart in views/parts.tsx) is one grid: a column of scale values as wide as the widest value, then the
+   plots. Every band, the labels under the last and the scale values share those two columns, so plots line up edge to
+   edge, values are right-aligned against the plot and each label is centred under its column. */
+.chart{padding:var(--sp-2) var(--pad) var(--sp-3);flex:1;display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:var(--sp-2);align-content:stretch;container-type:inline-size}
+.chart>.bandh,.chart>.read{grid-column:1/-1}
+.chart>.ticks{grid-column:1}
+.chart>.plot,.chart>.xl{grid-column:2}
+/* A band's caption and the key to its colours, over its plot. */
+.bandh{display:flex;align-items:baseline;gap:var(--sp-1) var(--sp-3);flex-wrap:wrap;font-size:var(--fs-small);color:var(--faint);min-width:0}
+.bandh b{font-weight:500;color:var(--muted)}
+.plot~.bandh{margin-top:var(--sp-4)}
 /* A bar plot: the bars are one SVG (BarPlot in views/parts.tsx) stretched over the plot, so each bar's height is
-   its value over the data's max of the plot height, from the baseline. The hit layer over it holds the value labels,
-   titles and clicks, one column per bar. */
-.plot{position:relative;border-bottom:1px solid var(--line)}
-.plot.spend{flex:1 0 clamp(7rem,20cqi,11rem);margin-top:1.4em}
-.plot.cm{flex:0 0 clamp(2.25rem,6cqi,3.25rem);margin-top:var(--sp-3)}
+   its value over the data's max of the plot height, from the baseline: the plot's bottom edge, drawn as a line. The
+   hit layer over it holds the value labels, titles and clicks, one column per bar. */
+.plot{position:relative;border-bottom:1px solid var(--line-strong);min-width:0}
+/* A plot and its scale values are one row: the same height and the same room above for the value over the tallest bar. */
+.plot.spend,.ticks.spend{min-height:clamp(6.5rem,18cqi,10rem);margin-top:1.25rem}
+.plot.cm,.ticks.cm{height:clamp(2.75rem,7cqi,3.75rem);margin-top:var(--sp-2)}
+.ticks{position:relative;font-size:10.5px;line-height:1;color:var(--faint);text-align:right;white-space:nowrap;border-bottom:1px solid transparent}
+.ticks b{display:block;height:0;visibility:hidden;font-weight:400}
+.ticks span{position:absolute;right:0;transform:translateY(50%)}
+.plot .rule{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--line-soft);transform:translateY(50%)}
 .plot svg.bars{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block}
 .plot path.grey{--bar:var(--g1)}.plot path.mac{--bar:var(--accent)}.plot path.pc{--bar:var(--accent-2)}.plot path.ubuntu{--bar:var(--accent-3)}
 .plot path.land{--bar:var(--g0)}.plot path.churn{--bar:var(--g3)}
 .plot path.bar{fill:var(--bar)}
 /* the column under the pointer or focus, as the old bars brightened */
 .plot g.on path.bar{fill:color-mix(in srgb,var(--bar) 88%,#fff)}
-.plot rect.unk.outline{fill:none;stroke:var(--line-strong);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
-.plot rect.unk.line{fill:var(--line-strong)}
+.plot rect.unk.outline{fill:none;stroke:var(--faint);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
 .plot .hits{position:absolute;inset:0;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 /* Each column fills its grid cell by its own width and height, so no engine has to stretch it (Safari does not). */
 .plot .col{position:relative;display:block;width:100%;height:100%;cursor:pointer;min-width:0;padding:0;border:0;background:none;font:inherit;color:inherit}
 .plot .col.empty{cursor:default}
 .plot .col em{position:absolute;left:50%;transform:translateX(-50%);font-style:normal;font-size:10.5px;line-height:15px;color:var(--faint);white-space:nowrap}
 .plot .col em.peak{color:var(--text);font-weight:600}
-.xl{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);font-size:10.5px;color:var(--faint);text-align:center;margin-top:5px;min-height:1lh}
-.xl span{white-space:nowrap;overflow:visible}
-.xl span.now{color:var(--text);font-weight:500}
+/* Labels under the columns. A cell centres its label even when the label is wider than the cell. */
+.xl{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);font-size:10.5px;color:var(--faint);margin-top:5px;min-height:1lh}
+.xl span{display:flex;justify-content:center;min-width:0;position:relative}
+.xl b{font-weight:400;white-space:nowrap;flex:none}
+.xl b.brief,.xl.short b.full{position:absolute;visibility:hidden}
+.xl.short b.brief{position:static;visibility:visible}
+.xl span.off b{visibility:hidden}
+.xl span.now{color:var(--text)}.xl span.now b{font-weight:500}
 .lg{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:var(--fs-small);color:var(--faint)}
 .lg i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;vertical-align:1px}
-.read{font-size:var(--fs-small);color:var(--faint);margin-top:var(--sp-2);min-height:1lh;text-wrap:pretty}
+.lg i.unkkey{background:none;border:1px dashed var(--faint)}
+.read{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-1) var(--sp-3);flex-wrap:wrap;font-size:var(--fs-small);color:var(--faint);margin-top:var(--sp-2);min-height:1lh;text-wrap:pretty}
 
 /* limits */
 .lim{padding:var(--sp-3) var(--pad);border-top:1px solid var(--line-soft)}
@@ -226,14 +246,7 @@ button.kpi:hover{background:var(--hover)}
 .meter i{display:block;height:100%;border-radius:3px;background:var(--g0)}
 .meter u{position:absolute;top:-3px;width:1.5px;height:12px;background:var(--muted)}
 .lim .f{font-size:var(--fs-small);color:var(--faint);display:flex;justify-content:space-between;gap:var(--sp-2);flex-wrap:wrap}
-.plot.spark{height:2em;margin:var(--sp-2) 0 6px}
-.burn{position:relative;height:clamp(9rem,22vw,12.5rem);margin:var(--sp-2) 0 26px 34px}
-.burn svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.burn .y{position:absolute;left:-34px;font-size:10.5px;color:var(--faint);transform:translateY(-50%)}
-.burn .x{position:absolute;bottom:-20px;font-size:10.5px;color:var(--faint);transform:translateX(-50%);white-space:nowrap}
-.burn .pt{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--text);border:2px solid var(--panel);transform:translate(-50%,-50%)}
-.burn .tagl{position:absolute;font-size:var(--fs-small);white-space:nowrap}
-.burn .tagl b{font-weight:600}
+/* The requests plot and the weekly line chart are styled in views/more.css, with the views that draw them. */
 
 /* table */
 .tw{overflow-x:auto;container-type:inline-size}
@@ -247,7 +260,11 @@ tbody tr:last-child td{border-bottom:0}
 tbody tr.row{cursor:pointer}
 tbody tr.row:hover{background:var(--hover)}
 tbody tr.sel{background:var(--raised)}
-td.name{max-width:clamp(8rem,32cqi,26rem);overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+/* The name takes the width the other columns leave and is cut with an ellipsis, so a table is never wider than its card. */
+td.name{width:100%;max-width:0;min-width:7rem;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+/* Columns step aside by the table's own width, wherever its card sits in the grid. */
+@container (max-width:860px){.tw .hide-m{display:none}}
+@container (max-width:560px){.tw .hide-s{display:none}}
 td.strong{color:var(--text);font-weight:500}
 tr.grp td{background:var(--bg);font-size:var(--fs-small);padding-top:6px;padding-bottom:6px}
 tr.grp td b{color:var(--text);font-weight:600}
@@ -326,7 +343,6 @@ dialog.panel{display:block;inset:0 0 0 auto;margin:0;padding:0;height:auto;max-h
   .kpi .v,.strip>.kpi:first-child .v{font-size:20px}
   .hide-s{display:none}
   /* On a phone the name is the row: the role sits above it and the name takes the width. */
-  td.name{max-width:40cqi}
   .nm .role{display:block;font-size:var(--fs-small);line-height:1.25}
   .seg.dev button small{display:none}
   .srcs{display:none}

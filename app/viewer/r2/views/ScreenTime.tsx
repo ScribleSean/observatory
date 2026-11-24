@@ -5,7 +5,7 @@ import type { Frame, Num, ScreenTimeVM } from '../../../../lib/view-r2.mjs';
 import type { ConfigEcho } from '../../../../lib/r2-shape.mjs';
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildScreenTime, metric } from '../../../../lib/view-r2.mjs';
-import { Block, BarList, Columns, Side, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, hours, money, names, partBars, plural, share, type Cell, type Column } from './parts';
+import { Block, BarList, Columns, Side, StateView, Strip, UNKNOWN, bucketWord, clock, dateIn, dayColumns, hours, labelSteps, money, names, partBars, plural, share, timeAxis, type Cell, type Column } from './parts';
 import './more.css';
 
 export type ScreenTimeData = { vm: ScreenTimeVM; spend: Num | null; config: ConfigEcho[]; now: number };
@@ -44,14 +44,14 @@ export function ScreenTimeBody({ vm, spend, config, now }: ScreenTimeData) {
   const today = dateIn(now, timeZone);
   const hourly = period.unit === 'day';
   const columns: Column[] = hourly
-    ? (vm.hours ?? Array(24).fill(null)).map((value, hour) => ({ key: String(hour), label: hour % 3 ? '' : hour === 0 ? '12a' : hour === 12 ? '12p' : hour < 12 ? `${hour}a` : `${hour - 12}p`,
+    ? (vm.hours ?? Array(24).fill(null)).map((value, hour) => ({ key: String(hour), label: hour === 0 ? '12a' : hour === 12 ? '12p' : hour < 12 ? `${hour}a` : `${hour - 12}p`, n: hour,
       value: vm.hours ? value : null, full: `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}` }))
     : dayColumns(period, new Map(vm.days.map(day => [day.date, day.tracked === false ? 0 : day.seconds.value])), today);
   return (
     <div className="grid more">
       <Strip cells={cells} foot={foot} four />
       <Block span={8} title="Hours at the screen" sub={`per ${bucketWord(period.unit)}, ${names(tracked.map(device => device.name))}`}>
-        <Columns columns={columns} format={hours} hint={hourly ? 'Hover a bar for its minutes' : 'Hover a bar for its hours'} />
+        <Columns columns={columns} format={hours} axis={timeAxis} steps={hourly ? [1, 3, 6, 12] : labelSteps(period.unit)} hint={hourly ? 'Hover a bar for its minutes' : 'Hover a bar for its hours'} />
       </Block>
       <Side><Block span={4} title="By kind of app" sub="share of screen time">
         <div className="bb">{categories.length ? <BarList items={partBars(categories)} format={hours} /> : <div className="fa">Not tracked by kind of app on these computers.</div>}</div>

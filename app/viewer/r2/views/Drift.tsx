@@ -99,7 +99,7 @@ export function DriftBody({ vm, rows, reference, now }: DriftData) {
                 const value = row.values[device.host];
                 return <td key={device.host} className={value === UNKNOWN ? 'fa' : row.state === 'differs' && device.host !== reference && value !== row.values[reference ?? ''] ? 'acc' : undefined}>{value}</td>;
               })}
-              <td>{row.state === 'differs' ? <><span className="flagdot" style={{ marginRight: 6 }} /><span className="acc">Differs</span></> : <span className="fa">{row.state === 'design' ? 'Differs by design' : row.state === 'unknown' ? UNKNOWN : row.state === 'alone' ? 'Not compared' : 'Same'}</span>}</td></tr>
+              <td>{row.state === 'differs' ? <span className="flagged"><span className="flagdot" /><span className="acc">Differs</span></span> : <span className="fa">{row.state === 'design' ? 'Differs by design' : row.state === 'unknown' ? UNKNOWN : row.state === 'alone' ? 'Not compared' : 'Same'}</span>}</td></tr>
           ))}</tbody>
         </table></div>
       </Block>
