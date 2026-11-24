@@ -1,7 +1,7 @@
 // npm run doctor: what stands between this computer and a reading, one plain line each and one fix for each
 // problem. `npm run setup` runs it at the end. It only reads: it never signs in, uses no token and changes no file.
 // The certificate probe opens a TLS connection to Anthropic the way Claude Code does (Node's own certificates plus
-// NODE_EXTRA_CA_CERTS) and closes it before anything is sent.
+// NODE_EXTRA_CA_CERTS) and closes it before any request is sent.
 import {existsSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import tls from 'node:tls';
@@ -37,7 +37,7 @@ export function probeTls(host,{extra=null,port=443,timeoutMs=5000,connect=tls.co
 /**
  * The checks, as {ok, text, fix?}: ok true is fine, false needs the fix, null is a note.
  * @param {{config?: any, configError?: string | null, source?: NodeJS.ProcessEnv, platform?: NodeJS.Platform,
- *   find?: () => Promise<string | null>, status?: (executable: string, environment: object) => Promise<{loggedIn: boolean, subscription: boolean} | null>,
+ *   find?: () => Promise<string | null>, status?: (executable: string, environment: object) => Promise<{loggedIn: boolean, subscription: boolean, console?: boolean} | null>,
  *   probe?: (host: string, extra: string | null) => Promise<'trusted' | 'certificate' | 'unreachable'>, readCa?: (file: string) => Promise<string>}} options
  */
 export async function doctor({config=null,configError=null,source=process.env,platform=process.platform,find=()=>findClaude(),
@@ -46,6 +46,8 @@ export async function doctor({config=null,configError=null,source=process.env,pl
   const lines=[];
   const add=(ok,text,fix=null)=>lines.push({ok,text,...(fix?{fix}:{})});
   const panel=platform==='darwin'?'the menu bar panel':platform==='win32'?'the tray panel':null;
+  // What reads the limits on this computer without the user's shell.
+  const reader=platform==='darwin'?'the menu bar app does':platform==='win32'?'the tray app does':'Observatory\'s collector does';
   if(!config) {
     add(false,'Settings could not be read'+(configError?`: ${configError}`:'.'),'Run npm run setup.');
     return lines;
@@ -61,7 +63,7 @@ export async function doctor({config=null,configError=null,source=process.env,pl
   const recorded=config.claude?.caCertificates ?? null;
   const ca=certificateSource(config,source,platform);
   if(ca.missing && !ca.file)add(false,'The certificate file recorded by setup is missing.','Set NODE_EXTRA_CA_CERTS to your network\'s certificate file and run npm run setup again.');
-  else if(shell && shell!==recorded)add(false,'This shell trusts an extra certificate file that the menu bar and tray apps do not know about.','Run npm run setup again to record it.');
+  else if(shell && shell!==recorded)add(false,`This shell trusts an extra certificate file that ${reader} not know about.`,'Run npm run setup again to record it.');
   else if(recorded)add(true,'Claude Code gets the certificate file recorded by setup.');
 
   const executable=await find().catch(()=>null);
@@ -86,7 +88,8 @@ export async function doctor({config=null,configError=null,source=process.env,pl
   const signed=await status(executable,claudeEnvironment(config,source,platform)).catch(()=>null);
   if(!signed)add(null,'Claude Code\'s sign-in could not be read.');
   else if(signed.subscription)add(true,'Signed in to Claude with a subscription.');
-  else if(signed.loggedIn)add(false,'Signed in with an Anthropic Console account, which has no subscription limits to read.','Sign in with your Claude subscription: claude auth login --claudeai');
+  else if(signed.console)add(false,'Signed in with an Anthropic Console account, which has no subscription limits to read.','Sign in with your Claude subscription: claude auth login --claudeai');
+  else if(signed.loggedIn)add(false,'Claude Code is signed in, but not with a Claude subscription, so there are no subscription limits to read.','Sign in with: claude auth login --claudeai');
   else add(false,'Claude Code is signed out.',panel?`Use Sign in to Claude in ${panel}, or run claude auth login --claudeai.`:'Run claude auth login --claudeai.');
   return lines;
 }

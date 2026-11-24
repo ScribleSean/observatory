@@ -3,17 +3,20 @@
 // the environment every Observatory claude process gets (lib/claude-env.mjs), so a network with its own certificate
 // authority works here too. Claude Code opens the browser itself. Progress goes to public/local/sign-in.json as one
 // plain line the panel shows: no tokens, no account details and none of claude's own output. A sign-in is confirmed
-// with `claude auth status`, then every source is read again so the limits come back.
+// with `claude auth status` and one read of the limits, then every source is read again so the limits come back.
+// The whole run has a time limit, and quitting the panel (SIGTERM or SIGINT) stops claude and everything it started.
 import path from 'node:path';
+import {mkdirSync,renameSync,writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {spawn} from '../lib/cycle-processes.mjs';
+import {spawn,withCycleDeadline} from '../lib/cycle-processes.mjs';
 import {loadConfig} from '../lib/config.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {withRunLock} from '../lib/run-lock.mjs';
 import {writeJsonAtomic} from '../lib/atomic-file.mjs';
 import {certificateSource,claudeEnvironment} from '../lib/claude-env.mjs';
 import strings from '../lib/strings.json' with {type:'json'};
-import {findClaude} from './claude-usage-command.mjs';
+import {findClaude,readClaudeUsage} from './claude-usage-command.mjs';
+import {ensureClaudeLimitsFolder} from './claude-limits.mjs';
 
 const S=strings.claudeSignIn;
 export const SIGN_IN_FILE='sign-in.json';
@@ -22,40 +25,58 @@ export const LOGIN_ARGUMENTS=Object.freeze(['auth','login','--claudeai']);
 export const STATUS_ARGUMENTS=Object.freeze(['auth','status','--json']);
 export const LOGIN_TIMEOUT_MS=5*60000;
 export const STATUS_TIMEOUT_MS=20000;
+export const USAGE_TIMEOUT_MS=30000;
+// Reading every source again: a tick already running may be waited for, then one tick runs to its own deadline.
+export const REFRESH_WAIT_MS=2*60000;
+export const REFRESH_LIMIT_MS=7*60000;
+// The longest a whole run takes: two status reads, two limit reads, the login and the refresh, with a minute to spare.
+export const runLimitMs=({loginTimeoutMs=LOGIN_TIMEOUT_MS,refreshLimitMs=REFRESH_LIMIT_MS}={})=>
+  2*STATUS_TIMEOUT_MS+2*USAGE_TIMEOUT_MS+loginTimeoutMs+refreshLimitMs+60000;
 const OUTPUT_LIMIT=64*1024;
 
 // Node's names for a certificate it cannot trust, and OpenSSL's wording of the same.
 const CERTIFICATE=/UNABLE_TO_GET_ISSUER_CERT(?:_LOCALLY)?|UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|DEPTH_ZERO_SELF_SIGNED_CERT|CERT_HAS_EXPIRED|CERT_UNTRUSTED|CERT_SIGNATURE_FAILURE|ERR_TLS_CERT_ALTNAME_INVALID|unable to get (?:local )?issuer certificate|self[- ]signed certificate|certificate has expired|unable to verify the first certificate/i;
-const PASTE_CODE=/paste (?:the |your )?(?:code|authorization)|code here|enter (?:the |your )?(?:code|authorization)/i;
-const NEEDS_TERMINAL=/raw mode is not supported|not a tty|stdin is not a terminal|requires an interactive|interactive terminal/i;
+// Claude Code saying it cannot finish in a browser from here. Its "Paste code here if prompted" line is not one of
+// these: it prints that in every browser sign-in.
+const NEEDS_TERMINAL=/raw mode is not supported|not a tty|stdin is not a terminal|requires an interactive|interactive terminal|browser can(?:no|'|\u2019)t return the sign-in|input ended before a code was pasted|(?:could ?n(?:o|'|\u2019)t|failed to|unable to|cannot|can(?:'|\u2019)t) open (?:a |the |your )?browser/i;
 
 /**
  * What `claude auth status --json` says, reduced to what Observatory needs. Nothing else of it is kept.
- * @returns {{loggedIn: boolean, subscription: boolean} | null}
+ * @returns {{loggedIn: boolean, subscription: boolean, console: boolean} | null}
  */
 export function parseAuthStatus(text) {
   let status;
   try {status=JSON.parse(text);}catch {return null;}
   if(!status || typeof status!=='object' || typeof status.loggedIn!=='boolean')return null;
-  // A Claude subscription signs in through claude.ai and is served by Anthropic. A Console account, an API key or a
-  // cloud provider has no subscription limits to read.
+  // A Claude subscription signs in through claude.ai and is served by Anthropic. An Anthropic Console sign-in is the
+  // API key that `claude auth login --console` saves. Those, another API key and a cloud provider have no subscription
+  // limits to read.
   const provider=status.apiProvider ?? 'firstParty';
-  return {loggedIn:status.loggedIn,subscription:status.loggedIn && status.authMethod==='claude.ai' && provider==='firstParty'};
+  return {loggedIn:status.loggedIn,subscription:status.loggedIn && status.authMethod==='claude.ai' && provider==='firstParty',
+    console:status.loggedIn && status.authMethod==='api_key' && status.apiKeySource==='/login managed key' && provider==='firstParty'};
 }
 
 /**
  * The one plain line for how a sign-in ended.
  * @param {{ending: 'exited' | 'failed' | 'timed-out' | 'not-found', code?: number | null, output?: string,
- *   status?: {loggedIn: boolean, subscription: boolean} | null, certificateMissing?: boolean}} result
+ *   status?: {loggedIn: boolean, subscription: boolean, console?: boolean} | null, usage?: string | null, certificateMissing?: boolean}} result
+ *   usage: how the one read of the limits ended (readClaudeUsage's status), once auth status reads a subscription.
  * @returns {{state: 'done' | 'failed', reason: string, message: string}}
  */
-export function classify({ending,code=null,output='',status=null,certificateMissing=false}) {
+export function classify({ending,code=null,output='',status=null,usage=null,certificateMissing=false}) {
   if(ending==='not-found')return {state:'failed',reason:'not-found',message:S.notFound};
-  if(status?.subscription)return {state:'done',reason:'signed-in',message:S.done};
-  if(status?.loggedIn)return {state:'failed',reason:'console',message:S.console};
+  if(status?.subscription) {
+    // Signed in is only said once the limits read. A read that answers without plan limits is an account with none,
+    // or a sign-in that did not stick. A read that could not run (offline, slow) leaves it to the next reading.
+    if(usage==='read')return {state:'done',reason:'signed-in',message:S.done};
+    if(usage==='signed-out' || usage==='unrecognized')return {state:'failed',reason:'no-limits',message:S.noLimits};
+    return {state:'done',reason:'limits-unread',message:S.limitsUnread};
+  }
+  if(status?.console)return {state:'failed',reason:'console',message:S.console};
+  if(status?.loggedIn)return {state:'failed',reason:'not-subscription',message:S.notSubscription};
   if(CERTIFICATE.test(output))return {state:'failed',reason:'certificate',message:certificateMissing?S.certificateMissing:S.certificate};
-  if(ending==='timed-out')return PASTE_CODE.test(output)?{state:'failed',reason:'terminal',message:S.terminal}:{state:'failed',reason:'timed-out',message:S.timedOut};
   if(NEEDS_TERMINAL.test(output))return {state:'failed',reason:'terminal',message:S.terminal};
+  if(ending==='timed-out')return {state:'failed',reason:'timed-out',message:S.timedOut};
   if(ending==='exited' && code===0)return {state:'failed',reason:'not-confirmed',message:S.failed};
   return {state:'failed',reason:'failed',message:S.failed};
 }
@@ -69,7 +90,7 @@ function stop(child) {
 
 // Runs claude with a time limit and keeps the first part of what it printed, in memory only. stdin stays open and
 // unused, so a prompt waits instead of reading an empty answer.
-export function runClaude(executable,args,{environment,timeoutMs,cwd,onOutput=()=>{}}) {
+export function runClaude(executable,args,{environment,timeoutMs,cwd}) {
   return new Promise(resolve=>{
     let output='',done=false,child;
     const finish=(ending,code=null)=>{
@@ -85,7 +106,7 @@ export function runClaude(executable,args,{environment,timeoutMs,cwd,onOutput=()
     child.stdin.on('error',()=>{});
     for(const stream of [child.stdout,child.stderr]) {
       stream.setEncoding('utf8');
-      stream.on('data',text=>{if(output.length<OUTPUT_LIMIT) {output+=text.slice(0,OUTPUT_LIMIT-output.length);onOutput(output);}});
+      stream.on('data',text=>{if(output.length<OUTPUT_LIMIT)output+=text.slice(0,OUTPUT_LIMIT-output.length);});
     }
     child.once('close',(code,signal)=>finish('exited',signal?null:code));
   });
@@ -97,7 +118,7 @@ export async function authStatus(executable,{environment,cwd,run=runClaude}) {
 }
 
 // Reads every source again, waiting for a tick already running to finish first.
-async function refreshAll(config,{waitMs=120000}={}) {
+async function refreshAll(config,{waitMs=REFRESH_WAIT_MS}={}) {
   const {tick}=await import('./tick.mjs');
   const until=Date.now()+waitMs;
   for(;;) {
@@ -107,12 +128,23 @@ async function refreshAll(config,{waitMs=120000}={}) {
   }
 }
 
+// The refresh with the tick's own kind of deadline: at the limit, everything it started is stopped and the sign-in
+// goes on to its last line.
+function bounded(action,limitMs) {
+  return new Promise(resolve=>{
+    const guard=setTimeout(()=>resolve('timed-out'),limitMs+2000);
+    const settle=ending=>{clearTimeout(guard);resolve(ending);};
+    withCycleDeadline(action,{deadlineMs:limitMs,onDeadline:()=>settle('timed-out')}).then(()=>settle('read'),()=>settle('failed'));
+  });
+}
+
 /**
  * @param {any} config
- * @param {{source?: NodeJS.ProcessEnv, find?: () => Promise<string | null>, run?: typeof runClaude,
- *   refresh?: (config: any) => Promise<unknown>, now?: () => number, loginTimeoutMs?: number}} [options]
+ * @param {{source?: NodeJS.ProcessEnv, find?: () => Promise<string | null>, run?: typeof runClaude, usage?: typeof readClaudeUsage,
+ *   refresh?: (config: any) => Promise<unknown>, now?: () => number, loginTimeoutMs?: number, refreshLimitMs?: number}} [options]
  */
-export async function signIn(config,{source=process.env,find=()=>findClaude(),run=runClaude,refresh=refreshAll,now=Date.now,loginTimeoutMs=LOGIN_TIMEOUT_MS}={}) {
+export async function signIn(config,{source=process.env,find=()=>findClaude(),run=runClaude,usage=readClaudeUsage,refresh=refreshAll,now=Date.now,
+  loginTimeoutMs=LOGIN_TIMEOUT_MS,refreshLimitMs=REFRESH_LIMIT_MS}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
   const file=path.join(folder,SIGN_IN_FILE);
   // One write at a time and in order, so a late progress line never replaces how the sign-in ended.
@@ -132,37 +164,74 @@ export async function signIn(config,{source=process.env,find=()=>findClaude(),ru
       return ended;
     }
     const cwd=config.dataFolder;
-    // Already signed in with a subscription: nothing to do but read the limits again.
+    // The limits read the collector does, once, to see that this sign-in has plan limits to read.
+    const readLimits=async()=>{
+      try {
+        const limitsFolder=await ensureClaudeLimitsFolder(config.dataFolder);
+        return (await usage({cwd:limitsFolder,find:async()=>executable,environment,timeoutMs:USAGE_TIMEOUT_MS,now:now()}))?.status ?? 'failed';
+      } catch {return 'failed';}
+    };
     let status=await authStatus(executable,{environment,cwd,run});
+    let limits=status?.subscription?await readLimits():null;
     let login={ending:'exited',code:0,output:''};
-    if(!status?.subscription) {
+    // Signed in with a subscription whose limits read (or cannot be reached just now): nothing to do but read every
+    // source again. A subscription whose limits do not read is signed in again.
+    if(!status?.subscription || limits==='signed-out' || limits==='unrecognized') {
       await report('waiting',S.waiting);
-      let asked=false;
-      login=await run(executable,LOGIN_ARGUMENTS,{environment,cwd,timeoutMs:loginTimeoutMs,onOutput:text=>{
-        if(!asked && PASTE_CODE.test(text)) {asked=true;report('waiting',S.waitingCode).catch(()=>{});}
-      }});
+      login=await run(executable,LOGIN_ARGUMENTS,{environment,cwd,timeoutMs:loginTimeoutMs});
       await report('waiting',S.checking);
       status=await authStatus(executable,{environment,cwd,run});
+      limits=status?.subscription?await readLimits():null;
     }
-    const ended=classify({...login,status,certificateMissing});
+    let ended=classify({...login,status,usage:limits,certificateMissing});
     if(ended.state==='done') {
       await report('waiting',S.refreshing);
-      try {await refresh(config);}catch {}
+      const refreshed=await bounded(()=>refresh(config),refreshLimitMs);
+      if(refreshed==='timed-out' && ended.reason==='signed-in')ended={state:'done',reason:'limits-unread',message:S.limitsUnread};
     }
     await report(ended.state,ended.message,ended.reason);
     return ended;
-  },{staleMs:loginTimeoutMs+2*60000});
+    // Longer than the longest run, so a second sign-in never takes the lock from one still going.
+  },{staleMs:runLimitMs({loginTimeoutMs,refreshLimitMs})+60000});
   return outcome.busy?{state:'busy',reason:'busy',message:null}:outcome.value;
 }
 
-if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+// The last line when the run is stopped from outside. Written in one step: the process ends right after.
+function stopLine(config,message,reason) {
   try {
-    const result=await signIn(await loadConfig());
+    const folder=path.join(config.dataFolder,'public','local');
+    mkdirSync(folder,{recursive:true,mode:0o700});
+    const temporary=path.join(folder,`.${SIGN_IN_FILE}-${process.pid}.tmp`);
+    writeFileSync(temporary,JSON.stringify({schema:SIGN_IN_SCHEMA,state:'failed',message,reason,updatedAt:new Date().toISOString()}),{mode:0o600});
+    renameSync(temporary,path.join(folder,SIGN_IN_FILE));
+  } catch {}
+}
+
+/**
+ * The sign-in as the panel runs it: with a limit on the whole run, and stopped with the panel. SIGTERM or SIGINT
+ * stops claude and every process it started, writes the last line and ends this process.
+ * @param {any} config
+ * @param {Parameters<typeof signIn>[1] & {exit?: (code: number) => void}} [options]
+ */
+export function runSignIn(config,{exit=code=>process.exit(code),...options}={}) {
+  return withCycleDeadline(()=>signIn(config,options),{
+    deadlineMs:runLimitMs(options),shutdownSignals:['SIGTERM','SIGINT'],
+    onDeadline:()=>{stopLine(config,S.timedOut,'timed-out');exit(2);},
+    onShutdown:()=>{stopLine(config,S.failed,'stopped');exit(0);},
+  });
+}
+
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  let code=1;
+  try {
+    const result=await runSignIn(await loadConfig());
     // The reason only, never claude's output.
     console.log(result.reason);
-    process.exitCode=result.state==='done' || result.state==='busy'?0:1;
+    code=result.state==='done' || result.state==='busy'?0:1;
   } catch(error) {
     console.error(`Sign-in stopped: ${error.message}`);
-    process.exitCode=1;
   }
+  // A refresh stopped at its limit may leave work behind, so the process ends here and not when that work does.
+  process.exitCode=code;
+  process.stdout.write('',()=>process.exit(code));
 }

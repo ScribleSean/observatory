@@ -15,7 +15,7 @@ import {fileURLToPath} from 'node:url';
 import {REPO,CONFIG_FILE,loadConfig,parseConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
 import {importHistory} from './import-history.mjs';
-import {certificateFile,shellCertificateFile} from '../lib/claude-env.mjs';
+import {CERT_STORES,certificateFile,settingsCertificates,shellCertificateFile} from '../lib/claude-env.mjs';
 import {runDoctor} from './doctor.mjs';
 
 const execute=promisify(execFile);
@@ -147,17 +147,31 @@ export function crontabLine(node,repo=REPO,configFile=CONFIG_FILE) {
   return `*/5 * * * * cd ${shellWord(repo)} && OBSERVATORY_CONFIG=${shellWord(configFile)} ${shellWord(node)} scripts/tick.mjs >/dev/null 2>&1`;
 }
 
-// A network with its own certificate authority: the certificate file this shell points claude or OpenSSL at, recorded
-// in the user's settings file (claude.caCertificates) so the apps' claude processes, started without this shell, trust
-// it too (lib/claude-env.mjs). Only a file that exists and holds a certificate is recorded. The path is never printed.
-export async function recordCertificates(configFile,{source=process.env,platform=process.platform,dryRun=false,step=()=>{},log=()=>{}}={}) {
+// A network with its own certificate authority: the certificate file this shell points claude or OpenSSL at, and the
+// certificate store it picks for claude (CLAUDE_CODE_CERT_STORE), recorded in the user's settings file
+// (claude.caCertificates, claude.certStore) so the apps' claude processes, started without this shell, trust the same
+// (lib/claude-env.mjs). What the shell lacks is taken from the "env" block of Claude Code's own settings file, which is
+// only read. Only a file that exists and holds a certificate is recorded. No path and nothing of that file is printed.
+export async function recordCertificates(configFile,{source=process.env,platform=process.platform,dryRun=false,step=()=>{},log=()=>{},
+  claudeSettings=claudeSettingsPath(source)}={}) {
   const raw=JSON.parse(await readFile(configFile,'utf8'));
   const recorded=raw?.claude?.caCertificates;
-  const found=shellCertificateFile(source,platform);
+  let own={file:null,store:null};
+  try {own=settingsCertificates(JSON.parse(await readFile(claudeSettings,'utf8')),platform);}catch {}
+  const found=shellCertificateFile(source,platform) ?? own.file;
+  const store=CERT_STORES.includes(source.CLAUDE_CODE_CERT_STORE)?source.CLAUDE_CODE_CERT_STORE:own.store;
+  const next={...raw.claude};
   if(found && found!==recorded) {
-    step(`${dryRun?'would record':'recorded'} this shell's certificate file for Claude Code in the settings file (claude.caCertificates)`);
+    step(`${dryRun?'would record':'recorded'} your certificate file for Claude Code in the settings file (claude.caCertificates)`);
+    next.caCertificates=found;
+  }
+  if(store && store!==raw?.claude?.certStore) {
+    step(`${dryRun?'would record':'recorded'} your certificate store for Claude Code in the settings file (claude.certStore)`);
+    next.certStore=store;
+  }
+  if(next.caCertificates!==recorded || next.certStore!==raw?.claude?.certStore) {
     if(dryRun)return 'would-record';
-    raw.claude={...raw.claude,caCertificates:found};
+    raw.claude=next;
     await writeFile(configFile,JSON.stringify(raw,null,2)+'\n');
     return 'recorded';
   }
@@ -165,7 +179,7 @@ export async function recordCertificates(configFile,{source=process.env,platform
     log('  Note: the certificate file under claude.caCertificates is missing. Set NODE_EXTRA_CA_CERTS to your network\'s certificate file and run setup again.');
     return 'missing';
   }
-  return found?'kept':'none';
+  return found || store?'kept':'none';
 }
 
 export function glanceSettings(config,node=process.execPath,repo=REPO,configFile=CONFIG_FILE) {

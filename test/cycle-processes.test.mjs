@@ -170,3 +170,33 @@ for (const exitsDuringGrace of [false,true]) {
     }
   });
 }
+
+test('a cycle inside another is stopped at either deadline',{skip:process.platform==='win32' && 'Requires POSIX signals'},async()=>{
+  const {spawn:cycleSpawn}=await import('../lib/cycle-processes.mjs');
+  const hang=()=>cycleSpawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+  const closed=child=>child.exitCode!==null || child.signalCode!==null?Promise.resolve():once(child,'close');
+  // The inner deadline stops what the inner step started and leaves the outer cycle running.
+  let outerHit=false,innerHit=false,started,after;
+  await withCycleDeadline(async()=>{
+    await new Promise(resolve=>{
+      void withCycleDeadline(()=>{started=hang();return new Promise(()=>{});},{deadlineMs:50,graceMs:20,onDeadline:()=>{innerHit=true;resolve();}});
+    });
+    await closed(started);
+    // Still inside the outer cycle, which has not expired: a new process starts.
+    after=hang();
+    after.kill('SIGKILL');
+    await closed(after);
+  },{deadlineMs:60000,onDeadline:()=>{outerHit=true;}});
+  assert.deepEqual([innerHit,outerHit,alive(started.pid)],[true,false,false]);
+  // The outer deadline stops a process started inside an inner step, and nothing more starts in either.
+  let inner,refused=null;
+  await new Promise(resolve=>{
+    void withCycleDeadline(()=>withCycleDeadline(()=>{inner=hang();return new Promise(()=>{});},{deadlineMs:60000,onDeadline:()=>{}}),
+      {deadlineMs:50,graceMs:20,onDeadline:resolve});
+  });
+  await closed(inner);
+  assert.equal(alive(inner.pid),false);
+  await withCycleDeadline(()=>withCycleDeadline(async()=>{},{deadlineMs:60000,onDeadline:()=>{}}),{deadlineMs:60000,onDeadline:()=>{}});
+  try {hang().kill('SIGKILL');}catch(error) {refused=error;}
+  assert.equal(refused,null,'outside any cycle nothing is refused');
+});

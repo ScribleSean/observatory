@@ -157,10 +157,14 @@ test('a computer that is up and signed out beats an old reading from one that is
   const icon=glanceView(combined,{now,timeZone:'UTC'}).icon;
   assert.deepEqual([icon.state,icon.fraction,icon.text],['stale',null,'Sign in']);
   // What to do comes first: the Windows tray cuts its tooltip at 63 characters, and a name can run to 64.
-  assert.match(icon.tip,/^Sign in from the panel\. Claude is signed out on .+\.$/);
+  // On the signed-out computer itself that is its panel. Seen from another computer, which may have no panel to point
+  // at (Linux), it is the command to run there.
+  assert.equal(glanceView(combined,{now,timeZone:'UTC',settings:{host:'Mac'}}).icon.tip,'Sign in from the panel. Claude is signed out on this computer.');
+  assert.match(icon.tip,/^Run claude auth login --claudeai on Test Mac\. Claude is signed out there\.$/);
+  assert.equal(glanceView(combined,{now,timeZone:'UTC',settings:{host:'Windows'}}).icon.tip,icon.tip);
   const longName=signedOutMac();longName.device={...longName.device,name:'M'.repeat(64)};
   const longTip=glanceView(combine([{host:'Mac',snapshot:longName}],{now}),{now,timeZone:'UTC'}).icon.tip;
-  assert.ok(longTip.slice(0,63).includes('Sign in from the panel'),longTip);
+  assert.ok(longTip.slice(0,63).includes('Run claude auth login --claudeai'),longTip);
   // The panel offers the Sign in to Claude button only on the computer that is signed out.
   const here=glanceView(combined,{now,timeZone:'UTC',settings:{host:'Mac'}}).signIn;
   assert.deepEqual({here:here.here,button:here.button,command:here.command},{here:true,button:'Sign in to Claude',command:'claude auth login --claudeai'});

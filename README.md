@@ -72,9 +72,9 @@ History goes back to the first day each source has data and is kept until you de
 
 Observatory reads Claude limits through the Claude Code you already use, so Claude Code has to be signed in with a Claude subscription on the computer that reads them.
 
-- **Sign in to Claude.** When Claude Code is signed out, the menu bar or tray panel shows **Sign in to Claude**. It runs `claude auth login --claudeai`, and Claude Code opens your browser. The panel shows how it is going, then reads your limits again. The dashboard's Limits view says which computer is signed out.
+- **Sign in to Claude.** When Claude Code is signed out, the menu bar or tray panel shows **Sign in to Claude**. It runs `claude auth login --claudeai`, and Claude Code opens your browser. The panel shows how it is going, checks that the account's limits read, then reads every source again. Quitting the app stops a sign-in that is still waiting. The dashboard's Limits view says which computer is signed out.
 - **From a terminal.** The same works by hand: `claude auth login --claudeai`. On Linux, which has no panel, this is the way.
-- **A subscription, not a Console account.** Observatory shows a Claude subscription's limits. An Anthropic Console (API) sign-in has none, so sign in with `--claudeai`.
+- **A subscription, not a Console account.** Observatory shows a Claude subscription's limits. An Anthropic Console sign-in, an API key or a cloud provider has none, so sign in with `--claudeai`.
 
 **Check a computer.** `npm run doctor` lists what stands between this computer and a reading, one line each with its fix: Claude Code missing, signed out, a Console account instead of a subscription, or a certificate it cannot trust. It only reads: it never signs in or changes a file. Setup runs it at the end.
 
@@ -82,7 +82,7 @@ Observatory reads Claude limits through the Claude Code you already use, so Clau
 npm run doctor
 ```
 
-**A network with its own certificate authority.** Some workplace and school networks inspect encrypted traffic with their own certificate, and Claude Code then cannot sign in or renew its sign-in ("unable to get local issuer certificate"). Claude Code trusts an extra certificate file only through `NODE_EXTRA_CA_CERTS`. Set it in your shell profile to that network's PEM file, then run `npm run setup` again. The menu bar and tray apps start at login without your shell, so setup records the file under `claude.caCertificates` in your settings file and passes it to every Claude Code process Observatory starts. Observatory never changes your shell profile or the system's trusted certificates.
+**A network with its own certificate authority.** Some workplace and school networks inspect encrypted traffic with their own certificate, and Claude Code then cannot sign in or renew its sign-in ("unable to get local issuer certificate"). Claude Code trusts an extra certificate file only through `NODE_EXTRA_CA_CERTS`. Set it in your shell profile to that network's PEM file, then run `npm run setup` again. The menu bar and tray apps start at login without your shell, so setup records the file under `claude.caCertificates` in your settings file and passes it to every Claude Code process Observatory starts. If you set `CLAUDE_CODE_CERT_STORE` (`system` or `bundled`) to choose the certificate store Claude Code starts from, setup records it the same way under `claude.certStore`. When your shell sets neither, setup takes them from the `env` block of Claude Code's own settings file, which it only reads. Observatory never picks a value for you and never changes your shell profile or the system's trusted certificates.
 
 ## Settings
 
@@ -101,7 +101,7 @@ npm run doctor
 }
 ```
 
-A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, `codexPath`, `claude.caCertificates` (written by setup, see [Signing in](#signing-in)), and `"glance": { "accent": true }` to draw the Mac menu bar icon in the accent color instead of the system's monochrome.
+A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, `codexPath`, `claude.caCertificates` and `claude.certStore` (written by setup, see [Signing in](#signing-in)), and `"glance": { "accent": true }` to draw the Mac menu bar icon in the accent color instead of the system's monochrome.
 
 **Engines.** `engines` sets each tile to `"auto"` (the default), `"off"`, or `"on"` (keep a free plan's own allowance on screen): `"engines": { "codex": "off" }`. With several computers, set it in each settings file: each one draws its own tiles.
 

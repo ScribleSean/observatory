@@ -722,7 +722,11 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
   func stopProcesses() {
     server?.terminate()
-    signInProcess?.terminate()
+    // The sign-in script stops claude and everything claude started when it gets SIGTERM, so wait for it to finish that.
+    if let signing = signInProcess, signing.isRunning {
+      signing.terminate()
+      signing.waitUntilExit()
+    }
     if let running = tick, running.isRunning {
       running.terminate()
       running.waitUntilExit()
