@@ -15,7 +15,7 @@ import {fileURLToPath} from 'node:url';
 import {REPO,CONFIG_FILE,loadConfig,parseConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
 import {importHistory} from './import-history.mjs';
-import {CERT_STORES,certificateFile,settingsCertificates,shellCertificateFile} from '../lib/claude-env.mjs';
+import {certStoreValue,certificateFile,settingsCertificates} from '../lib/claude-env.mjs';
 import {runDoctor} from './doctor.mjs';
 
 const execute=promisify(execFile);
@@ -158,8 +158,10 @@ export async function recordCertificates(configFile,{source=process.env,platform
   const recorded=raw?.claude?.caCertificates;
   let own={file:null,store:null};
   try {own=settingsCertificates(JSON.parse(await readFile(claudeSettings,'utf8')),platform);}catch {}
-  const found=shellCertificateFile(source,platform) ?? own.file;
-  const store=CERT_STORES.includes(source.CLAUDE_CODE_CERT_STORE)?source.CLAUDE_CODE_CERT_STORE:own.store;
+  // The variable claude reads wins, from the shell and then from Claude Code's settings. OpenSSL's variable is last.
+  const shell=name=>certificateFile(source[name],platform)?source[name]:null;
+  const found=shell('NODE_EXTRA_CA_CERTS') ?? own.file ?? shell('SSL_CERT_FILE');
+  const store=certStoreValue(source.CLAUDE_CODE_CERT_STORE) ?? own.store;
   const next={...raw.claude};
   if(found && found!==recorded) {
     step(`${dryRun?'would record':'recorded'} your certificate file for Claude Code in the settings file (claude.caCertificates)`);

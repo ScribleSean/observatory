@@ -6,7 +6,8 @@
 // with `claude auth status` and one read of the limits, then every source is read again so the limits come back.
 // The whole run has a time limit, and quitting the panel (SIGTERM or SIGINT) stops claude and everything it started.
 import path from 'node:path';
-import {mkdirSync,renameSync,writeFileSync} from 'node:fs';
+import {renameSync,unlinkSync,writeFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {spawn,withCycleDeadline} from '../lib/cycle-processes.mjs';
 import {loadConfig} from '../lib/config.mjs';
@@ -141,10 +142,11 @@ function bounded(action,limitMs) {
 /**
  * @param {any} config
  * @param {{source?: NodeJS.ProcessEnv, find?: () => Promise<string | null>, run?: typeof runClaude, usage?: typeof readClaudeUsage,
- *   refresh?: (config: any) => Promise<unknown>, now?: () => number, loginTimeoutMs?: number, refreshLimitMs?: number}} [options]
+ *   refresh?: (config: any) => Promise<unknown>, now?: () => number, loginTimeoutMs?: number, refreshLimitMs?: number,
+ *   progress?: {signedIn?: boolean}}} [options]
  */
 export async function signIn(config,{source=process.env,find=()=>findClaude(),run=runClaude,usage=readClaudeUsage,refresh=refreshAll,now=Date.now,
-  loginTimeoutMs=LOGIN_TIMEOUT_MS,refreshLimitMs=REFRESH_LIMIT_MS}={}) {
+  loginTimeoutMs=LOGIN_TIMEOUT_MS,refreshLimitMs=REFRESH_LIMIT_MS,progress={}}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
   const file=path.join(folder,SIGN_IN_FILE);
   // One write at a time and in order, so a late progress line never replaces how the sign-in ended.
@@ -185,6 +187,8 @@ export async function signIn(config,{source=process.env,find=()=>findClaude(),ru
     }
     let ended=classify({...login,status,usage:limits,certificateMissing});
     if(ended.state==='done') {
+      // From here a stop from outside ends a sign-in that worked.
+      progress.signedIn=true;
       await report('waiting',S.refreshing);
       const refreshed=await bounded(()=>refresh(config),refreshLimitMs);
       if(refreshed==='timed-out' && ended.reason==='signed-in')ended={state:'done',reason:'limits-unread',message:S.limitsUnread};
@@ -196,28 +200,31 @@ export async function signIn(config,{source=process.env,find=()=>findClaude(),ru
   return outcome.busy?{state:'busy',reason:'busy',message:null}:outcome.value;
 }
 
-// The last line when the run is stopped from outside. Written in one step: the process ends right after.
-function stopLine(config,message,reason) {
+// The last line when the run is stopped from outside. Written in one step: the process ends right after. The folder
+// is the private one the sign-in made when it started, and the file is new, as every other write here is.
+function stopLine(config,state,message,reason) {
+  const folder=path.join(config.dataFolder,'public','local');
+  const temporary=path.join(folder,`.${SIGN_IN_FILE}-${randomUUID()}.tmp`);
   try {
-    const folder=path.join(config.dataFolder,'public','local');
-    mkdirSync(folder,{recursive:true,mode:0o700});
-    const temporary=path.join(folder,`.${SIGN_IN_FILE}-${process.pid}.tmp`);
-    writeFileSync(temporary,JSON.stringify({schema:SIGN_IN_SCHEMA,state:'failed',message,reason,updatedAt:new Date().toISOString()}),{mode:0o600});
+    writeFileSync(temporary,JSON.stringify({schema:SIGN_IN_SCHEMA,state,message,reason,updatedAt:new Date().toISOString()}),{flag:'wx',mode:0o600});
     renameSync(temporary,path.join(folder,SIGN_IN_FILE));
-  } catch {}
+  } catch {try {unlinkSync(temporary);}catch {}}
 }
 
 /**
  * The sign-in as the panel runs it: with a limit on the whole run, and stopped with the panel. SIGTERM or SIGINT
- * stops claude and every process it started, writes the last line and ends this process.
+ * stops claude and every process it started, writes the last line and ends this process. Stopped during the refresh
+ * after a sign-in that worked, the last line says signed in, not that the sign-in did not finish.
  * @param {any} config
  * @param {Parameters<typeof signIn>[1] & {exit?: (code: number) => void}} [options]
  */
 export function runSignIn(config,{exit=code=>process.exit(code),...options}={}) {
-  return withCycleDeadline(()=>signIn(config,options),{
+  const progress={signedIn:false};
+  const stopped=(message,reason)=>progress.signedIn?stopLine(config,'done',S.limitsUnread,'limits-unread'):stopLine(config,'failed',message,reason);
+  return withCycleDeadline(()=>signIn(config,{...options,progress}),{
     deadlineMs:runLimitMs(options),shutdownSignals:['SIGTERM','SIGINT'],
-    onDeadline:()=>{stopLine(config,S.timedOut,'timed-out');exit(2);},
-    onShutdown:()=>{stopLine(config,S.failed,'stopped');exit(0);},
+    onDeadline:()=>{stopped(S.timedOut,'timed-out');exit(2);},
+    onShutdown:()=>{stopped(S.failed,'stopped');exit(0);},
   });
 }
 

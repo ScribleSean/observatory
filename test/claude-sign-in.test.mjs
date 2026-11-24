@@ -2,17 +2,17 @@
 // The real `claude auth login` is never run here: a fake claude executable stands in for it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {chmod,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {chmod,mkdir,readdir,readFile,writeFile} from 'node:fs/promises';
 import {readFileSync,realpathSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
-import {CA_VARIABLES,certificateSource,certificateStore,claudeEnvironment,claudeVariables,settingsCertificates,shellCertificateFile} from '../lib/claude-env.mjs';
+import {CA_VARIABLES,certStoreValue,certificateSource,certificateStore,claudeEnvironment,claudeVariables,settingsCertificates,shellCertificateFile} from '../lib/claude-env.mjs';
 import {parseConfig,configEcho} from '../lib/config.mjs';
 import {usageEnvironment,USAGE_ARGUMENTS} from '../scripts/claude-usage-command.mjs';
 import {TICK_DEADLINE_MS} from '../scripts/tick.mjs';
 import {classify,parseAuthStatus,signIn,runLimitMs,SIGN_IN_FILE,LOGIN_ARGUMENTS,LOGIN_TIMEOUT_MS,REFRESH_LIMIT_MS,REFRESH_WAIT_MS} from '../scripts/claude-sign-in.mjs';
-import {doctor,describe,probeTls} from '../scripts/doctor.mjs';
+import {doctor,describe,probeTls,storeRoots,systemRoots} from '../scripts/doctor.mjs';
 import {recordCertificates} from '../scripts/setup.mjs';
 import {combine} from '../lib/combine.mjs';
 import {buildLimits} from '../lib/view-r2.mjs';
@@ -69,6 +69,14 @@ test('the certificate store is passed only when the user set it: this process fi
   assert.equal(parseConfig({claude:{certStore:'system'}},{platform:'linux',environment:{}}).claude.certStore,'system');
   assert.equal(parseConfig({},{platform:'linux',environment:{}}).claude.certStore,null);
   assert.throws(()=>parseConfig({claude:{certStore:'other'}},{platform:'linux',environment:{}}),/claude\.certStore/);
+  // Read as Claude Code reads it: a list separated by commas, any letter case, spaces around names, known names only.
+  for(const [given,value] of [['system','system'],['BUNDLED','bundled'],[' System , bundled ','system,bundled'],['bundled,system','bundled,system'],
+    ['system,system','system'],['system,synthetic','system'],['synthetic',null],['',null],[',',null],[7,null],[null,null],[undefined,null]])
+    assert.equal(certStoreValue(given),value,JSON.stringify(given));
+  assert.equal(claudeEnvironment(null,{...source,CLAUDE_CODE_CERT_STORE:' Bundled, SYSTEM '},process.platform).CLAUDE_CODE_CERT_STORE,'bundled,system');
+  assert.equal(claudeEnvironment({claude:{certStore:'System'}},source,process.platform).CLAUDE_CODE_CERT_STORE,'system');
+  assert.equal(parseConfig({claude:{certStore:' System , Bundled '}},{platform:'linux',environment:{}}).claude.certStore,'system,bundled');
+  assert.throws(()=>parseConfig({claude:{certStore:7}},{platform:'linux',environment:{}}),/claude\.certStore/);
 }));
 
 test('setup takes what the shell lacks from the env block of Claude Code\'s settings file, reads it only, and prints nothing of it', () => withFolder(async folder => {
@@ -94,6 +102,14 @@ test('setup takes what the shell lacks from the env block of Claude Code\'s sett
   // The shell wins for each value it sets.
   assert.equal(await record({NODE_EXTRA_CA_CERTS:shellFile,CLAUDE_CODE_CERT_STORE:'bundled'}),'recorded');
   assert.deepEqual(JSON.parse(await readFile(configFile,'utf8')),{...original,claude:{caCertificates:shellFile,certStore:'bundled'}});
+  // The variable claude reads comes first, from the shell and then from Claude Code's settings. The shell's OpenSSL
+  // variable is used only when neither has one. The store is recorded as Claude Code reads it.
+  await writeFile(configFile,JSON.stringify(original));
+  assert.equal(await record({SSL_CERT_FILE:shellFile,CLAUDE_CODE_CERT_STORE:' Bundled , SYSTEM '}),'recorded');
+  assert.deepEqual(JSON.parse(await readFile(configFile,'utf8')),{...original,claude:{caCertificates:ownFile,certStore:'bundled,system'}});
+  await writeFile(configFile,JSON.stringify(original));
+  assert.equal(await record({SSL_CERT_FILE:shellFile},{claudeSettings:path.join(realpathSync(folder),'none.json')}),'recorded');
+  assert.deepEqual(JSON.parse(await readFile(configFile,'utf8')),{...original,claude:{caCertificates:shellFile}});
   // The shell's store alone, with no certificate file anywhere.
   await writeFile(configFile,JSON.stringify(original));
   assert.equal(await record({CLAUDE_CODE_CERT_STORE:'system'},{claudeSettings:path.join(realpathSync(folder),'none.json')}),'recorded');
@@ -338,10 +354,34 @@ test('stopping the sign-in script stops claude and what claude started', {skip:!
     // The script's own entry (runSignIn) with the fake claude: the real one is never looked for.
     const driver=path.join(realpathSync(sub),'driver.mjs');
     await writeFile(driver,`import {runSignIn} from ${JSON.stringify(new URL('../scripts/claude-sign-in.mjs',import.meta.url).href)};
-const [data,claude]=process.argv.slice(2);
-const result=await runSignIn({dataFolder:data,claude:{caCertificates:null,certStore:null}},{source:{PATH:'/usr/bin:/bin'},find:async()=>claude,refresh:async()=>{}});
+const [data,claude,refresh]=process.argv.slice(2);
+const result=await runSignIn({dataFolder:data,claude:{caCertificates:null,certStore:null}},{source:{PATH:'/usr/bin:/bin'},find:async()=>claude,
+  refresh:async()=>{if(refresh==='hang') {setInterval(()=>{},1000);await new Promise(()=>{});}}});
 console.log(result.reason);
 `);
+    if(signal==='SIGTERM') {
+      // Stopped during the refresh after a sign-in that worked: the last line says signed in.
+      const signed=path.join(sub,'signed');
+      await mkdir(signed);
+      const ready=await fakeClaude(signed,{login:{code:9},status:subscription});
+      const folder=path.join(realpathSync(signed),'data');
+      await mkdir(folder,{recursive:true,mode:0o700});
+      const file=path.join(folder,'public','local',SIGN_IN_FILE);
+      const running=spawn(process.execPath,[driver,folder,ready.file,'hang'],{stdio:'ignore'});
+      const ended=new Promise(resolve=>running.once('close',(code,by)=>resolve({code,by})));
+      try {
+        let line=null;
+        for(const until=Date.now()+15000;Date.now()<until && line?.message!==S.refreshing;await new Promise(resolve=>setTimeout(resolve,25))) {
+          try {line=JSON.parse(await readFile(file,'utf8'));}catch {}
+        }
+        assert.equal(line?.message,S.refreshing);
+        running.kill(signal);
+        assert.deepEqual(await ended,{code:0,by:null});
+        const last=JSON.parse(await readFile(file,'utf8'));
+        assert.deepEqual([last.state,last.message],['done',S.limitsUnread]);
+        assert.deepEqual((await readdir(path.dirname(file))).filter(name=>name.endsWith('.tmp')),[],'no temporary file is left');
+      } finally {running.kill('SIGKILL');}
+    }
     const child=spawn(process.execPath,[driver,data,fake.file],{stdio:'ignore'});
     const exited=new Promise(resolve=>child.once('close',(code,by)=>resolve({code,by})));
     try {
@@ -456,6 +496,10 @@ test('the check names each problem with one fix, and never signs in', async () =
       assert.match(worded,reader,platform);
       if(platform==='linux')assert.doesNotMatch(worded,/menu bar|tray/);
     }
+    // Recorded from Claude Code's settings while the shell has only OpenSSL's variable: nothing to record again.
+    const other=await bundle(folder,'other.pem');
+    assert.doesNotMatch(text(await run({...real,config:{...config,claude:{caCertificates:file}},source:{SSL_CERT_FILE:other}})),/This shell trusts/);
+    assert.match(text(await run({...real,config:{...config,claude:{caCertificates:file}},source:{NODE_EXTRA_CA_CERTS:other}})),/fix\s+This shell trusts/);
     // The check says nothing about the certificate store: that choice is the user's.
     assert.doesNotMatch(text(await run({...real,config:{...config,claude:{caCertificates:file,certStore:null}}})),/CERT_STORE|certificate store/i);
     assert.ok(!text(lines).includes(file),'the path is not printed');
@@ -466,6 +510,41 @@ test('the check names each problem with one fix, and never signs in', async () =
   });
 });
 
+test('the check probes with the certificates Claude Code starts from, and never fails over ones it cannot read', async () => {
+  const bundled=['BUNDLED'];
+  assert.deepEqual(storeRoots(null,{system:()=>['SYSTEM'],bundled}),{roots:['BUNDLED'],complete:true});
+  assert.deepEqual(storeRoots('bundled',{system:()=>null,bundled}),{roots:['BUNDLED'],complete:true});
+  assert.deepEqual(storeRoots('system',{system:()=>['SYSTEM'],bundled}),{roots:['SYSTEM'],complete:true});
+  assert.deepEqual(storeRoots('bundled,system',{system:()=>['SYSTEM'],bundled}),{roots:['BUNDLED','SYSTEM'],complete:true});
+  // A Node that cannot read the system's certificates: probe with what there is, and say the list is not whole.
+  assert.deepEqual(storeRoots('system',{system:()=>null,bundled}),{roots:['BUNDLED'],complete:false});
+  assert.equal(systemRoots(null),null,'an older Node has no such read');
+  assert.equal(systemRoots(()=>{throw Error('synthetic');}),null);
+  assert.deepEqual(systemRoots(kind=>[kind]),['system']);
+  const config={...testConfig('/synthetic/data'),claude:{caCertificates:null,certStore:'system'}};
+  const run=overrides=>doctor({config,source:{},platform:'darwin',find:async()=>'/synthetic/claude',status:async()=>({loggedIn:true,subscription:true}),
+    readCa:async()=>PEM,...overrides});
+  let given=null;
+  const failing=async(host,extra,roots)=>{given=roots;return 'certificate';};
+  // The system's certificates are in the probe when this Node reads them, and a failure then is a real one.
+  const real=await run({system:()=>['SYSTEM'],probe:failing});
+  assert.deepEqual(given,['SYSTEM']);
+  assert.match(describe(real),/fix\s+Claude Code cannot trust this network's certificate/);
+  // When it cannot read them, a certificate it could not check is a note: nothing to fix, nothing failing.
+  const unread=await run({system:()=>null,probe:failing});
+  assert.match(describe(unread),/note\s+The certificate check was skipped: Claude Code uses the system's certificates here/);
+  assert.ok(unread.every(line=>line.ok!==false),describe(unread));
+  // This process's own store wins over the recorded one, as it does for claude.
+  await run({source:{CLAUDE_CODE_CERT_STORE:'bundled'},system:()=>['SYSTEM'],probe:failing});
+  assert.equal(given.includes('SYSTEM'),false);
+  assert.ok(given.length>10,'Node\'s own certificates');
+  // What the check finds is advice: setup prints it and goes on, whatever it found.
+  const setup=readFileSync(new URL('../scripts/setup.mjs',import.meta.url),'utf8');
+  const calls=setup.match(/^.*runDoctor\(.*$/gm);
+  assert.equal(calls.length,2);
+  for(const call of calls)assert.match(call,/^\s*try \{await runDoctor\(\{log,configFile\}\);\}catch \{\}$/);
+});
+
 test('the TLS probe tells a certificate failure from no network', async () => {
   const fake=outcome=>(options,ready)=>{
     const socket=new EventEmitter();socket.destroy=()=>{};
@@ -473,6 +552,9 @@ test('the TLS probe tells a certificate failure from no network', async () => {
     return socket;
   };
   assert.equal(await probeTls('example.invalid',{connect:fake('ok')}),'trusted');
+  let options=null;
+  await probeTls('example.invalid',{roots:['SYSTEM'],extra:PEM,connect:(given,ready)=>{options=given;return fake('ok')(given,ready);}});
+  assert.deepEqual(options.ca,['SYSTEM',PEM]);
   assert.equal(await probeTls('example.invalid',{connect:fake('UNABLE_TO_GET_ISSUER_CERT_LOCALLY')}),'certificate');
   assert.equal(await probeTls('example.invalid',{connect:fake('SELF_SIGNED_CERT_IN_CHAIN')}),'certificate');
   assert.equal(await probeTls('example.invalid',{connect:fake('ENOTFOUND')}),'unreachable');
