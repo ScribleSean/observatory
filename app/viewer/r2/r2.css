@@ -276,6 +276,7 @@ tr.more td.name,tr.rest td.name{color:var(--muted)}
 .nm{display:inline-block;max-width:calc(100% - 1.2em);overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;text-align:left;white-space:nowrap}
 button.nm{color:inherit}
 .gb{display:inline-flex;align-items:baseline;gap:0;color:inherit;font-size:inherit;white-space:nowrap}
+.gb .fa{margin-left:.4em}
 .car{display:inline-block;width:1.1em;color:var(--faint);font-size:var(--fs-small)}
 .mix{display:inline-flex;width:4.3em;height:4px;border-radius:2px;overflow:hidden;background:var(--track);vertical-align:middle}
 .mix i{display:block;height:100%}

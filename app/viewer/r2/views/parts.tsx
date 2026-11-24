@@ -237,6 +237,7 @@ export const countAxis: Axis = { format: short, whole: true };
 export const tokenAxis: Axis = { format: short, whole: true };
 /** Seconds on a scale of whole hours, or of minutes when the largest column is under two hours. */
 export const timeAxis: Axis = {
+  whole: true,
   unit: max => max >= 7200 ? 3600 : 60,
   format: value => value === 0 ? '0' : value % 3600 === 0 ? `${value / 3600}h` : value >= 3600 ? `${Number((value / 3600).toFixed(1))}h` : `${Math.round(value / 60)}m`,
 };
@@ -298,7 +299,8 @@ export function BarPlot({ columns, max, className = 'spend', unknownHeight = 14,
   const widest = Math.max(...columns.map(column => labelOf(column).length), 0);
   const allFit = size ? widest * LABEL_CHAR_PX + LABEL_GAP_PX <= slot : columns.length <= 12;
   const step = axis?.unit?.(top) ?? 1;
-  const ticks = axis && top > 0 ? axisTicks(top / step, axis).map(tick => tick * step) : [];
+  // A band with nothing in it still shows its baseline value.
+  const ticks = !axis ? [] : top > 0 ? axisTicks(top / step, axis).map(tick => tick * step) : [0];
   return (
     <>
       {axis && <div className={`ticks ${className}`} aria-hidden="true">
