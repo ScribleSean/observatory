@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
 import {git,makeRepo,commitFile} from './ledger-fixtures.mjs';
-import {joinCommits,gitRunner,JOIN_WINDOW_MS,safeRef} from '../scripts/ledger-commits.mjs';
+import {joinCommits,gitRunner,JOIN_WINDOW_MS,MAX_SQUASH_ASKS,safeRef} from '../scripts/ledger-commits.mjs';
 import {repositoryResolver} from '../scripts/sources/activity.mjs';
 
 const T=Date.parse('2026-11-10T15:00:00Z');
@@ -210,4 +210,115 @@ test('a merge commit names the branch tip it brought in, and the merged branch c
     assert.equal(merge.mergedTip,tip);
     assert.equal(shipped.get('s').branches[0].tip,tip);
   });
+});
+
+// A branch with two commits, landed on main as one squash commit after main moved on.
+async function squashRepo(repo) {
+  await makeRepo(repo,T-3*3600000);
+  git(repo,['checkout','-q','-b','feature/graft']);
+  await commitFile(repo,'graft.txt',T+5*MIN,'Graft');
+  const tip=await commitFile(repo,'scion.txt',T+6*MIN,'Scion');
+  git(repo,['checkout','-q','-b','feature/other','main']);
+  await commitFile(repo,'other.txt',T+6*MIN,'Other');
+  git(repo,['checkout','-q','main']);
+  await commitFile(repo,'moved.txt',T+7*MIN,'Main moved on');
+  git(repo,['merge','-q','--squash','feature/graft']);
+  git(repo,['commit','-qm','Graft and scion'],T+8*MIN);
+  return tip;
+}
+const squashSessions=repo=>[{key:'s',writes:[{repo,at:T+4*MIN}],branches:[{repo,name:'feature/graft',at:T+MIN},{repo,name:'feature/other',at:T+MIN}]}];
+
+test('a branch that landed on the default branch as one squash commit counts as merged, and one beside it does not',async()=>{
+  await withFolder(async folder=>{
+    const repo=path.join(folder,'nursery');
+    const tip=await squashRepo(repo);
+    assert.equal(git(repo,['branch','--merged','main','--format=%(refname:short)']),'main','git itself calls neither branch merged');
+    const before=git(repo,['count-objects','-v']),refs=git(repo,['for-each-ref']);
+    const cache=new Map();
+    const {shipped,unread}=await joinCommits(squashSessions(repo),{since:T-3600000,until:T+60*MIN,cache});
+    assert.deepEqual(shipped.get('s').branches,[{repo,name:'feature/graft',at:T+MIN,tip}]);
+    assert.deepEqual(shipped.get('s').unsure,[],'the unmerged branch is read as unmerged, not Unknown');
+    assert.equal(unread.size,0);
+    assert.equal(shipped.get('s').commits.filter(commit=>commit.merge).length,0,'a squash is not a merge commit');
+    assert.equal(git(repo,['count-objects','-v']),before,'nothing was written into the repository');
+    assert.equal(git(repo,['for-each-ref']),refs);
+    // The answers are kept with the repository's facts, so a second run asks nothing more about the branches.
+    const real=gitRunner(),asked=[];
+    const counting=(dir,args,options)=>{asked.push(args[0]);return real(dir,args,options);};
+    const again=await joinCommits(squashSessions(repo),{since:T-3600000,until:T+60*MIN,cache,git:counting});
+    assert.deepEqual(asked,['for-each-ref']);
+    assert.deepEqual(again.shipped.get('s').branches.map(branch=>branch.name),['feature/graft']);
+  });
+});
+
+test('a squash of other work does not make a branch merged, and a branch made after its tip is not counted',async()=>{
+  await withFolder(async folder=>{
+    const repo=path.join(folder,'arbor');
+    await makeRepo(repo,T-3*3600000);
+    git(repo,['checkout','-q','-b','feature/vine']);
+    await commitFile(repo,'vine.txt',T+5*MIN,'Vine');
+    git(repo,['checkout','-q','-b','feature/half','main']);
+    await commitFile(repo,'half-a.txt',T+5*MIN,'Half a');
+    await commitFile(repo,'half-b.txt',T+6*MIN,'Half b');
+    git(repo,['checkout','-q','main']);
+    // Main gets a change to the same file as feature/vine with other text, and only part of feature/half.
+    await writeFile(path.join(repo,'vine.txt'),'something else\n');
+    await writeFile(path.join(repo,'half-a.txt'),`Half a ${T+5*MIN}\n`);
+    git(repo,['add','.']);
+    git(repo,['commit','-qm','Unrelated'],T+8*MIN);
+    const sessions=[{key:'s',writes:[{repo,at:T+4*MIN}],branches:[{repo,name:'feature/vine',at:T+MIN},{repo,name:'feature/half',at:T+MIN}]}];
+    const {shipped}=await joinCommits(sessions,{since:T-3600000,until:T+60*MIN});
+    assert.deepEqual(shipped.get('s').branches,[]);
+    assert.deepEqual(shipped.get('s').unsure,[]);
+    const squashed=path.join(folder,'bower');
+    await squashRepo(squashed);
+    // The session made its branch long after the squashed branch's last commit: an older branch of the same name.
+    const later=await joinCommits([{key:'s',writes:[{repo:squashed,at:T+4*MIN}],branches:[{repo:squashed,name:'feature/graft',at:T+30*MIN}]}],{since:T-3600000,until:T+60*MIN});
+    assert.equal(later.shipped.get('s').branches.length,0);
+  });
+});
+
+test('a squash question git cannot answer leaves the branch Unknown, never unmerged',async()=>{
+  await withFolder(async folder=>{
+    const repo=path.join(folder,'thicket');
+    const tip=await squashRepo(repo);
+    const real=gitRunner();
+    for(const failing of ['patch-id','diff','log -p']) {
+      const cache=new Map();
+      const flaky=(dir,args,options)=>(args[0]===failing || (failing==='log -p' && args[0]==='log' && args.includes('-p')))?Promise.resolve(null):real(dir,args,options);
+      const {shipped,unread}=await joinCommits(squashSessions(repo),{since:T-3600000,until:T+60*MIN,cache,git:flaky});
+      assert.deepEqual(shipped.get('s').branches,[],failing);
+      assert.deepEqual(shipped.get('s').unsure.map(branch=>branch.name).sort(),['feature/graft','feature/other'],failing);
+      assert.equal(unread.size,0,'the repository itself was read, so its commits still count');
+      assert.ok(shipped.get('s').commits.length>0);
+      // The failure is not remembered: the next run asks again and gets the answer.
+      const healed=await joinCommits(squashSessions(repo),{since:T-3600000,until:T+60*MIN,cache});
+      assert.deepEqual(healed.shipped.get('s').branches,[{repo,name:'feature/graft',at:T+MIN,tip}],failing);
+      assert.deepEqual(healed.shipped.get('s').unsure,[]);
+    }
+  });
+});
+
+test('squash questions are bounded for each repository in a run, and branches past the bound are Unknown',async()=>{
+  const repo='/fictional/code/hedgerow';
+  const names=Array.from({length:MAX_SQUASH_ASKS+5},(_,index)=>`feature/b${index}`);
+  const asked=[];
+  const fake=async(dir,args)=>{
+    asked.push(args[0]);
+    if(args[0]==='for-each-ref' && args.some(arg=>arg.startsWith('--merged')))return '';
+    if(args[0]==='for-each-ref' && args.some(arg=>arg.includes('committerdate')))return names.map((name,index)=>`${name} ${Math.floor(T/1000)+index} ${'a'.repeat(40)}`).join('\n');
+    if(args[0]==='for-each-ref')return 'refs';
+    if(args[0]==='symbolic-ref')return 'refs/remotes/origin/main';
+    if(args[0]==='log' && args.includes('-p'))return `commit ${'b'.repeat(40)}\ndiff --git a/x b/x\n`;
+    if(args[0]==='diff')return 'diff --git a/y b/y\n';
+    if(args[0]==='patch-id')return `${'c'.repeat(40)} ${'0'.repeat(40)}\n`;
+    return '';
+  };
+  const sessions=[{key:'s',writes:[{repo,at:T}],branches:names.map(name=>({repo,name,at:T-MIN}))}];
+  const {shipped}=await joinCommits(sessions,{since:T-3600000,until:T+MIN,git:fake,exists:()=>true});
+  assert.equal(asked.filter(name=>name==='diff').length,MAX_SQUASH_ASKS);
+  assert.equal(asked.filter(name=>name==='log').length,2,'the default branch is read once for all of them');
+  // The fake gives every patch the same id, so each branch asked about reads as landed.
+  assert.equal(shipped.get('s').branches.length,MAX_SQUASH_ASKS);
+  assert.equal(shipped.get('s').unsure.length,5);
 });

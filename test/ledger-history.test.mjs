@@ -94,6 +94,9 @@ test('shipped work: commits by commit time, merges counted once a day, Unknown w
   const clean=build([a],{joined:{shipped:new Map([['claude:a',shipped.get('claude:a')]]),unread:new Set()}}).days[0];
   assert.deepEqual(clean.ship,{commits:2,onMain:1,merges:1});
   assert.deepEqual(clean.repos[0],{repo:'hedge',apiUsd:clean.apiUsd,commits:2,onMain:1,merges:1});
+  // A branch whose merge could not be read makes that repository's merges Unknown, and its commits still count.
+  const unsure=build([a],{joined:{shipped:new Map([['claude:a',{...shipped.get('claude:a'),unsure:[{repo,name:'feature/edge',at:NOON-MIN}]}]]),unread:new Set()}}).days[0];
+  assert.deepEqual(unsure.ship,{commits:2,onMain:1,merges:null});
   // The join failing makes every written repository Unknown, and a session that wrote nothing still shipped 0.
   const failed=build([a,session({id:'quiet'})],{joined:null}).days[0];
   assert.equal(failed.sessions.find(row=>row.ship.length).ship[0].commits,null);

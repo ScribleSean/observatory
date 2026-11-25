@@ -82,6 +82,11 @@ function sessionDay(source,session,part,{titles}) {
     const name=folder(written);if(!name)continue;
     Object.assign(entry(name),{commits:null,onMain:null,merges:null});
   }
+  // A branch whose merge could not be read leaves that repository's merges Unknown.
+  for(const branch of part.unsure) {
+    const name=folder(branch.repo);if(!name)continue;
+    entry(name).merges=null;
+  }
   const units=new Set();
   const ships=[...ship.values()].map(({units:own,...row})=>{
     for(const unit of own)units.add(unit);
@@ -183,7 +188,7 @@ export function buildLedgerHistory({tools,joined,timeZone,titles}) {
       const kindOf=new Map(session.agents.map(agent=>[agent.key,agent.kind]));
       const parts=new Map();
       const part=date=>{
-        if(!parts.has(date))parts.set(date,{requests:[],commits:[],branches:[],started:[],unread:new Set(),kindOf});
+        if(!parts.has(date))parts.set(date,{requests:[],commits:[],branches:[],unsure:[],started:[],unread:new Set(),kindOf});
         return parts.get(date);
       };
       const seen=new Set();
@@ -197,6 +202,7 @@ export function buildLedgerHistory({tools,joined,timeZone,titles}) {
       }
       for(const commit of shipped.commits) {const date=dayKey(commit.at,timeZone);if(wanted.has(date))part(date).commits.push(commit);}
       for(const branch of shipped.branches) {const date=dayKey(branch.at,timeZone);if(wanted.has(date))part(date).branches.push(branch);}
+      for(const branch of shipped.unsure ?? []) {const date=dayKey(branch.at,timeZone);if(wanted.has(date))part(date).unsure.push(branch);}
       for(const write of session.writes) {
         const date=dayKey(write.at,timeZone);
         if(!parts.has(date))continue;
