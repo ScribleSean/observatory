@@ -271,10 +271,14 @@ test('an old reading is worded the same everywhere: its last value, with when it
   const shown = surfaces(fleet({ age: 20 }));
   const label = 'as of Wed 7:20 AM';
   assert.ok(shown.tray.some(line => /^ {2}Claude Code weekly: 73% used · Resets Fri 11:45 AM · as of Wed 7:20 AM/.test(line)), shown.tray.join('\n'));
-  // With no current reading the forecast has no lead, so the menu bar has no headline number. Every row says its last value.
-  assert.equal(shown.glance.headline.used, 'Used: Unknown');
-  for (const [name, used] of [['Claude 5-hour', 39], ['Claude weekly', 73]])
-    assert.equal(shown.glance.limits.find(row => row.name === name)?.percent, `${used}%, ${label}`, name);
+  // With no current reading the forecast has no lead. The headline still says the weekly limit's last value, dated, the
+  // same value the icon keeps, so the headline and the rows never disagree. Every other row says its last value too,
+  // with the date apart so the apps can give it its own line.
+  assert.equal(shown.glance.headline.used, `73% of the week used, ${label}`);
+  assert.equal(shown.glance.headline.fraction, 0.73);
+  assert.equal(shown.glance.limits.find(row => row.name === 'Claude weekly'), undefined, 'the weekly row is the headline');
+  const hour = shown.glance.limits.find(row => row.name === 'Claude 5-hour');
+  assert.deepEqual([hour?.percent, hour?.asOf], ['39%', label]);
   assert.deepEqual(shown.status.engines.claude.windows.weekly.lastReading, { percentLeft: 27, asOfLabel: label });
   assert.equal(shown.status.engines.claude.windows.weekly.percentLeft, null, 'pace is never judged on an old reading');
   assert.match(shown.statusText, new RegExp(`weekly 73% used, ${label}`));

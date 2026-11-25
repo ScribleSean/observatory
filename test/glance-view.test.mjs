@@ -115,9 +115,13 @@ test('Unknown stays Unknown: no forecast, no pace and no ledger never become zer
   const view=glanceView(combined,{now,timeZone});
   assert.equal(view.headline.engine,null);
   assert.equal(view.headline.text,'Claude has no current reading.');
-  assert.equal(view.headline.used,'Used: Unknown');
-  assert.deepEqual(view.bar,{percent:null,ring:null,showPercent:false,text:null});
-  assert.equal(view.limits.length,4);
+  // No forecast leads, but the Claude weekly row has a current reading: the headline says it, so it never reads
+  // Unknown above a row that shows a number. Its tone stays unknown, as nothing judged the pace.
+  assert.equal(view.headline.used,'64% of the week used');
+  assert.equal(view.headline.tone,'unknown');
+  assert.deepEqual(view.bar,{percent:64,ring:0.64,showPercent:false,text:null});
+  assert.equal(view.limits.length,3);
+  assert.ok(view.limits.every(row=>row.asOf===null));
   // One session with an Unknown pace makes the total Unknown, not smaller.
   assert.equal(view.running.ratePerHour,null);
   assert.equal(view.running.summary,'4 sessions');
@@ -132,6 +136,7 @@ test('Unknown stays Unknown: no forecast, no pace and no ledger never become zer
   assert.equal(empty.collecting,true,'a first run reads Collecting in both apps, not Unknown');
   assert.equal(empty.updated,'Updated: Unknown');
   assert.equal(empty.headline.text,'Unknown');
+  assert.equal(empty.headline.used,'Used: Unknown');
   assert.deepEqual(empty.limits,[]);
   assert.equal(empty.stale,true);
 });

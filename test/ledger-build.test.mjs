@@ -303,6 +303,11 @@ test('a merged branch is one change: its merge commit and the branch count once,
   const two={...shipped,branches:[...shipped.branches,{repo,name:'feature/edge',at:NOW-175*MIN,tip:'c7'}]};
   const again=await build([session({writes:[{repo,at:NOW-3*3600000}]})],{join:async sessions=>({unread:new Set(),stats:null,shipped:new Map([[sessions[0].key,two]])})});
   assert.equal(current(again.row).sessions[0].shipped.merges,2);
+  // A branch whose merge could not be read makes the merges Unknown, and the commits still count.
+  const unsure={...shipped,unsure:[{repo,name:'feature/edge',at:NOW-175*MIN}]};
+  const third=await build([session({writes:[{repo,at:NOW-3*3600000}]})],{join:async sessions=>({unread:new Set(),stats:null,shipped:new Map([[sessions[0].key,unsure]])})});
+  const unknown=current(third.row).sessions[0].shipped;
+  assert.deepEqual([unknown.merges,unknown.commits,unknown.onMain],[null,1,1]);
 });
 
 test('a session row carries its origin, task and repository, and a tampered row is refused or cleaned',async()=>{

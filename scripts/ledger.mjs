@@ -143,6 +143,8 @@ function sessionRow(source,session,requests,period,ctx) {
   const allCommits=(joined?.commits ?? []).filter(commit=>commit.at>=period.start && commit.at<period.end);
   const commits=allCommits.filter(commit=>!commit.merge);
   const branches=(joined?.branches ?? []).filter(branch=>branch.at>=period.start && branch.at<period.end);
+  // A branch whose merge could not be read leaves the count of merges Unknown.
+  const unsure=(joined?.unsure ?? []).some(branch=>branch.at>=period.start && branch.at<period.end);
   const written=new Map();
   for(const write of session.writes)if(write.at>=period.start && write.at<period.end)written.set(write.repo,(written.get(write.repo) ?? 0)+1);
   const unreadable=[...written.keys()].some(repo=>ctx.unreadRepos.has(repo));
@@ -153,7 +155,7 @@ function sessionRow(source,session,requests,period,ctx) {
   const merges=units.size;
   const shipped={estimated:true,commits:unreadable?null:commits.length,
     onMain:unreadable || commits.some(commit=>commit.onMain===null)?null:commits.filter(commit=>commit.onMain).length,
-    merges:unreadable?null:merges,prsOpen:null,repos};
+    merges:unreadable || unsure?null:merges,prsOpen:null,repos};
   // Live state, current period only.
   const current=period.key==='current';
   // The session's own thread and its subagents: a subagent still working keeps the session working.
