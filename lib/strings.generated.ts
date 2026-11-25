@@ -125,8 +125,8 @@ export const STRINGS = {
     "signInTipElsewhere": "Run claude auth login --claudeai on {name}. Claude is signed out there."
   },
   "ledger": {
-    "fanout": "{title} fanned out to {count} subagents and took {share} of the week. No branch merged.",
-    "fanoutSpend": "{title} fanned out to {count} subagents and took {share} of the spend. No branch merged.",
+    "fanout": "{title} fanned out to {count} subagents and took {share} of the week. Nothing landed on main.",
+    "fanoutSpend": "{title} fanned out to {count} subagents and took {share} of the spend. Nothing landed on main.",
     "modelFit": "{title} spent {top} on search with the top model. A small model would have cost about {small}.",
     "retryLoop": "{title} retried one {tool} call {count} times in a row.",
     "autoResume": "{title} went on by itself after a limit reset and spent {usd} in the next 30 minutes.",
@@ -207,7 +207,7 @@ export const STRINGS = {
     "fanoutOwn": "Fanned out to {count} subagents",
     "fanoutOwnRest": "and took {share} of the week.",
     "fanoutOwnRestSpend": "and took {share} of the spend.",
-    "noMerge": "No branch merged.",
+    "nothingLanded": "Nothing landed on main.",
     "searchLead": "{model} did search work",
     "searchRest": "in {count} subagents. The smallest model would have cut the week by about {share}.",
     "searchRestSpend": "in {count} subagents. The smallest model would have cost about {saved} less.",

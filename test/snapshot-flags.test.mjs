@@ -8,7 +8,7 @@ const row = (host, sessions, apiUsd = 100) => ({host, status: 'ok', tools: [{too
 
 test('pools every computer and ignores previous periods', () => {
   const combined = {view: {ledger: [
-    row('Mac', [session('a1', 'Release review', {apiUsd: 45, subagents: 300, shipped: {merges: 0}})]),
+    row('Mac', [session('a1', 'Release review', {apiUsd: 45, subagents: 300, shipped: {merges: 0, onMain: 0}})]),
     row('Linux', [session('b1', 'Package updates', {signals: {longestRetry: 14, retryTool: 'Shell'}})]),
     {host: 'Windows', status: 'not-connected'},
   ]}};
