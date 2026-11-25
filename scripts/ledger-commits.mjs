@@ -28,12 +28,14 @@ const PLAIN_DIFF=Object.freeze(['--no-ext-diff','--no-textconv','--no-color']);
 // The repositories come from paths an agent wrote, so they are untrusted: an agent may have cloned
 // anything, and a repository's own config can name programs for git to run (fsmonitor, a signature
 // checker, a pager, an external diff, hooks). Every call turns those off on the command line, which
-// wins over the repository's config, and reads no system or user config.
+// wins over the repository's config, and reads no system or user config. A partial clone could also fetch a missing
+// object while a diff runs, through a transport the repository's config names, so every transport is off too.
 export const GIT_SAFE_ARGS=Object.freeze(['-c','core.fsmonitor=false','-c','log.showSignature=false','-c','gpg.program=false',
-  '-c',`core.hooksPath=${process.platform==='win32'?'NUL':'/dev/null'}`,'-c','diff.external=','-c','core.pager=cat']);
+  '-c',`core.hooksPath=${process.platform==='win32'?'NUL':'/dev/null'}`,'-c','diff.external=','-c','core.pager=cat',
+  '-c','protocol.allow=never','-c','core.sshCommand=false']);
 export function gitEnv(platform=process.platform,environment=process.env) {
   return {...Object.fromEntries(Object.entries(environment).filter(([key])=>!key.startsWith('GIT_'))),
-    GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:platform==='win32'?'NUL':'/dev/null',GIT_TERMINAL_PROMPT:'0',GIT_OPTIONAL_LOCKS:'0',LC_ALL:'C'};
+    GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:platform==='win32'?'NUL':'/dev/null',GIT_TERMINAL_PROMPT:'0',GIT_OPTIONAL_LOCKS:'0',GIT_NO_LAZY_FETCH:'1',LC_ALL:'C'};
 }
 export function gitRunner(exec=run) {
   // `input` is text for the command to read, for a question asked of text git already gave.
