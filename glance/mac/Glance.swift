@@ -402,8 +402,14 @@ struct PanelView: View {
   @ViewBuilder func content(_ state: PanelState, _ palette: Palette) -> some View {
     VStack(alignment: .leading, spacing: 5) {
       Text(state.headline ?? "Unknown").font(font(14.5, .semibold)).fixedSize(horizontal: false, vertical: true).measured("headline")
-      pair(Text(state.used ?? "").measured("used"), Text(state.resets ?? "").measured("resets"))
-        .font(font(12)).foregroundStyle(palette.muted)
+      Group {
+        if let resets = state.resets {
+          pair(Text(state.used ?? "").measured("used"), Text(resets).measured("resets"))
+        } else {
+          Text(state.used ?? "").fixedSize(horizontal: false, vertical: true).measured("used")
+        }
+      }
+      .font(font(12)).foregroundStyle(palette.muted)
       bar(state.fraction, tone(state, palette), palette, height: 6).padding(.top, 3)
     }
     .accessibilityElement(children: .combine)
@@ -412,28 +418,30 @@ struct PanelView: View {
       Divider()
       // One line per limit, in a grid so the bars, values and resets line up and each column is as wide as its longest
       // text. When that does not fit the panel (long values or large text), each limit takes two lines instead: its
-      // name and bar, then its value and reset. Names are cut with an ellipsis before anything else, values never are.
+      // name and bar, then its value and reset. Values are never cut. A long name is cut with an ellipsis.
       ViewThatFits(in: .horizontal) {
         Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 7) {
           ForEach(state.limits) { row in
             GridRow(alignment: .center) {
-              Circle().fill(palette.provider(row.engine)).frame(width: 7, height: 7)
+              Circle().fill(palette.provider(row.engine)).frame(width: 7, height: 7).accessibilityHidden(true)
+              // The name's ideal width is capped, so one long name is cut short rather than sending every row to two lines.
               VStack(alignment: .leading, spacing: 1) {
                 Text(row.name).lineLimit(1).truncationMode(.tail).measured("limit.\(row.id).name")
                 if let asOf = row.asOf {
                   Text(asOf).font(font(11.5)).foregroundStyle(palette.muted).lineLimit(1).truncationMode(.tail).measured("limit.\(row.id).asOf")
                 }
               }
-              .frame(maxWidth: .infinity, alignment: .leading)
+              .frame(minWidth: 48, idealWidth: 120 * textScale, maxWidth: .infinity, alignment: .leading)
+              // A grid row's modifiers go to each of its cells, so the row is read once, from this cell.
+              .accessibilityElement(children: .ignore)
+              .accessibilityLabel(row.label)
               bar(row.fraction, palette.provider(row.engine), palette, height: 4)
-                .frame(minWidth: 16, idealWidth: 48, maxWidth: 48).measured("limit.\(row.id).bar")
+                .frame(minWidth: 16, idealWidth: 48, maxWidth: 48).measured("limit.\(row.id).bar").accessibilityHidden(true)
               Text(row.percent).monospacedDigit().foregroundStyle(limitTone(row, palette)).fixedSize()
-                .gridColumnAlignment(.trailing).measured("limit.\(row.id).value")
+                .gridColumnAlignment(.trailing).measured("limit.\(row.id).value").accessibilityHidden(true)
               Text(row.resets ?? "").font(font(11.5)).foregroundStyle(palette.muted).fixedSize()
-                .gridColumnAlignment(.trailing).measured("limit.\(row.id).resets")
+                .gridColumnAlignment(.trailing).measured("limit.\(row.id).resets").accessibilityHidden(true)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(row.label)
             .help(row.label)
           }
         }

@@ -1,7 +1,7 @@
 // The menu bar panel (macOS, glance/mac/Glance.swift) and the tray panel (Windows, glance/windows/Glance.cs) as each
 // app lays it out. The app is compiled into a temporary folder and run with `--layout`, which writes where each named
-// part of the panel landed. For each glance below, at three text sizes, no two parts of one row may overlap and no part
-// may leave the panel. A value drawn over its bar is how the panel once broke ("54%, as of Tue 9:50 AM" on the weekly
+// part of the panel landed. For each glance below, at three text sizes, no two parts may overlap, no part may leave the
+// panel and no part that has text or a bar may be laid out with no width. A value drawn over its bar is how the panel once broke ("54%, as of Tue 9:50 AM" on the weekly
 // bar), so the long and old values are here on purpose. Other systems have no panel, so the test skips there.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -81,19 +81,22 @@ test('no part of the panel is drawn over another or outside it, at any text size
         const output = path.join(folder, 'layout.json');
         await rm(output, { force: true });
         await run(app, ['--layout', input, output, NOW, '--text-scale', String(scale)], { timeout: 60000 });
-        const { width, frames } = JSON.parse(await readFile(output, 'utf8'));
+        const { width, height, frames } = JSON.parse(await readFile(output, 'utf8'));
         const at = `${name}, text x${scale}`;
         // The parts the panel always has: a missing one means the layout was not measured, which must not pass.
         const needed = ['headline', 'used', 'footer.open', 'footer.updated', ...glance.limits.flatMap((_, index) => ['name', 'bar', 'value'].map(part => `limit.${index}.${part}`))];
         for (const part of needed) if (!frames[part]) problems.push(`${at}: ${part} was not laid out`);
         for (const [part, box] of Object.entries(frames)) {
-          if (box[0] < -0.5 || box[0] + box[2] > width + 0.5) problems.push(`${at}: ${part} leaves the panel (${box.map(Math.round)} in ${width})`);
+          if (box[0] < -0.5 || box[0] + box[2] > width + 0.5 || box[1] < -0.5 || box[1] + box[3] > height + 0.5)
+            problems.push(`${at}: ${part} leaves the panel (${box.map(Math.round)} in ${width} by ${height})`);
+          if (/\.(name|bar|value|asOf)$|^(headline|used)$/.test(part) && !(box[2] > 0.5 && box[3] > 0.5)) problems.push(`${at}: ${part} has no size`);
           if (part.endsWith('.bar') && box[2] < 12) problems.push(`${at}: ${part} is ${box[2]} wide`);
         }
         const parts = Object.entries(frames);
         for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
           const [a, boxA] = parts[i], [b, boxB] = parts[j];
-          if (group(a) === group(b) && overlap(boxA, boxB) > 0.5) problems.push(`${at}: ${a} and ${b} overlap`);
+          // Any two parts, in one row or across rows and sections: a section drawn too short shows here too.
+          if (overlap(boxA, boxB) > 0.5) problems.push(`${at}: ${a} and ${b} overlap${group(a) === group(b) ? '' : ' (different rows)'}`);
         }
       }
     }

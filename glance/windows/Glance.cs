@@ -595,7 +595,7 @@ namespace Observatory
                     // The share used and the reset share a line when both fit. Otherwise the reset goes under it.
                     {
                         float line = (float)Math.Ceiling(small.GetHeight(g)), usedWidth = s.Used == null ? 0 : Measure(g, s.Used, small);
-                        float resetsWidth = s.Resets == null ? 0 : Measure(g, s.Resets, small);
+                        float resetsWidth = s.Resets == null ? 0 : Measure(g, s.Resets, small) + 1;
                         float usedHeight = s.Used == null ? line : (float)Math.Ceiling(g.MeasureString(s.Used, small, (int)(right - left), wrap).Height);
                         bool together = usedWidth + 8 + resetsWidth <= right - left;
                         var usedBox = new RectangleF(left, y, Math.Min(usedWidth, right - left), usedHeight);
@@ -654,7 +654,7 @@ namespace Observatory
                                 rowTop += line;
                                 float valueOwn = Measure(g, row.Percent, body) + 1, resetsOwn = row.Resets == null ? 0 : Measure(g, row.Resets, small) + 1;
                                 valueBox = new RectangleF(cx + 15, rowTop + 4, Math.Min(valueOwn, cr - cx - 15), line - 8);
-                                resetsBox = new RectangleF(Math.Max(valueBox.Right + 10, cr - resetsOwn), rowTop + 4, Math.Min(resetsOwn, cr - valueBox.Right - 10), line - 8);
+                                resetsBox = new RectangleF(Math.Max(valueBox.Right + 10, cr - resetsOwn), rowTop + 4, Math.Max(0, Math.Min(resetsOwn, cr - valueBox.Right - 10)), line - 8);
                             }
                             rowTop += line;
                             if (draw)
@@ -690,8 +690,8 @@ namespace Observatory
                         float titleWidth0 = Measure(g, s.RunningTitle, smallStrong) + 1, summaryWidth = Measure(g, summary, small) + 1;
                         // The summary sits at the right of the title when both fit, else on the line under it.
                         bool together = titleWidth0 + 8 + summaryWidth <= cr - cx;
-                        float headHeight = together ? head : head * 2;
-                        float h = 10 + headHeight + line * s.Sessions.Count + 6;
+                        float runHead = together ? head : head * 2;
+                        float h = 10 + runHead + line * s.Sessions.Count + 6;
                         var titleHead = new RectangleF(cx, y + 10, Math.Min(titleWidth0, cr - cx), head - 4);
                         var summaryHead = together ? new RectangleF(cr - summaryWidth, y + 10, summaryWidth, head - 4) : new RectangleF(cx, y + 10 + head, Math.Min(summaryWidth, cr - cx), head - 4);
                         if (draw)
@@ -702,7 +702,7 @@ namespace Observatory
                         }
                         Place("running.title", titleHead);
                         Place("running.summary", summaryHead);
-                        float rowTop = y + 10 + headHeight;
+                        float rowTop = y + 10 + runHead;
                         int sessionIndex = 0;
                         foreach (var session in s.Sessions)
                         {
