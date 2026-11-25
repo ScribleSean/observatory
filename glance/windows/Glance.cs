@@ -33,8 +33,21 @@ namespace Observatory
     sealed class LimitRow
     {
         public string Engine, Name, Percent, Resets, Tone;
+        // "as of Tue 9:50 AM" when the value is an old reading. Drawn on its own line under the row.
+        public string AsOf;
         // Share used, 0 to 1, or null when Unknown.
         public double? Fraction;
+        // The whole row in words, for the tooltip, so nothing cut short is lost.
+        public string Label
+        {
+            get
+            {
+                var parts = new List<string> { Name, Percent == "Unknown" || Percent == "Off" ? Percent : Percent + " used" };
+                if (Resets != null) parts.Add("resets " + Resets);
+                if (AsOf != null) parts.Add(AsOf);
+                return string.Join(", ", parts);
+            }
+        }
     }
 
     sealed class SessionRow
@@ -185,6 +198,7 @@ namespace Observatory
                     Percent = Get(row, "percent") as string ?? "Unknown",
                     Resets = Get(row, "resets") as string,
                     Tone = Get(row, "tone") as string ?? "muted",
+                    AsOf = Get(row, "asOf") as string,
                 });
             }
             var running = Get(json, "running") as Dictionary<string, object>;
@@ -440,6 +454,12 @@ namespace Observatory
     {
         public const int Width = 360;
         const int Pad = 16, Inner = 12, Row = 26, Gap = 10, FooterHeight = 60;
+        // Text size, 1 by default. `--render` and `--layout` take `--text-scale` to check that every row still fits with
+        // larger text: no text is drawn into a box narrower than it.
+        public static float TextScale = 1;
+        // Where each named part was drawn, while `--layout` asks (test/panel-layout.test.mjs). Null otherwise.
+        public static Dictionary<string, RectangleF> Frames;
+        static void Place(string name, RectangleF box) { if (Frames != null) Frames[name] = box; }
 
         static GraphicsPath Rounded(RectangleF r, float radius)
         {
@@ -540,12 +560,12 @@ namespace Observatory
 
         public static int Paint(Graphics g, PanelState s, Palette p, bool draw, List<Tuple<RectangleF, string>> hits)
         {
-            using (var body = new Font("Segoe UI", 13, GraphicsUnit.Pixel))
-            using (var strong = new Font("Segoe UI Semibold", 13, GraphicsUnit.Pixel))
-            using (var title = new Font("Segoe UI Semibold", 15, GraphicsUnit.Pixel))
-            using (var small = new Font("Segoe UI", 12, GraphicsUnit.Pixel))
-            using (var smallStrong = new Font("Segoe UI Semibold", 12, GraphicsUnit.Pixel))
-            using (var badgeFont = new Font("Segoe UI Semibold", 10.5f, GraphicsUnit.Pixel))
+            using (var body = new Font("Segoe UI", 13 * TextScale, GraphicsUnit.Pixel))
+            using (var strong = new Font("Segoe UI Semibold", 13 * TextScale, GraphicsUnit.Pixel))
+            using (var title = new Font("Segoe UI Semibold", 15 * TextScale, GraphicsUnit.Pixel))
+            using (var small = new Font("Segoe UI", 12 * TextScale, GraphicsUnit.Pixel))
+            using (var smallStrong = new Font("Segoe UI Semibold", 12 * TextScale, GraphicsUnit.Pixel))
+            using (var badgeFont = new Font("Segoe UI Semibold", 10.5f * TextScale, GraphicsUnit.Pixel))
             using (var wrap = new StringFormat(StringFormat.GenericTypographic))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -570,40 +590,93 @@ namespace Observatory
                     string headline = s.Headline ?? "Unknown";
                     float headHeight = (float)Math.Ceiling(g.MeasureString(headline, title, (int)(right - left), wrap).Height);
                     if (draw) using (var brush = new SolidBrush(fade(p.Text))) g.DrawString(headline, title, brush, new RectangleF(left, y, right - left, headHeight + 2), wrap);
+                    Place("headline", new RectangleF(left, y, right - left, headHeight));
                     y += headHeight + 5;
-                    if (draw)
+                    // The share used and the reset share a line when both fit. Otherwise the reset goes under it.
                     {
-                        if (s.Used != null) Text(g, s.Used, small, fade(p.Muted), left, y);
-                        if (s.Resets != null) Text(g, s.Resets, small, fade(p.Muted), right - Measure(g, s.Resets, small), y);
+                        float line = (float)Math.Ceiling(small.GetHeight(g)), usedWidth = s.Used == null ? 0 : Measure(g, s.Used, small);
+                        float resetsWidth = s.Resets == null ? 0 : Measure(g, s.Resets, small);
+                        float usedHeight = s.Used == null ? line : (float)Math.Ceiling(g.MeasureString(s.Used, small, (int)(right - left), wrap).Height);
+                        bool together = usedWidth + 8 + resetsWidth <= right - left;
+                        var usedBox = new RectangleF(left, y, Math.Min(usedWidth, right - left), usedHeight);
+                        var resetsBox = together ? new RectangleF(right - resetsWidth, y, resetsWidth, line) : new RectangleF(left, y + usedHeight + 2, Math.Min(resetsWidth, right - left), line);
+                        if (draw)
+                        {
+                            if (s.Used != null) using (var brush = new SolidBrush(fade(p.Muted))) g.DrawString(s.Used, small, brush, new RectangleF(left, y, right - left, usedHeight + 2), wrap);
+                            if (s.Resets != null) Line(g, s.Resets, small, fade(p.Muted), resetsBox, StringAlignment.Near);
+                        }
+                        if (s.Used != null) Place("used", usedBox);
+                        if (s.Resets != null) Place("resets", resetsBox);
+                        y = Math.Max(usedBox.Bottom, s.Resets != null ? resetsBox.Bottom : 0) + 6;
                     }
-                    y += 16 + 6;
                     var engine = new EngineRow { Id = s.HeadEngine ?? "", Status = s.HeadTone };
                     Color tone = s.Old ? p.Muted : engine.Status == "out" ? p.Error : engine.Status == "runs-out" ? p.Warning : p.Provider(engine.Id);
                     if (draw) Bar(g, p, new RectangleF(left, y, right - left, 6), s.Fraction, tone);
                     y += 6 + 14;
                     y = SignIn(g, s, p, draw, hits, body, small, wrap, left, right, y);
 
-                    // Every other limit window, any engine.
+                    // Every other limit window, any engine. The value and reset columns are as wide as their longest text, so they
+                    // line up and are never cut. The name gives way first (cut with an ellipsis), then the bar shrinks. When even
+                    // that does not fit (long values or large text), each limit takes two lines: its name and bar, then its value
+                    // and reset. An old reading adds a line saying when it was read.
                     if (s.Limits.Count > 0)
                     {
-                        float h = 8 + Row * s.Limits.Count + 8;
-                        if (draw)
+                        float cx = left + Inner, cr = right - Inner, line = (float)Math.Max(Row * TextScale, Math.Ceiling(body.GetHeight(g)) + 8);
+                        float note = (float)Math.Ceiling(small.GetHeight(g)) + 2;
+                        float valueWidth = s.Limits.Max(row => Measure(g, row.Percent, body)) + 1;
+                        float resetsWidth = s.Limits.Max(row => row.Resets == null ? 0 : Measure(g, row.Resets, small) + 1);
+                        float resetsRoom = resetsWidth > 0 ? resetsWidth + 10 : 0;
+                        const float NameMin = 64, BarMin = 16, BarMax = 56;
+                        float barWidth = Math.Min(BarMax, cr - (cx + 15) - NameMin - 8 - 10 - valueWidth - resetsRoom);
+                        bool oneLine = barWidth >= BarMin;
+                        if (!oneLine) barWidth = Math.Max(BarMin, Math.Min(BarMax, (cr - cx - 15) / 4));
+                        float h = 16;
+                        foreach (var row in s.Limits) h += line * (oneLine ? 1 : 2) + (row.AsOf != null ? note : 0);
+                        if (draw) Box(g, p.Surface, p.Hairline, new RectangleF(left, y, right - left, h), 6);
+                        float rowTop = y + 8;
+                        for (int index = 0; index < s.Limits.Count; index++)
                         {
-                            Box(g, p.Surface, p.Hairline, new RectangleF(left, y, right - left, h), 6);
-                            float rowTop = y + 8, cx = left + Inner, cr = right - Inner;
-                            float resetsX = cr - 64, percentRight = resetsX - 10, barX = percentRight - 48 - 56;
-                            foreach (var row in s.Limits)
+                            var row = s.Limits[index];
+                            float mid = rowTop + line / 2f, top = rowTop;
+                            Color color = p.Provider(row.Engine);
+                            Color figure = row.Tone == "out" ? p.Error : row.Tone == "low" ? p.Warning : row.Tone == "muted" ? p.Muted : p.Text;
+                            float barX = oneLine ? cr - resetsRoom - valueWidth - 10 - barWidth : cr - barWidth;
+                            var nameBox = new RectangleF(cx + 15, mid - line / 2f + 4, barX - 8 - cx - 15, line - 8);
+                            var barBox = new RectangleF(barX, mid - 2, barWidth, 4);
+                            RectangleF valueBox, resetsBox;
+                            if (oneLine)
                             {
-                                float mid = rowTop + Row / 2f;
-                                Color color = p.Provider(row.Engine);
-                                using (var dot = new SolidBrush(fade(color))) g.FillEllipse(dot, cx, mid - 3.5f, 7, 7);
-                                Line(g, row.Name, body, fade(p.Text), new RectangleF(cx + 15, mid - 9, barX - 8 - cx - 15, 18), StringAlignment.Near);
-                                Bar(g, p, new RectangleF(barX, mid - 2, 56, 4), row.Fraction, fade(color));
-                                Color figure = row.Tone == "out" ? p.Error : row.Tone == "low" ? p.Warning : row.Tone == "muted" ? p.Muted : p.Text;
-                                Line(g, row.Percent, body, fade(figure), new RectangleF(percentRight - 48, mid - 9, 48, 18), StringAlignment.Far);
-                                if (row.Resets != null) Line(g, row.Resets, small, fade(p.Muted), new RectangleF(resetsX, mid - 8, cr - resetsX, 18), StringAlignment.Far);
-                                rowTop += Row;
+                                valueBox = new RectangleF(cr - resetsRoom - valueWidth, nameBox.Y, valueWidth, nameBox.Height);
+                                resetsBox = new RectangleF(cr - resetsWidth, nameBox.Y, resetsWidth, nameBox.Height);
                             }
+                            else
+                            {
+                                rowTop += line;
+                                float valueOwn = Measure(g, row.Percent, body) + 1, resetsOwn = row.Resets == null ? 0 : Measure(g, row.Resets, small) + 1;
+                                valueBox = new RectangleF(cx + 15, rowTop + 4, Math.Min(valueOwn, cr - cx - 15), line - 8);
+                                resetsBox = new RectangleF(Math.Max(valueBox.Right + 10, cr - resetsOwn), rowTop + 4, Math.Min(resetsOwn, cr - valueBox.Right - 10), line - 8);
+                            }
+                            rowTop += line;
+                            if (draw)
+                            {
+                                using (var dot = new SolidBrush(fade(color))) g.FillEllipse(dot, cx, mid - 3.5f, 7, 7);
+                                Line(g, row.Name, body, fade(p.Text), nameBox, StringAlignment.Near);
+                                Bar(g, p, barBox, row.Fraction, fade(color));
+                                Line(g, row.Percent, body, fade(figure), valueBox, oneLine ? StringAlignment.Far : StringAlignment.Near);
+                                if (row.Resets != null) Line(g, row.Resets, small, fade(p.Muted), resetsBox, StringAlignment.Far);
+                            }
+                            Place("limit." + index + ".name", nameBox);
+                            Place("limit." + index + ".bar", barBox);
+                            Place("limit." + index + ".value", valueBox);
+                            if (row.Resets != null) Place("limit." + index + ".resets", resetsBox);
+                            if (row.AsOf != null)
+                            {
+                                var asOfBox = new RectangleF(cx + 15, rowTop - 2, cr - cx - 15, note);
+                                if (draw) Line(g, row.AsOf, small, fade(p.Muted), asOfBox, StringAlignment.Near);
+                                Place("limit." + index + ".asOf", new RectangleF(asOfBox.X, asOfBox.Y, Math.Min(Measure(g, row.AsOf, small) + 1, asOfBox.Width), asOfBox.Height));
+                                rowTop += note;
+                            }
+                            if (hits != null) hits.Add(Tuple.Create(new RectangleF(cx, top, cr - cx, rowTop - top), "tip:" + row.Label));
                         }
                         y += h + Gap;
                     }
@@ -611,33 +684,46 @@ namespace Observatory
                     // What is running across computers, fastest first.
                     if (s.RunningTitle != null)
                     {
-                        float h = 10 + 18 + Row * s.Sessions.Count + 6;
-                        float cx = left + Inner, cr = right - Inner;
+                        float cx = left + Inner, cr = right - Inner, line = (float)Math.Max(Row * TextScale, Math.Ceiling(body.GetHeight(g)) + 8);
+                        float head = (float)Math.Ceiling(small.GetHeight(g)) + 4;
+                        string summary = s.RunningSummary ?? "";
+                        float titleWidth0 = Measure(g, s.RunningTitle, smallStrong) + 1, summaryWidth = Measure(g, summary, small) + 1;
+                        // The summary sits at the right of the title when both fit, else on the line under it.
+                        bool together = titleWidth0 + 8 + summaryWidth <= cr - cx;
+                        float headHeight = together ? head : head * 2;
+                        float h = 10 + headHeight + line * s.Sessions.Count + 6;
+                        var titleHead = new RectangleF(cx, y + 10, Math.Min(titleWidth0, cr - cx), head - 4);
+                        var summaryHead = together ? new RectangleF(cr - summaryWidth, y + 10, summaryWidth, head - 4) : new RectangleF(cx, y + 10 + head, Math.Min(summaryWidth, cr - cx), head - 4);
                         if (draw)
                         {
                             Box(g, p.Surface, p.Hairline, new RectangleF(left, y, right - left, h), 6);
-                            string summary = s.RunningSummary ?? "";
-                            Text(g, s.RunningTitle, smallStrong, fade(p.Muted), cx, y + 10);
-                            Text(g, summary, small, fade(p.Muted), cr - Measure(g, summary, small), y + 10);
+                            Line(g, s.RunningTitle, smallStrong, fade(p.Muted), titleHead, StringAlignment.Near);
+                            Line(g, summary, small, fade(p.Muted), summaryHead, StringAlignment.Near);
                         }
-                        float rowTop = y + 10 + 18;
+                        Place("running.title", titleHead);
+                        Place("running.summary", summaryHead);
+                        float rowTop = y + 10 + headHeight;
+                        int sessionIndex = 0;
                         foreach (var session in s.Sessions)
                         {
-                            float mid = rowTop + Row / 2f;
+                            float mid = rowTop + line / 2f;
                             float rateWidth = Measure(g, session.Rate, body);
                             float room = cr - rateWidth - 12 - cx;
                             float machineWidth = Math.Min(Measure(g, session.Machine, small) + 2, room * 0.4f);
                             float fullTitle = Measure(g, session.Title, body) + 2;
                             float titleWidth = Math.Min(fullTitle, room - machineWidth - 6);
-                            var titleBox = new RectangleF(cx, mid - 9, titleWidth, 18);
+                            var titleBox = new RectangleF(cx, mid - (line - 8) / 2, titleWidth, line - 8);
                             if (draw)
                             {
                                 Line(g, session.Title, body, fade(p.Text), titleBox, StringAlignment.Near);
-                                Line(g, session.Machine, small, fade(p.Muted), new RectangleF(cx + titleWidth + 6, mid - 8, machineWidth, 18), StringAlignment.Near);
-                                Text(g, session.Rate, body, fade(p.Text), cr - rateWidth, mid - 9);
+                                Line(g, session.Machine, small, fade(p.Muted), new RectangleF(cx + titleWidth + 6, mid - (line - 8) / 2 + 1, machineWidth, line - 8), StringAlignment.Near);
+                                Text(g, session.Rate, body, fade(p.Text), cr - rateWidth, mid - (line - 8) / 2);
                             }
                             if (hits != null && fullTitle > titleWidth) hits.Add(Tuple.Create(titleBox, "tip:" + session.Title));
-                            rowTop += Row;
+                            Place("session." + sessionIndex + ".title", titleBox);
+                            Place("session." + sessionIndex + ".rate", new RectangleF(cr - rateWidth, mid - (line - 8) / 2, rateWidth, line - 8));
+                            sessionIndex++;
+                            rowTop += line;
                         }
                         y += h + Gap;
                     }
@@ -665,21 +751,31 @@ namespace Observatory
 
                 // The footer band: Open dashboard, Refresh (every source read again now) and when the data was made.
                 y += 2;
-                var open = new RectangleF(left, y + 15, Measure(g, "Open dashboard", body) + 26, 30);
-                var refresh = new RectangleF(open.Right + 8, y + 15, Measure(g, "Refresh", body) + 26, 30);
+                float buttonHeight = (float)Math.Max(30, Math.Ceiling(body.GetHeight(g)) + 12), textTop = (buttonHeight - body.GetHeight(g)) / 2;
+                var open = new RectangleF(left, y + 15, Measure(g, "Open dashboard", body) + 26, buttonHeight);
+                var refresh = new RectangleF(open.Right + 8, y + 15, Measure(g, "Refresh", body) + 26, buttonHeight);
+                string status = s.Refreshing ? "Refreshing…" : s.Old && s.Updated.HasValue ? "Updated " + Format.Age(s.Now - s.Updated.Value) : s.UpdatedText;
+                float statusWidth = status == null ? 0 : Measure(g, status, small) + 1, statusHeight = (float)Math.Ceiling(small.GetHeight(g));
+                // The time sits at the right of the buttons when it fits, else on its own line under them.
+                bool beside = refresh.Right + 12 + statusWidth <= right;
+                var statusBox = beside ? new RectangleF(right - statusWidth, open.Y + (buttonHeight - statusHeight) / 2, statusWidth, statusHeight)
+                    : new RectangleF(left, open.Bottom + 8, Math.Min(statusWidth, right - left), statusHeight);
+                float footerHeight = beside ? Math.Max(FooterHeight, buttonHeight + 30) : buttonHeight + 30 + statusHeight + 8;
                 if (hits != null) { hits.Add(Tuple.Create(open, "dashboard")); if (!s.Refreshing) hits.Add(Tuple.Create(refresh, "refresh")); }
+                Place("footer.open", open);
+                Place("footer.refresh", refresh);
+                if (status != null) Place("footer.updated", statusBox);
                 if (draw)
                 {
-                    using (var brush = new SolidBrush(p.Footer)) g.FillRectangle(brush, new RectangleF(0, y, Width, FooterHeight));
+                    using (var brush = new SolidBrush(p.Footer)) g.FillRectangle(brush, new RectangleF(0, y, Width, footerHeight));
                     using (var pen = new Pen(p.Hairline)) g.DrawLine(pen, 0, y, Width, y);
                     Box(g, p.Button, p.Hairline, open, 4);
-                    Text(g, "Open dashboard", body, p.Text, open.X + 13, open.Y + 7);
+                    Text(g, "Open dashboard", body, p.Text, open.X + 13, open.Y + textTop);
                     Box(g, p.Button, p.Hairline, refresh, 4);
-                    Text(g, "Refresh", body, s.Refreshing ? p.Muted : p.Text, refresh.X + 13, refresh.Y + 7);
-                    string status = s.Refreshing ? "Refreshing…" : s.Old && s.Updated.HasValue ? "Updated " + Format.Age(s.Now - s.Updated.Value) : s.UpdatedText;
-                    if (status != null) Text(g, status, small, s.Old && !s.Refreshing ? p.Warning : p.Muted, right - Measure(g, status, small), y + 23);
+                    Text(g, "Refresh", body, s.Refreshing ? p.Muted : p.Text, refresh.X + 13, refresh.Y + textTop);
+                    if (status != null) Line(g, status, small, s.Old && !s.Refreshing ? p.Warning : p.Muted, statusBox, StringAlignment.Near);
                 }
-                y += FooterHeight;
+                y += footerHeight;
                 return (int)Math.Ceiling(y);
             }
         }
@@ -1146,13 +1242,47 @@ namespace Observatory
             var state = (PanelState.Get(json, "schema") as string) == PanelState.GlanceSchema ? PanelState.ParseGlance(json, now) : PanelState.Parse(json, now);
             int status = Array.IndexOf(args, "--sign-in");
             state.ApplySignIn(status >= 0 && status + 1 < args.Length ? ReadJson(args[status + 1]) : null, Array.IndexOf(args, "--signing-in") >= 0);
+            Painter.TextScale = TextScale(args);
             using (var image = Painter.Render(state, args[at + 3] == "dark", 2)) image.Save(args[at + 2], System.Drawing.Imaging.ImageFormat.Png);
+            return 0;
+        }
+
+        // `--text-scale 1.4` draws the panel's text that much larger, for checking that it still fits.
+        static float TextScale(string[] args)
+        {
+            int at = Array.IndexOf(args, "--text-scale");
+            double value;
+            if (at < 0 || at + 1 >= args.Length || !double.TryParse(args[at + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out value) || value < 0.5 || value > 3) return 1;
+            return (float)value;
+        }
+
+        // `ObservatoryGlance.exe --layout glance.json out.json [now] [--text-scale n]` lays the panel out without drawing it
+        // and writes where each named part landed, as JSON: {"width", "height", "frames": {name: [x, y, width, height]}}.
+        // test/panel-layout.test.mjs reads it to check that no two parts of a row overlap and nothing leaves the panel.
+        static int Layout(string[] args)
+        {
+            int at = Array.IndexOf(args, "--layout");
+            if (args.Length < at + 3) return 2;
+            var json = ReadJson(args[at + 1]);
+            if (json == null) return 2;
+            DateTime now = args.Length > at + 3 && PanelState.Date(args[at + 3]).HasValue ? PanelState.Date(args[at + 3]).Value : DateTime.UtcNow;
+            var state = (PanelState.Get(json, "schema") as string) == PanelState.GlanceSchema ? PanelState.ParseGlance(json, now) : PanelState.Parse(json, now);
+            Painter.TextScale = TextScale(args);
+            Painter.Frames = new Dictionary<string, RectangleF>();
+            int height;
+            using (var probe = new Bitmap(1, 1))
+            using (var g = Graphics.FromImage(probe)) height = Painter.Paint(g, state, Palette.Of(false), false, null);
+            Func<float, string> n = value => value.ToString("0.##", CultureInfo.InvariantCulture);
+            var frames = Painter.Frames.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => "\"" + pair.Key + "\":[" + n(pair.Value.X) + "," + n(pair.Value.Y) + "," + n(pair.Value.Width) + "," + n(pair.Value.Height) + "]");
+            File.WriteAllText(args[at + 2], "{\"width\":" + Painter.Width + ",\"height\":" + height + ",\"frames\":{" + string.Join(",", frames) + "}}");
             return 0;
         }
 
         [STAThread]
         static int Main(string[] args)
         {
+            if (Array.IndexOf(args, "--layout") >= 0) return Layout(args);
             if (Array.IndexOf(args, "--render") >= 0) return Render(args);
             UseMonitorDpi();
             bool created;

@@ -19,6 +19,10 @@ struct LimitRow: Identifiable, Equatable {
   let percent: String
   let resets: String?
   let tone: String
+  // "as of Tue 9:50 AM" when the value is an old reading. Drawn on its own line under the row.
+  var asOf: String? = nil
+  // The whole row in words, for VoiceOver and the tooltip, so nothing cut short is lost.
+  var label: String { [name, percent == "Unknown" || percent == "Off" ? percent : "\(percent) used", resets.map { "resets \($0)" }, asOf].compactMap { $0 }.joined(separator: ", ") }
 }
 
 struct SessionRow: Identifiable, Equatable {
@@ -165,7 +169,7 @@ struct PanelState: Equatable {
     state.limits = (json["limits"] as? [[String: Any]] ?? []).enumerated().map { index, row in
       LimitRow(id: "\(index)", engine: row["engine"] as? String ?? "", name: row["name"] as? String ?? "Unknown",
                fraction: share(row["fraction"]), percent: row["percent"] as? String ?? "Unknown",
-               resets: row["resets"] as? String, tone: row["tone"] as? String ?? "muted")
+               resets: row["resets"] as? String, tone: row["tone"] as? String ?? "muted", asOf: row["asOf"] as? String)
     }
     if let running = json["running"] as? [String: Any] {
       state.runningTitle = running["title"] as? String
@@ -294,13 +298,42 @@ final class PanelModel: ObservableObject {
   var quit: () -> Void = {}
 }
 
+// Text size for the panel, 1 by default. `--render` and `--layout` take `--text-scale` to check that every row still fits
+// with larger text: nothing in the panel has a fixed width that text must fit into.
+private struct TextScaleKey: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+extension EnvironmentValues {
+  var panelTextScale: CGFloat {
+    get { self[TextScaleKey.self] }
+    set { self[TextScaleKey.self] = newValue }
+  }
+}
+
+// Where each part of the panel was laid out, by name, in the panel's own coordinates. `--layout` prints them, and
+// test/panel-layout.test.mjs fails when two parts of a row overlap or a part leaves the panel.
+struct PanelFrames: PreferenceKey {
+  static let defaultValue: [String: CGRect] = [:]
+  static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue()) { $1 } }
+}
+
+extension View {
+  func measured(_ name: String) -> some View {
+    background(GeometryReader { geometry in
+      Color.clear.preference(key: PanelFrames.self, value: [name: geometry.frame(in: .named(PanelView.space))])
+    })
+  }
+}
+
 struct PanelView: View {
   @ObservedObject var model: PanelModel
   // The live panel sits on the system popover material. A render to PNG has no window behind it.
   var opaque = false
   @Environment(\.colorScheme) private var scheme
+  @Environment(\.panelTextScale) private var textScale
 
   static let width: CGFloat = 336
+  static let space = "panel"
+
+  func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size * textScale, weight: weight) }
 
   // The headline bar takes the forecast's tone: out reads as an error, runs-out as a warning.
   func tone(_ state: PanelState, _ palette: Palette) -> Color {
@@ -322,6 +355,18 @@ struct PanelView: View {
       }
     }
     .frame(height: height)
+  }
+
+  // Two texts on one line, one at each end. When they do not both fit, the second goes under the first, so neither is
+  // drawn over the other at any text size.
+  func pair<A: View, B: View>(_ first: A, _ second: B) -> some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .firstTextBaseline, spacing: 8) { first.fixedSize(); Spacer(minLength: 8); second.fixedSize() }
+      VStack(alignment: .leading, spacing: 2) {
+        first.fixedSize(horizontal: false, vertical: true)
+        second.fixedSize(horizontal: false, vertical: true)
+      }
+    }
   }
 
   var body: some View {
@@ -347,73 +392,109 @@ struct PanelView: View {
     .padding(.top, 13)
     .padding(.bottom, 12)
     .frame(width: Self.width, alignment: .leading)
+    .coordinateSpace(name: Self.space)
     .background(opaque ? palette.background : Color.clear)
     .foregroundStyle(palette.text)
-    .font(.system(size: 13))
+    .font(font(13))
     .background(shortcuts)
   }
 
   @ViewBuilder func content(_ state: PanelState, _ palette: Palette) -> some View {
     VStack(alignment: .leading, spacing: 5) {
-      Text(state.headline ?? "Unknown").font(.system(size: 14.5, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-      HStack(alignment: .firstTextBaseline, spacing: 8) {
-        Text(state.used ?? "")
-        Spacer(minLength: 8)
-        if let resets = state.resets { Text(resets) }
-      }
-      .font(.system(size: 12)).foregroundStyle(palette.muted)
+      Text(state.headline ?? "Unknown").font(font(14.5, .semibold)).fixedSize(horizontal: false, vertical: true).measured("headline")
+      pair(Text(state.used ?? "").measured("used"), Text(state.resets ?? "").measured("resets"))
+        .font(font(12)).foregroundStyle(palette.muted)
       bar(state.fraction, tone(state, palette), palette, height: 6).padding(.top, 3)
     }
     .accessibilityElement(children: .combine)
     signInView(state, palette)
     if !state.limits.isEmpty {
       Divider()
-      VStack(alignment: .leading, spacing: 7) {
-        ForEach(state.limits) { row in
-          HStack(spacing: 8) {
-            Circle().fill(palette.provider(row.engine)).frame(width: 7, height: 7)
-            Text(row.name).lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            Spacer(minLength: 0)
-            bar(row.fraction, palette.provider(row.engine), palette, height: 4).frame(width: 48)
-            Text(row.percent).monospacedDigit().foregroundStyle(limitTone(row, palette)).lineLimit(1).fixedSize().frame(minWidth: 36, alignment: .trailing)
-            Text(row.resets ?? "").font(.system(size: 11.5)).foregroundStyle(palette.muted).lineLimit(1).fixedSize().frame(width: 70, alignment: .trailing)
+      // One line per limit, in a grid so the bars, values and resets line up and each column is as wide as its longest
+      // text. When that does not fit the panel (long values or large text), each limit takes two lines instead: its
+      // name and bar, then its value and reset. Names are cut with an ellipsis before anything else, values never are.
+      ViewThatFits(in: .horizontal) {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 7) {
+          ForEach(state.limits) { row in
+            GridRow(alignment: .center) {
+              Circle().fill(palette.provider(row.engine)).frame(width: 7, height: 7)
+              VStack(alignment: .leading, spacing: 1) {
+                Text(row.name).lineLimit(1).truncationMode(.tail).measured("limit.\(row.id).name")
+                if let asOf = row.asOf {
+                  Text(asOf).font(font(11.5)).foregroundStyle(palette.muted).lineLimit(1).truncationMode(.tail).measured("limit.\(row.id).asOf")
+                }
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              bar(row.fraction, palette.provider(row.engine), palette, height: 4)
+                .frame(minWidth: 16, idealWidth: 48, maxWidth: 48).measured("limit.\(row.id).bar")
+              Text(row.percent).monospacedDigit().foregroundStyle(limitTone(row, palette)).fixedSize()
+                .gridColumnAlignment(.trailing).measured("limit.\(row.id).value")
+              Text(row.resets ?? "").font(font(11.5)).foregroundStyle(palette.muted).fixedSize()
+                .gridColumnAlignment(.trailing).measured("limit.\(row.id).resets")
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.label)
+            .help(row.label)
           }
-          .accessibilityElement(children: .combine)
+        }
+        VStack(alignment: .leading, spacing: 7) {
+          ForEach(state.limits) { row in
+            VStack(alignment: .leading, spacing: 2) {
+              HStack(spacing: 8) {
+                Circle().fill(palette.provider(row.engine)).frame(width: 7, height: 7)
+                Text(row.name).lineLimit(1).truncationMode(.tail).measured("limit.\(row.id).name")
+                Spacer(minLength: 8)
+                bar(row.fraction, palette.provider(row.engine), palette, height: 4)
+                  .frame(minWidth: 16, idealWidth: 48, maxWidth: 48).measured("limit.\(row.id).bar")
+              }
+              pair(Text(row.percent).monospacedDigit().foregroundStyle(limitTone(row, palette)).measured("limit.\(row.id).value"),
+                   Text(row.resets ?? "").font(font(11.5)).foregroundStyle(palette.muted).measured("limit.\(row.id).resets"))
+                .padding(.leading, 15)
+              if let asOf = row.asOf {
+                Text(asOf).font(font(11.5)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
+                  .padding(.leading, 15).measured("limit.\(row.id).asOf")
+              }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.label)
+            .help(row.label)
+          }
         }
       }
     }
     if let title = state.runningTitle {
       Divider()
       VStack(alignment: .leading, spacing: 7) {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(title).fontWeight(.semibold)
-          Spacer(minLength: 8)
-          Text(state.runningSummary ?? "")
-        }
-        .font(.system(size: 12)).foregroundStyle(palette.muted)
+        pair(Text(title).fontWeight(.semibold).measured("running.title"), Text(state.runningSummary ?? "").measured("running.summary"))
+          .font(font(12)).foregroundStyle(palette.muted)
         ForEach(state.sessions) { session in
           HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("\(Text(session.title))  \(Text(session.machine).font(.system(size: 11.5)).foregroundColor(palette.muted))")
-              .lineLimit(1).truncationMode(.tail)
+            Text("\(Text(session.title))  \(Text(session.machine).font(font(11.5)).foregroundColor(palette.muted))")
+              .lineLimit(1).truncationMode(.tail).measured("session.\(session.id).title")
             Spacer(minLength: 8)
-            Text(session.rate).monospacedDigit()
+            Text(session.rate).monospacedDigit().fixedSize().measured("session.\(session.id).rate")
           }
           .accessibilityElement(children: .combine)
+          .help("\(session.title), \(session.machine), \(session.rate)")
         }
       }
     }
     if let flag = state.flag {
       Divider()
       HStack(alignment: .top, spacing: 9) {
-        Text("\(flag.count)").font(.system(size: 10.5, weight: .semibold)).monospacedDigit()
+        Text("\(flag.count)").font(font(10.5, .semibold)).monospacedDigit()
           .foregroundStyle(scheme == .dark ? Color.black.opacity(0.8) : Color.white)
-          .frame(width: 18, height: 18)
+          .frame(minWidth: 18 * textScale, minHeight: 18 * textScale)
           .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(palette.warning))
-        if let subject = flag.subject {
-          Text("\(Text(subject).fontWeight(.semibold)) \(flag.text)")
-        } else {
-          Text(flag.text)
+          .measured("flag.count")
+        Group {
+          if let subject = flag.subject {
+            Text("\(Text(subject).fontWeight(.semibold)) \(flag.text)")
+          } else {
+            Text(flag.text)
+          }
         }
+        .measured("flag.text")
       }
       .fixedSize(horizontal: false, vertical: true)
       .accessibilityElement(children: .combine)
@@ -427,7 +508,7 @@ struct PanelView: View {
       VStack(alignment: .leading, spacing: 8) {
         let line = state.signInMessage ?? sign.text
         if !line.isEmpty {
-          Text(line).font(.system(size: 12)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
+          Text(line).font(font(12)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
         }
         if sign.here || state.signingIn {
           Button(state.signingIn ? sign.running : sign.button, action: model.signIn)
@@ -444,9 +525,9 @@ struct PanelView: View {
   }
 
   func footer(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack(spacing: 8) {
+    let buttons = HStack(spacing: 8) {
       Button("Open dashboard", action: model.openDashboard)
-        .buttonStyle(Push(palette: palette)).keyboardShortcut("d")
+        .buttonStyle(Push(palette: palette)).keyboardShortcut("d").measured("footer.open")
       // Reads every source again now, the same as the five-minute tick. An icon, so the footer keeps room for the
       // time; the spinner takes its place while a read runs.
       if state.refreshing {
@@ -454,15 +535,22 @@ struct PanelView: View {
       } else {
         Button(action: model.refresh) { Image(systemName: "arrow.clockwise") }
           .buttonStyle(Push(palette: palette)).keyboardShortcut("r").help("Refresh").accessibilityLabel("Refresh")
+          .measured("footer.refresh")
       }
-      Spacer(minLength: 8)
+    }
+    let updated = Group {
       if state.old, let updated = state.updated {
         Text("Updated \(Format.age(state.now.timeIntervalSince(updated)))").foregroundStyle(palette.warning)
       } else if let text = state.updatedText {
         Text(text).foregroundStyle(palette.muted)
       }
     }
-    .font(.system(size: 12))
+    .measured("footer.updated")
+    return ViewThatFits(in: .horizontal) {
+      HStack(spacing: 8) { buttons; Spacer(minLength: 8); updated.fixedSize() }
+      VStack(alignment: .leading, spacing: 6) { buttons; updated.fixedSize(horizontal: false, vertical: true) }
+    }
+    .font(font(12))
   }
 
   // Quit lives in the right-click menu. Its key still works while the panel is open.
@@ -478,10 +566,11 @@ struct PanelView: View {
 struct Push: ButtonStyle {
   let palette: Palette
   @Environment(\.colorScheme) private var scheme
+  @Environment(\.panelTextScale) private var textScale
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.system(size: 13))
+      .font(.system(size: 13 * textScale))
       .padding(.horizontal, 11)
       .frame(minHeight: 24)
       .fixedSize()
@@ -922,7 +1011,7 @@ extension ISO8601DateFormatter {
   }()
 }
 
-// `Observatory --render glance.json|combined.json out.png light|dark [now-iso] [--sign-in sign-in.json] [--signing-in]`
+// `Observatory --render glance.json|combined.json out.png light|dark [now-iso] [--sign-in sign-in.json] [--signing-in] [--text-scale n]`
 // draws the panel to a PNG without a menu bar, for checking the layout and for documentation screenshots.
 @MainActor func render(_ arguments: [String]) -> Int32 {
   guard arguments.count >= 4, let data = FileManager.default.contents(atPath: arguments[1]),
@@ -937,11 +1026,46 @@ extension ISO8601DateFormatter {
   let status = all.firstIndex(of: "--sign-in").flatMap { $0 + 1 < all.count ? Glance.json(URL(fileURLWithPath: all[$0 + 1])) : nil }
   model.state.applySignIn(status, running: all.contains("--signing-in"))
   let scheme: ColorScheme = arguments[3] == "dark" ? .dark : .light
-  let renderer = ImageRenderer(content: PanelView(model: model, opaque: true).environment(\.colorScheme, scheme))
+  let renderer = ImageRenderer(content: PanelView(model: model, opaque: true).environment(\.colorScheme, scheme).environment(\.panelTextScale, textScale(all)))
   renderer.scale = 2
   guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
         let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return 1 }
   do { try png.write(to: URL(fileURLWithPath: arguments[2])) } catch { return 1 }
+  return 0
+}
+
+// `--text-scale 1.4` draws the panel's text that much larger, for checking that it still fits.
+func textScale(_ all: [String]) -> CGFloat {
+  guard let at = all.firstIndex(of: "--text-scale"), at + 1 < all.count, let value = Double(all[at + 1]), value >= 0.5, value <= 3 else { return 1 }
+  return CGFloat(value)
+}
+
+// `Observatory --layout glance.json out.json [now-iso] [--text-scale n]` lays the panel out in a window that is never
+// shown and writes where each named part landed, as JSON: {"width", "height", "frames": {name: [x, y, width, height]}}.
+// test/panel-layout.test.mjs reads it to check that no two parts of a row overlap and nothing leaves the panel.
+@MainActor func layout(_ arguments: [String]) -> Int32 {
+  guard arguments.count >= 3, let data = FileManager.default.contents(atPath: arguments[1]),
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+    FileHandle.standardError.write("usage: --layout glance.json out.json [now] [--text-scale n]\n".data(using: .utf8)!)
+    return 2
+  }
+  let now = arguments.count > 3 ? PanelState.date(arguments[3]) ?? Date() : Date()
+  let model = PanelModel()
+  model.state = Glance.state(glance: json, combined: { json }, now: now) ?? PanelState(notice: .collecting)
+  var frames: [String: CGRect] = [:]
+  let view = PanelView(model: model, opaque: true).environment(\.panelTextScale, textScale(CommandLine.arguments))
+    .onPreferenceChange(PanelFrames.self) { frames = $0 }
+  let host = NSHostingView(rootView: view)
+  let size = host.fittingSize
+  host.frame = NSRect(origin: .zero, size: size)
+  let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+  window.contentView = host
+  host.layoutSubtreeIfNeeded()
+  for _ in 0..<5 { RunLoop.main.run(until: Date().addingTimeInterval(0.05)); host.layoutSubtreeIfNeeded() }
+  let out: [String: Any] = ["width": size.width, "height": size.height,
+                            "frames": frames.mapValues { [$0.minX, $0.minY, $0.width, $0.height] }]
+  guard let text = try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]) else { return 1 }
+  do { try text.write(to: URL(fileURLWithPath: arguments[2])) } catch { return 1 }
   return 0
 }
 
@@ -1025,6 +1149,9 @@ if let flag = arguments.firstIndex(of: "--render-icon") {
 }
 if let flag = arguments.firstIndex(of: "--app-icons") {
   exit(MainActor.assumeIsolated { appIcons(Array(arguments[flag...])) })
+}
+if let flag = arguments.firstIndex(of: "--layout") {
+  exit(MainActor.assumeIsolated { layout(Array(arguments[flag...])) })
 }
 if let flag = arguments.firstIndex(of: "--render") {
   exit(MainActor.assumeIsolated { render(Array(arguments[flag...])) })
