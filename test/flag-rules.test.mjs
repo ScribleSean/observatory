@@ -7,18 +7,20 @@ import {combine} from '../lib/combine.mjs';
 import {summaryOf} from '../lib/summary.mjs';
 import {ownSnapshot} from './helpers.mjs';
 
-const base={subagents:0,shipped:{merges:0},signals:{},kinds:[]};
+const base={subagents:0,shipped:{merges:0,onMain:0},signals:{},kinds:[]};
 const kinds=flags=>flags.map(flag=>flag.kind);
 const none=()=>null;
 
-test('fan-out needs enough subagents, enough share, and no merge',()=>{
+test('fan-out needs enough subagents, enough share, and nothing landed',()=>{
   const ok={...base,subagents:FANOUT_MIN_SUBAGENTS};
   assert.deepEqual(sessionFlags(ok,{share:FANOUT_MIN_SHARE,shareOf:none}),[{kind:'fanout',tone:'warn',values:{subagents:FANOUT_MIN_SUBAGENTS,share:FANOUT_MIN_SHARE,merged:false}}]);
   assert.deepEqual(sessionFlags({...ok,subagents:FANOUT_MIN_SUBAGENTS-1},{share:50,shareOf:none}),[]);
   assert.deepEqual(sessionFlags(ok,{share:FANOUT_MIN_SHARE-0.1,shareOf:none}),[]);
   assert.deepEqual(sessionFlags(ok,{share:null,shareOf:none}),[]);
-  assert.deepEqual(sessionFlags({...ok,shipped:{merges:1}},{share:50,shareOf:none}),[]);
-  assert.deepEqual(sessionFlags({...ok,shipped:{merges:null}},{share:50,shareOf:none}),[],'an unknown merge count is not a flag');
+  assert.deepEqual(sessionFlags({...ok,shipped:{merges:1,onMain:0}},{share:50,shareOf:none}),[]);
+  assert.deepEqual(sessionFlags({...ok,shipped:{merges:0,onMain:15}},{share:50,shareOf:none}),[],'commits on main are work that landed');
+  assert.deepEqual(sessionFlags({...ok,shipped:{merges:0,onMain:null}},{share:50,shareOf:none}),[],'an unknown count on main is not a flag');
+  assert.deepEqual(sessionFlags({...ok,shipped:{merges:null,onMain:0}},{share:50,shareOf:none}),[],'an unknown merge count is not a flag');
 });
 
 test('model fit uses the window share, and dollars only when the share is unknown',()=>{

@@ -29,7 +29,7 @@ const base = {
   running: { title: 'Running now', count: 2, ratePerHour: null, summary: '2 sessions', sessions: [
     { title: 'Planner: weekly review', machine: 'Studio Mac', ratePerHour: null, rate: 'Unknown' },
     { title: 'Runner: job queue', machine: 'Studio Mac', ratePerHour: 0.4, rate: '0.4%/h' }] },
-  flag: { count: 1, subject: 'Planner: weekly review', text: 'fanned out to 51 subagents and took 30% of the week. No branch merged.' },
+  flag: { count: 1, subject: 'Planner: weekly review', text: 'fanned out to 51 subagents and took 30% of the week. Nothing landed on main.' },
 };
 const limit = (engine, name, percent, fraction, resets, extra = {}) => ({ engine, name, fraction, percent, resets, tone: fraction === null ? 'muted' : 'normal', asOf: null, ...extra });
 

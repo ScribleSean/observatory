@@ -178,7 +178,7 @@ test('running now lists live sessions on every computer with their pace',()=>{
 test('flags name the session, rank by share with retry loops last, and stop at four',()=>{
   const view=weekView(feed(),{now});
   assert.deepEqual(view.flags.map(flag=>[flag.tone,flag.lead,flag.rest]),[
-    ['warn','Release review','fanned out to 372 subagents and took 29% of the week. No branch merged.'],
+    ['warn','Release review','fanned out to 372 subagents and took 29% of the week. Nothing landed on main.'],
     ['note','Opus did search work','in 212 subagents. The smallest model would have cut the week by about 9.6%.'],
     ['warn','Package updates','repeated one failing Shell call 14 times.']]);
   assert.ok(view.flags.every(flag=>view.table.rows.some(row=>row.key===flag.session) || flag.session.includes('.codex.')));

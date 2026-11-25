@@ -134,10 +134,10 @@ test('work kinds come from the agent type, then the task',()=>{
   assert.equal(workKind(null,'Lunch'),'other');
 });
 
-test('flags: fan-out without a merge, model fit, retry loop and auto-resume, ranked and capped',()=>{
+test('flags: fan-out with nothing landed, model fit, retry loop and auto-resume, ranked and capped',()=>{
   const base={title:'Rake leaves',apiUsd:40,subagents:0,shipped:{merges:1},signals:{}};
   const period={apiUsd:100,sessions:[
-    {...base,id:'aaaaaaaaaaaa',subagents:FANOUT_MIN_SUBAGENTS,shipped:{merges:0}},
+    {...base,id:'aaaaaaaaaaaa',subagents:FANOUT_MIN_SUBAGENTS,shipped:{merges:0,onMain:0}},
     {...base,id:'bbbbbbbbbbbb',signals:{searchOnTopModelUsd:30,searchOnSmallModelUsd:1}},
     {...base,id:'cccccccccccc',signals:{longestRetry:RETRY_MIN,retryTool:'Shell'}},
     {...base,id:'dddddddddddd',signals:{autoResumeUsd:12}},
@@ -148,7 +148,7 @@ test('flags: fan-out without a merge, model fit, retry loop and auto-resume, ran
   assert.equal(flags.length,MAX_FLAGS);
   assert.deepEqual(flags.map(flag=>flag.kind),['fanout','model-fit','auto-resume','auto-resume']);
   assert.equal(flags[0].values.share,20);
-  assert.equal(flagText(flags[0]),'Rake leaves fanned out to 15 subagents and took 20% of the week. No branch merged.');
+  assert.equal(flagText(flags[0]),'Rake leaves fanned out to 15 subagents and took 20% of the week. Nothing landed on main.');
   assert.match(flagText(flags[3]),/^A session went on by itself/);
   assert.match(flagText({kind:'retry-loop',sessionId:'c',values:{title:'Rake leaves',count:5,tool:'Shell'}}),/retried one Shell call 5 times/);
   assert.deepEqual(ledgerFlags({apiUsd:null,sessions:[]},null),[]);
