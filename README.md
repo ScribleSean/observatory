@@ -116,6 +116,16 @@ A source is read only while it is `true`. Run `npm run setup` after a change. Op
 
 `appFolder` gives the weekly limit the app last read, which counts as current until the app's own expiry (at most a day). `requestLog` is one JSON object per line with an ISO time in `at`; only the count per day is kept. With a log and no limit, the tile shows today's requests and no percent. Without `sources.grokLimits` or either path there is no Grok tile. A limit reading older than a day stops counting.
 
+**Self-check.** After every run the hub checks what it read. A metric that reads Unknown or late on a computer that is on, with its source on, is a problem. Problems are kept in the data folder, and one that lasts 30 minutes can file a ticket in a Markdown work queue: a table whose first column is the row number. Set `selfCheck.tickets` to turn that on:
+
+```json
+"selfCheck": { "tickets": { "file": "/absolute/path/to/QUEUE.md", "lock": "/absolute/path/to/lock-program", "engine": "agent", "commit": true } }
+```
+
+`lock` is optional: a program run as `<lock> run <owner> -- <command>` around the write. `commit` commits only that file with git. A ticket is filed once per computer and metric. It is filed again only if the queue no longer has it open and the problem is still there a day later.
+
+**Archive.** Set `"archive": { "folder": "/absolute/path" }` to keep every reading for good as JSON Lines, one file per computer and day. Observatory only appends to it. See [Raw archive](docs/RAW-ARCHIVE.md).
+
 On a Windows PC, set `"wsl": true` under `sources` to also count the Claude Code and Codex logs inside WSL toward that PC. See [Several computers](docs/SEVERAL-COMPUTERS.md#wsl-on-the-pc).
 
 ## Ask Claude for a view (optional)

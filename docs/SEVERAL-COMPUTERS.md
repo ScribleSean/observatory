@@ -102,3 +102,11 @@ To turn a computer off on purpose, set `"off": true` on its entry:
 ```
 
 The hub then does not reach it over SSH. Every menu, tray and dashboard shows it as Off instead of the time of its last reading, and its earlier sessions still count in the week. A computer that is on in the settings but cannot be reached still shows the time of its last reading. Remove the setting, or set it to `false`, to turn the computer back on.
+
+If something else on the hub already records whether a computer is off, point `offSwitch` at that file instead. The hub reads it on every run:
+
+```json
+{ "name": "PC", "ssh": "my-pc", "platform": "windows", "offSwitch": "/absolute/path/to/pc.json" }
+```
+
+The file holds `{"state": "off", "since": "2026-11-18"}` while the computer is off. A missing file, a file that cannot be read, or any other state means on. While it is off, the Drift view shows "Off (since Nov 18)" and leaves the computer out of its counts and comparisons. Without a `since` date it names the day of the last reading.

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
-import {runHub,recombine,MAX_PEER_BYTES,peerBytes} from '../scripts/hub.mjs';
+import {runHub,recombine,switchedOff,MAX_PEER_BYTES,peerBytes} from '../scripts/hub.mjs';
 import {combine} from '../lib/combine.mjs';
 import {serializeSnapshot,snapshotHistoryBudget} from '../scripts/snapshot-size.mjs';
 import {pullCommand,pushCommand,sshEnvironment,sshTransport,stagedName,MAX_FILE_BYTES} from '../scripts/hub-transport.mjs';
@@ -357,4 +357,30 @@ test('with three computers each large snapshot gets a third of the room, so the 
   const text=await readFile(path.join(folder,'public','local','combined.json'),'utf8');
   assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES,`${Buffer.byteLength(text)} bytes`);
   assert.ok(peerBytes(3)<MAX_PEER_BYTES && peerBytes(2)===MAX_PEER_BYTES);
+}));
+
+test('a switch file turns a spoke off with its date, and a missing or broken one leaves it on',()=>withFolder(async folder=>{
+  const file=path.join(folder,'pc.json');
+  const spoke={...pc,offSwitch:file};
+  assert.deepEqual(await switchedOff(spoke),{off:false,since:null},'no file is on');
+  await writeFile(file,'{not json');
+  assert.deepEqual(await switchedOff(spoke),{off:false,since:null},'a file that cannot be read is on');
+  await writeFile(file,JSON.stringify({state:'on',since:'2026-10-01'}));
+  assert.equal((await switchedOff(spoke)).off,false);
+  await writeFile(file,JSON.stringify({state:'off',since:'2026-10-18',by:'someone'}));
+  assert.deepEqual(await switchedOff(spoke),{off:true,since:'2026-10-18'});
+  assert.deepEqual(await switchedOff({...spoke,off:true}),{off:true,since:null},'off in the settings wins');
+  // The hub then does not reach it, and every surface gets the date.
+  await seed(folder,'usage.json',ownSnapshot('Mac',now));
+  const transport=fakeTransport(Error('must not be reached'));
+  const combined=await runHub(testConfig(folder,{role:'hub',hub:{spokes:[spoke]}}),{transport,now:()=>now});
+  assert.equal(combined.hub.spokes[0].pull,'off');
+  const device=combined.devices.find(item=>item.host==='Windows');
+  assert.deepEqual([device.state,device.offSince],['off','2026-10-18']);
+  const {deviceChips}=await import('../lib/scope.mjs');
+  assert.equal(deviceChips(combined,null,{now}).find(chip=>chip.host==='Windows').offSince,'2026-10-18');
+  // Turned back on: the hub reaches it again.
+  await writeFile(file,JSON.stringify({state:'on',since:'2026-10-21'}));
+  const again=await runHub(testConfig(folder,{role:'hub',hub:{spokes:[spoke]}}),{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now))),now:()=>now});
+  assert.equal(again.hub.spokes[0].pull,'ok');
 }));

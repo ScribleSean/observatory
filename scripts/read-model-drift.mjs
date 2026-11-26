@@ -8,17 +8,19 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 import {writeAtomic} from '../lib/atomic-file.mjs';
-import {binOf,EFFORTS,MODEL_NAME} from '../lib/drift.mjs';
+import {binOf,EFFORTS,MODEL_NAME,SPEEDS} from '../lib/drift.mjs';
 
 export const KEEP_DAYS=45;
 export const MAX_FILES=50_000;
+// The most transcript bytes one run parses. Files read before come from the cache and cost nothing, so they
+// do not count. A first read of a larger folder saves what it parsed and finishes on the next runs.
 export const MAX_TOTAL_BYTES=4*1024*1024*1024;
 export const MAX_LINE_BYTES=4*1024*1024;
 // A gap longer than this between the request and the reply is the user away, not the model working.
 export const MAX_REPLY_SECONDS=30*60;
 const CACHE_FILE='model-drift.json';
-// 2: each file's numbers also count tool calls.
-const CACHE_VERSION=2;
+// 2: each file's numbers also count tool calls. 3: and each reply's speed.
+const CACHE_VERSION=3;
 
 function dayFormatter(timeZone) {
   const format=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'});
@@ -26,7 +28,7 @@ function dayFormatter(timeZone) {
 }
 
 function emptyStats() {
-  return {replies:0,retries:0,toolCalls:0,thinking:{},replySeconds:{},outputTokens:{},efforts:{}};
+  return {replies:0,retries:0,toolCalls:0,thinking:{},replySeconds:{},outputTokens:{},efforts:{},speeds:{}};
 }
 
 function addTo(histogram,value) {
@@ -74,7 +76,7 @@ function driftParser({timeZone=TIME_ZONE}={}) {
     const id=typeof message.id==='string'?message.id:typeof entry.requestId==='string'?entry.requestId:`line-${replies.size}`;
     let reply=replies.get(id);
     if(!reply) {
-      reply={model:message.model,requestAt:lastRequestAt,lastAt:at,output:0,thinkingMs:0,effort:null,tools:new Set()};
+      reply={model:message.model,requestAt:lastRequestAt,lastAt:at,output:0,thinkingMs:0,effort:null,speed:null,tools:new Set()};
       replies.set(id,reply);
     }
     reply.lastAt=Math.max(reply.lastAt,at);
@@ -83,6 +85,8 @@ function driftParser({timeZone=TIME_ZONE}={}) {
     const thinking=entry.thinkingDurationMs;
     if(typeof thinking==='number' && Number.isFinite(thinking) && thinking>reply.thinkingMs)reply.thinkingMs=thinking;
     if(typeof entry.effort==='string')reply.effort=EFFORTS.includes(entry.effort)?entry.effort:'other';
+    const speed=message.usage?.speed;
+    if(typeof speed==='string')reply.speed=SPEEDS.includes(speed)?speed:'other';
     // A reply is written once per block as it streams, so a tool call is counted by its id.
     if(Array.isArray(message.content))for(const block of message.content)
       if(block?.type==='tool_use' && typeof block.id==='string')reply.tools.add(block.id);
@@ -100,6 +104,8 @@ function driftParser({timeZone=TIME_ZONE}={}) {
       }
       const effort=reply.effort ?? 'unset';
       stats.efforts[effort]=(stats.efforts[effort] ?? 0)+1;
+      const speed=reply.speed ?? 'unset';
+      stats.speeds[speed]=(stats.speeds[speed] ?? 0)+1;
     }
     return days;
   };
@@ -150,7 +156,8 @@ export function mergeDays(into,from) {
     target.replies+=stats.replies;
     target.retries+=stats.retries;
     target.toolCalls+=stats.toolCalls;
-    for(const key of ['thinking','replySeconds','outputTokens','efforts'])mergeHistogram(target[key],stats[key]);
+    // A day cached before speeds were counted has none.
+    for(const key of ['thinking','replySeconds','outputTokens','efforts','speeds'])mergeHistogram(target[key],stats[key] ?? {});
   }
   return into;
 }
@@ -163,7 +170,8 @@ export function driftRow(days,{now=new Date(),timeZone=TIME_ZONE,keepDays=KEEP_D
   return Object.keys(days).filter(date=>date>=first).sort().map(date=>({date,models:Object.entries(days[date]).sort(([a],[b])=>a.localeCompare(b))
     .map(([model,stats])=>({model,replies:stats.replies,retries:stats.retries,toolCalls:stats.toolCalls,thinking:pairs(stats.thinking),
       replySeconds:pairs(stats.replySeconds),outputTokens:pairs(stats.outputTokens),
-      efforts:Object.fromEntries([...EFFORTS,'other','unset'].map(name=>[name,stats.efforts[name] ?? 0]))}))}));
+      efforts:Object.fromEntries([...EFFORTS,'other','unset'].map(name=>[name,stats.efforts[name] ?? 0])),
+      speeds:Object.fromEntries([...SPEEDS,'other','unset'].map(name=>[name,stats.speeds?.[name] ?? 0]))}))}));
 }
 
 async function walk(directory,found) {
@@ -191,8 +199,9 @@ async function loadCache(directory,timeZone) {
 
 // One Claude folder (a home's .claude) into {date: {model: stats}}. Each file is read again only when
 // its size or modified time changed. The cache keys files by a hash of their relative path.
-// Files untouched since before the kept days cannot add to them, so they are skipped. If the rest is
-// still over the size cap the result is unavailable rather than silently partial.
+// Files untouched since before the kept days cannot add to them, so they are skipped. Only files parsed
+// in this run count toward the size cap. When a run reaches it, the files parsed so far are cached and
+// the result is unavailable rather than silently partial, so the next run starts where this one stopped.
 export async function collectModelDrift(claudeFolder,{cacheDirectory=null,timeZone=TIME_ZONE,now=new Date(),keepDays=KEEP_DAYS,maxBytes=MAX_TOTAL_BYTES}={}) {
   const projects=path.join(claudeFolder,'projects');
   const info=await fs.promises.lstat(projects).catch(()=>null);
@@ -203,18 +212,20 @@ export async function collectModelDrift(claudeFolder,{cacheDirectory=null,timeZo
   const cache=await loadCache(cacheDirectory,timeZone);
   const kept={};
   const days={};
-  let bytes=0;
+  let parsed=0,over=false;
   const oldest=now.getTime()-(keepDays+1)*86400000;
   for(const file of files) {
     const stat=await fs.promises.stat(file).catch(()=>null);
     if(!stat || stat.mtimeMs<oldest)continue;
-    bytes+=stat.size;
-    if(bytes>maxBytes)return {status:'unavailable',days:{}};
     const key=hash(path.relative(projects,file));
     const old=cache.get(key);
     let fileDays;
     if(old && old.size===stat.size && old.mtimeMs===stat.mtimeMs)fileDays=old.days;
-    else fileDays=await driftFromFile(file,{timeZone});
+    else {
+      if(over || parsed+stat.size>maxBytes) {over=true;continue;}
+      parsed+=stat.size;
+      fileDays=await driftFromFile(file,{timeZone});
+    }
     kept[key]={size:stat.size,mtimeMs:stat.mtimeMs,days:fileDays};
     mergeDays(days,fileDays);
   }
@@ -222,7 +233,7 @@ export async function collectModelDrift(claudeFolder,{cacheDirectory=null,timeZo
     // The cache only saves time. The numbers stand without it.
     try {await writeAtomic(path.join(cacheDirectory,CACHE_FILE),JSON.stringify({version:CACHE_VERSION,timeZone,files:kept}));} catch {}
   }
-  return {status:'ok',days};
+  return over?{status:'unavailable',days:{}}:{status:'ok',days};
 }
 
 // Every Claude folder this computer counts as its own (its home and, on a PC, WSL), merged.
