@@ -185,8 +185,9 @@ test('Drift compares every computer against the hub and calls a platform differe
   assert.equal(row('Screen time').state, 'design', 'Linux collects no screen time');
   assert.equal(row('Codex sessions').state, 'differs');
   assert.equal(row('Session titles').values.Linux, 'hashed away');
-  assert.equal(row('Most used model').values.Mac, 'Unknown', 'no settings read is Unknown');
-  assert.equal(row('Most used model').state, 'unknown', 'a setting no computer reported is Unknown, not Same');
+  assert.equal(row('Claude Code model').values.Mac, 'Unknown', 'no replies read is Unknown');
+  assert.equal(row('Claude Code effort').state, 'unknown', 'a setting no computer reported is Unknown, not Same');
+  assert.deepEqual(row('Codex model').values, { Mac: 'off', Windows: 'Unknown', Linux: 'off' }, 'Codex off reads off, Codex on with nothing read is Unknown');
   const markup = clean(html(createElement(DriftBody, { vm: { frame: frame(), models: [], setup: [] }, rows, reference: 'Mac', now: NOW })), 'Drift');
   assert.ok(markup.includes('Studio is the reference') && markup.includes('Differs by design') && markup.includes('Differs'));
   assert.ok(markup.includes('Tower values are from the'), 'a stale computer is named in the footer');
@@ -196,6 +197,34 @@ test('Drift compares every computer against the hub and calls a platform differe
   const lonely = clean(html(createElement(DriftBody, { vm: { frame: frame(), models: [], setup: [] }, rows: alone, reference: 'Mac', now: NOW })), 'Drift alone');
   assert.ok(lonely.includes('Not compared') && lonely.includes('only Studio has been read'));
   assert.ok(!lonely.includes('every computer matches') && !lonely.includes('>Same<') && !lonely.includes('the Unknown read'));
+});
+
+test('Drift reads Claude Code model, effort and speed from replies, and leaves a computer that is off out of every count', () => {
+  const driftRow = (host, model, effort, speed) => ({ host, status: 'ok', days: [{ date: '2026-11-18', models: [{ model, replies: 30,
+    efforts: { [effort]: 30 }, speeds: { [speed]: 30 } }] }] });
+  const echo = view.config.map(item => ({ ...item, sources: { ...item.sources, claudeCode: true, codex: false } }));
+  const drift = [driftRow('Mac', 'claude-opus-5-5', 'medium', 'standard'), driftRow('Windows', 'claude-sonnet-5-5', 'high', 'fast')];
+  const both = setupRows(echo, [], ['Mac', 'Windows'], { drift });
+  const row = (rows, name) => rows.find(item => item.setting === name);
+  assert.deepEqual(row(both, 'Claude Code model').values, { Mac: 'Opus 5.5', Windows: 'Sonnet 5.5' });
+  assert.equal(row(both, 'Claude Code speed').state, 'differs');
+  assert.equal(row(both, 'Codex model').values.Mac, 'off', 'a source turned off reads off, not Unknown');
+  // Windows turned off on purpose: its last values stay in its column, and nothing is compared with them.
+  const offRows = setupRows(echo, [], ['Mac', 'Windows', 'Linux'], { drift, off: ['Windows', 'Linux'] });
+  assert.equal(row(offRows, 'Claude Code speed').state, 'alone');
+  assert.equal(row(offRows, 'Claude Code model').values.Windows, 'Sonnet 5.5');
+  const base = frame();
+  const devices = base.devices.map(device => device.host === 'Mac' ? device : { ...device, off: true, state: 'stale', offSince: device.host === 'Windows' ? '2026-11-18' : null,
+    since: '2026-11-10T12:00:00Z' });
+  const markup = clean(html(createElement(DriftBody, { vm: { frame: { ...base, devices }, models: [], setup: [] }, rows: offRows, reference: 'Mac', now: NOW })), 'Drift off');
+  const text = markup.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.ok(text.includes('Off (since Nov 18)'), 'the switch date is named');
+  assert.ok(text.includes('Off (since Nov 10)'), 'without a switch date, the last read names the day');
+  assert.ok(text.includes('of 1 on'), 'only computers that are on are counted');
+  assert.ok(text.includes('Not compared') && text.includes('is on'), 'one computer on is not compared, not Unknown');
+  assert.ok(!/not read/.test(text), 'an off computer is never listed as not read');
+  const oldest = /Oldest read ([^]*?) ago/.exec(text)?.[1] ?? '';
+  assert.ok(oldest.includes(base.devices.find(device => device.host === 'Mac').name), 'the oldest read is among computers that are on');
 });
 
 test('day, month, year and all time bucket into hours, days, months and weeks with future buckets empty', () => {

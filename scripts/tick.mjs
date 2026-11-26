@@ -10,6 +10,8 @@ import {glanceView} from '../lib/glance-view.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 import {collect} from './collect.mjs';
 import {runHub,recombine} from './hub.mjs';
+import {runSelfCheck} from './self-check.mjs';
+import {archiveReadings} from './raw-archive.mjs';
 
 // The flags shown in the menu bar and tray: lib/ledger-flags.mjs pools every computer's sessions per tool.
 export async function glanceFlags(combined) {
@@ -34,17 +36,35 @@ export async function writeGlance(config,combined,{now=Date.now(),flags=glanceFl
   }
 }
 
-export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=recombine,glanceStep=writeGlance}={}) {
+// The readings to keep for good after a tick: this computer's own snapshot as it was collected and, on the hub,
+// every other computer's snapshot it read just now. A copy carried from an earlier tick adds nothing new.
+export function archivedSnapshots(config,own,combined) {
+  const list=own?[{host:config.host,snapshot:own}]:[];
+  if(config.role==='hub')for(const spoke of combined?.hub?.spokes ?? [])
+    if(spoke.pull==='ok' && combined.snapshots?.[spoke.host])list.push({host:spoke.host,snapshot:combined.snapshots[spoke.host]});
+  return list;
+}
+
+export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=recombine,glanceStep=writeGlance,checkStep=runSelfCheck,archiveStep=archiveReadings}={}) {
   const lockFolder=await privateFolder(config.dataFolder,'.runtime');
   return withRunLock(path.join(lockFolder,'tick.lock'),async()=>{
     const result={role:config.role,collect:'ok'};
-    try {result.sources=(await collectStep(config)).status;}
+    let own=null;
+    try {const collected=await collectStep(config);result.sources=collected.status;own=collected.data ?? null;}
     catch(error) {result.collect=error.message;}
     const combined=config.role==='hub'?await hubStep(config):await spokeStep(config);
     result.combined=combined.generatedAt;
     result.title=combined.glance.title;
     result.glance=await glanceStep(config,combined);
     if(combined.hub?.spokes)result.spokes=combined.hub.spokes;
+    // Neither step can stop the tick: each reports its own failure.
+    try {result.archived=await archiveStep(config,archivedSnapshots(config,own,combined));}
+    catch(error) {result.archived=error.message;}
+    // The hub sees every computer, so it alone checks what reads Unknown or stale.
+    if(config.role==='hub') {
+      try {result.selfCheck=await checkStep(config,combined);}
+      catch(error) {result.selfCheck=error.message;}
+    }
     return result;
   });
 }

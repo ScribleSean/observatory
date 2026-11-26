@@ -300,3 +300,52 @@ test('tool counts pass the combine step, and a row without them still passes',()
   assert.equal(old.devices[0].error,undefined);
   assert.ok(windows(old.view).days.every(day=>day.models.every(model=>model.toolCalls===undefined && model.replies>0)));
 });
+
+test('a folder larger than the cap is read across runs, and files read before do not count toward it',async()=>{
+  const home=await mkdtemp(path.join(tmpdir(),'drift-'));
+  try {
+    const folder=path.join(home,'.claude','projects','p');
+    await mkdir(folder,{recursive:true});
+    const now=new Date('2026-11-12T00:00:00Z');
+    const files=['a','b','c'].map(name=>path.join(folder,`${name}.jsonl`));
+    for(const [index,file] of files.entries()) {
+      await writeFile(file,[user(`2026-11-1${index}T10:00:00Z`),reply(`2026-11-1${index}T10:00:05Z`,{id:`msg_${index}`})].join('\n')+'\n');
+      await utimes(file,now,now);
+    }
+    const one=(await stat(files[0])).size;
+    const cache=path.join(home,'cache');
+    await mkdir(cache);
+    const options={cacheDirectory:cache,timeZone:'UTC',now,maxBytes:Math.ceil(one*1.5)};
+    // The cap allows one file per run: the first runs are unavailable, never partial.
+    assert.equal((await collectModelDrift(path.join(home,'.claude'),options)).status,'unavailable');
+    assert.equal((await collectModelDrift(path.join(home,'.claude'),options)).status,'unavailable');
+    const done=await collectModelDrift(path.join(home,'.claude'),options);
+    assert.equal(done.status,'ok','the third run parses the last file, the other two come from the cache');
+    assert.deepEqual(Object.keys(done.days).sort(),['2026-11-10','2026-11-11','2026-11-12']);
+    // Every run after reads nothing new, however far the folder is past the cap.
+    assert.equal((await collectModelDrift(path.join(home,'.claude'),options)).status,'ok');
+  } finally {await rm(home,{recursive:true,force:true});}
+});
+
+test('each reply counts the speed it ran at, and the latest profile names the busiest model, effort and speed',async()=>{
+  const {latestProfile}=await import('../lib/drift.mjs');
+  const fast=(at,id,model='claude-opus-5-5')=>line({type:'assistant',timestamp:at,effort:'medium',message:{id,model,usage:{output_tokens:10,speed:'fast'},content:[]}});
+  const days=driftFromLines([
+    user('2026-11-11T09:00:00Z'),reply('2026-11-11T09:00:05Z',{id:'old',model:'claude-sonnet-5-5'}),
+    user('2026-11-12T10:00:00Z'),fast('2026-11-12T10:00:05Z','m1'),fast('2026-11-12T10:01:05Z','m2'),reply('2026-11-12T10:02:05Z',{id:'m3',effort:'medium'}),
+    reply('2026-11-12T10:03:05Z',{id:'m4',model:'claude-haiku-5-5'}),
+  ],{timeZone:'UTC'});
+  assert.deepEqual(days['2026-11-12']['claude-opus-5-5'].speeds,{fast:2,unset:1},'a reply without a speed is unset, not standard');
+  const row={host:'Mac',status:'ok',days:driftRow(days,{now:new Date('2026-11-12T12:00:00Z'),timeZone:'UTC'})};
+  assert.deepEqual(latestProfile(row),{date:'2026-11-12',model:'claude-opus-5-5',effort:'medium',speed:'fast'});
+  assert.equal(latestProfile({host:'Mac',status:'unavailable'}),null);
+  // A day whose replies reported no effort or speed gives null, which the dashboard shows as Unknown.
+  const bare=driftFromLines([user('2026-11-12T10:00:00Z'),line({type:'assistant',timestamp:'2026-11-12T10:00:05Z',message:{id:'x',model:'claude-opus-5-5',usage:{output_tokens:1},content:[]}})],{timeZone:'UTC'});
+  const profile=latestProfile({status:'ok',days:driftRow(bare,{now:new Date('2026-11-12T12:00:00Z'),timeZone:'UTC'})});
+  assert.equal(profile.effort,null);
+  assert.equal(profile.speed,null);
+  // The combined view keeps the speeds a computer sends.
+  const at=Date.parse('2026-11-12T12:00:00Z');
+  const combined=combine([{host:'Mac',name:'Mac',snapshot:ownSnapshot('Mac',at,snapshot=>({...snapshot,modelDrift:[row]}))}],{now:at,generatedBy:'Mac'});
+  assert.equal(latestProfile(combined.view.modelDrift.find(item=>item.host==='Mac')).speed,'fast');
+});

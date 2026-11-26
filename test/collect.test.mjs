@@ -134,3 +134,20 @@ test('a backfill tick takes its longer commit join from what the read left, so t
   for(let read=0;read<=150000;read+=5000)
     assert.ok(read+joinMs({started:0,now:read,backfill:true})+ONMAIN_RECHECK_MS+30000<=TICK_DEADLINE_MS,`a read of ${read} ms`);
 });
+
+test('tick keeps its readings and, on the hub only, runs the self-check, and neither can stop it',()=>withFolder(async folder=>{
+  const seen=[];
+  const steps={collectStep:cfg=>collect(cfg,{readers,now:()=>at}),
+    archiveStep:async(cfg,snapshots)=>{seen.push(['archive',snapshots.map(item=>item.host)]);return snapshots.length;},
+    checkStep:async()=>{seen.push(['check']);return {problems:[],filed:[],resolved:[]};}};
+  const spoke=await tick(testConfig(folder),steps);
+  assert.equal(spoke.value.archived,1);
+  assert.deepEqual(seen,[['archive',['Mac']]],'a spoke archives its own snapshot and does not check');
+  seen.length=0;
+  const hub=await tick(testConfig(folder,{role:'hub'}),{...steps,hubStep:async()=>({generatedAt:at.toISOString(),glance:{title:'t'},hub:{role:'hub',spokes:[]}}),glanceStep:async()=>'ok'});
+  assert.deepEqual(seen,[['archive',['Mac']],['check']]);
+  assert.deepEqual(hub.value.selfCheck,{problems:[],filed:[],resolved:[]});
+  const failing=await tick(testConfig(folder,{role:'hub'}),{...steps,hubStep:async()=>({generatedAt:at.toISOString(),glance:{title:'t'},hub:{role:'hub',spokes:[]}}),glanceStep:async()=>'ok',
+    archiveStep:async()=>{throw Error('disk full');},checkStep:async()=>{throw Error('broken');}});
+  assert.deepEqual([failing.value.archived,failing.value.selfCheck,failing.value.glance],['disk full','broken','ok']);
+}));

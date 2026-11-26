@@ -46,6 +46,10 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | WSL logs counted on the PC | `"wsl": true` | `test/token-roots.test.mjs` |
 | Several computers over SSH | `hub.spokes`, see `docs/SEVERAL-COMPUTERS.md` | `test/hub.test.mjs`, `test/combine.test.mjs`, `test/unknown-not-zero.test.mjs` |
 | A computer turned off in the settings (`"off": true` on its `hub.spokes` entry) reads Off on every surface, not the time of its last reading | Dashboard, menu bar, tray and `npm run status -- --json` | `test/hub.test.mjs`, `test/forecast-contract.test.mjs` |
+| A computer whose `offSwitch` file says off reads "Off (since <date>)" on the Drift view and is left out of its counts and comparisons | Dashboard | `test/hub.test.mjs`, `test/r2-render-more.test.mjs` |
+| The setup table reads Claude Code model, effort and speed from replies, and Codex's from its logs. A source that is off reads off, not Unknown | Dashboard | `test/drift.test.mjs`, `test/r2-render-more.test.mjs` |
+| After each hub run a self-check lists metrics that read Unknown or late on a computer that is on, and files one ticket per computer and metric in a Markdown queue when `selfCheck.tickets` is set | `npm run tick` | `test/self-check.test.mjs` |
+| With `archive.folder` set, every reading is appended for good as JSON Lines, one file per computer and day | `npm run tick` | `test/raw-archive.test.mjs` |
 | Daily token history kept for good | Tokens, All | `test/history.test.mjs`, `test/history-two-computers.test.mjs`, `scripts/view-activity.test.mjs` |
 | Older limit history imported | `scripts/import-history.mjs` | `test/limit-history.test.mjs` |
 | Check that a computer matches the Mac (read-only) | `node scripts/harness/parity-check.mjs` | `test/parity-check.test.mjs` |

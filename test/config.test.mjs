@@ -16,7 +16,7 @@ test('sources are off unless listed as true',()=>{
 test('a hub lists spokes by SSH alias',()=>{
   const config=parseConfig({hub:{spokes:[{name:'PC',ssh:'my-pc',platform:'windows'}]}},mac);
   assert.equal(config.role,'hub');
-  assert.deepEqual(config.hub.spokes,[{name:'PC',ssh:'my-pc',platform:'windows',dataFolder:null,off:false}]);
+  assert.deepEqual(config.hub.spokes,[{name:'PC',ssh:'my-pc',platform:'windows',dataFolder:null,off:false,offSwitch:null}]);
 });
 
 test('Windows uses LOCALAPPDATA for its data folder',()=>{
@@ -85,8 +85,8 @@ test('screen time is off on Linux unless the file turns it on, and WSL is refuse
 
 test('a Linux computer can be a spoke of a Mac or a Windows hub, once',()=>{
   const spoke={name:'Build box',ssh:'build-box',platform:'linux'};
-  assert.deepEqual(parseConfig({hub:{spokes:[spoke]}},mac).hub.spokes,[{...spoke,dataFolder:null,off:false}]);
-  assert.deepEqual(parseConfig({hub:{spokes:[spoke]}},win).hub.spokes,[{...spoke,dataFolder:null,off:false}]);
+  assert.deepEqual(parseConfig({hub:{spokes:[spoke]}},mac).hub.spokes,[{...spoke,dataFolder:null,off:false,offSwitch:null}]);
+  assert.deepEqual(parseConfig({hub:{spokes:[spoke]}},win).hub.spokes,[{...spoke,dataFolder:null,off:false,offSwitch:null}]);
   assert.equal(parseConfig({hub:{spokes:[{ssh:'lx',platform:'linux'}]}},mac).hub.spokes[0].name,'Linux');
   assert.throws(()=>parseConfig({hub:{spokes:[spoke,{...spoke,ssh:'other'}]}},mac),/at most one/);
   assert.throws(()=>parseConfig({hub:{spokes:[{ssh:'lx',platform:'linux'}]}},linux),/at most one/);
@@ -115,4 +115,24 @@ test('the example settings file parses',async()=>{
   const {readFile}=await import('node:fs/promises');
   const example=JSON.parse(await readFile(new URL('../observatory.config.example.json',import.meta.url),'utf8'));
   assert.deepEqual(parseConfig(example,{platform:'darwin'}).sessions,{titles:true,roles:{}});
+});
+
+test('the off switch, self-check tickets and archive take absolute paths and are off when unset',()=>{
+  const plain=parseConfig({},mac);
+  assert.deepEqual([plain.selfCheck.tickets,plain.archive.folder],[null,null],'nothing private is on by default');
+  const config=parseConfig({hub:{spokes:[{ssh:'pc',platform:'windows',offSwitch:'/state/pc.json'}]},
+    selfCheck:{tickets:{file:'/queue/QUEUE.md',lock:'/bin/lock',engine:'Runner',commit:true}},archive:{folder:'/keep/observatory'}},mac);
+  assert.equal(config.hub.spokes[0].offSwitch,'/state/pc.json');
+  assert.deepEqual(config.selfCheck.tickets,{file:'/queue/QUEUE.md',lock:'/bin/lock',engine:'Runner',commit:true});
+  assert.equal(parseConfig({selfCheck:{tickets:{file:'/q.md'}}},mac).selfCheck.tickets.engine,'agent');
+  assert.equal(config.archive.folder,'/keep/observatory');
+  for(const [raw,message] of [
+    [{hub:{spokes:[{ssh:'pc',platform:'windows',offSwitch:'pc.json'}]}},/offSwitch must be an absolute path/],
+    [{selfCheck:{tickets:{file:'QUEUE.md'}}},/tickets.file must be an absolute path/],
+    [{selfCheck:{tickets:{file:'/q.md',lock:'lock'}}},/tickets.lock must be an absolute path/],
+    [{selfCheck:{tickets:{file:'/q.md',commit:'yes'}}},/commit must be true or false/],
+    [{selfCheck:{tickets:{file:'/q.md',engine:'a\nb'}}},/engine must be short text/],
+    [{selfCheck:{other:true}},/unknown setting other/],
+    [{archive:{folder:'relative'}},/archive.folder must be an absolute path/],
+  ])assert.throws(()=>parseConfig(raw,mac),message);
 });

@@ -56,7 +56,18 @@ function validatedDevice(combined,host,now,cap) {
   } catch {return null;}
 }
 
-export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()}={}) {
+// Whether a spoke is off on purpose: `off` in the settings, or its switch file saying {"state":"off","since":"YYYY-MM-DD"}.
+// A missing or unreadable switch file means on, so a computer is never hidden by a file that went wrong.
+export async function switchedOff(spoke,{read=readFile}={}) {
+  if(spoke.off)return {off:true,since:null};
+  if(!spoke.offSwitch)return {off:false,since:null};
+  let value;
+  try {value=JSON.parse((await read(spoke.offSwitch,'utf8')).slice(0,2000));} catch {return {off:false,since:null};}
+  if(!value || typeof value!=='object' || value.state!=='off')return {off:false,since:null};
+  return {off:true,since:typeof value.since==='string' && /^\d{4}-\d{2}-\d{2}$/.test(value.since)?value.since:null};
+}
+
+export async function runHub(config,{transport=sshTransport(),now=()=>Date.now(),readSwitch=readFile}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
   const previous=await readJson(path.join(folder,'combined.json'));
   const cap=peerBytes(1+config.hub.spokes.length);
@@ -65,9 +76,10 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
   for(const spoke of config.hub.spokes) {
     const host=HOST[spoke.platform];
     // A computer the settings turn off is not reached at all. Its last copy keeps its history, and it reads Off.
-    if(spoke.off) {
+    const switched=await switchedOff(spoke,{read:readSwitch});
+    if(switched.off) {
       const carried=validatedDevice(previous,host,now(),cap);
-      devices.push({...(carried??{host,name:spoke.name,snapshot:null}),name:spoke.name,off:true});
+      devices.push({...(carried??{host,name:spoke.name,snapshot:null}),name:spoke.name,off:true,offSince:switched.since});
       report.push({name:spoke.name,host,pull:'off'});
       continue;
     }
@@ -117,7 +129,8 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
   const fromHub=incoming && !(Date.parse(hubTime(mine))>=Date.parse(incoming.generatedAt))?incoming:mine;
   for(const host of others) {
     const carried=newer(validatedDevice(mine,host,now(),cap),validatedDevice(incoming,host,now(),cap));
-    if(carried)devices.push({...carried,off:carriedDevice(fromHub,host)?.off===true});
+    const hubSays=carriedDevice(fromHub,host);
+    if(carried)devices.push({...carried,off:hubSays?.off===true,offSince:hubSays?.offSince ?? null});
   }
   // Which limits are off is the hub's setting for the whole account, so a spoke shows the list the hub stored.
   // Only a copy the hub wrote counts. The spoke's own last output is not the hub's word, so with no hub copy its own settings decide.
