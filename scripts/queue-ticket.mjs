@@ -21,12 +21,19 @@ export const marker=key=>`[observatory-check ${String(key).replace(/[^A-Za-z0-9/
 export function withTicket(text,ticket,{engine='agent'}={}) {
   const lines=text.split('\n');
   const mark=marker(ticket.key);
+  // Each row's status is in its table's Status column, or the last column when the header has none.
+  const statusOf=index=>{
+    let header=index;
+    while(header>0 && lines[header-1].trim().startsWith('|'))header--;
+    const column=cells(lines[header]).findIndex(name=>name.toLowerCase()==='status');
+    const row=cells(lines[index]);
+    return (column===-1?row.at(-1):row[column]) ?? '';
+  };
   let highest=-1,at=-1;
   for(const [index,line] of lines.entries()) {
     const found=ROW.exec(line);
     if(!found)continue;
-    const row=cells(line);
-    if(line.includes(mark) && !/^(done|dropped)\b/i.test(row.at(-1) ?? ''))return {result:'open',row:Number(found[1]),text};
+    if(line.includes(mark) && !/^(done|dropped)\b/i.test(statusOf(index)))return {result:'open',row:Number(found[1]),text};
     if(Number(found[1])>highest) {highest=Number(found[1]);at=index;}
   }
   if(at===-1)throw Error('No numbered queue table');

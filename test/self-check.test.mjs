@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {writeFile,readFile,chmod} from 'node:fs/promises';
+import {writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {findProblems} from '../lib/self-check.mjs';
 import {runSelfCheck,ticketFor,fileTicket,machineName,PERSIST_MS,REFILE_MS} from '../scripts/self-check.mjs';
@@ -62,16 +62,22 @@ test('a ticket is the next row at the end of the numbered table and is not filed
   // Once the row is done, a problem that is back files a new row.
   const done=first.text.replace(/^(\| 8 \|.*)\| ready \|$/m,'$1| done (2026-11-27) |');
   assert.equal(withTicket(done,ticket).row,9);
+  // The status is read from the Status column wherever it sits, not from the last column.
+  const moved=['| # | Status | Job |','| --- | --- | --- |',`| 3 | done (old) | x ${marker('Mac/modelDrift')} |`,`| 4 | ready | y ${marker('Mac/ledger')} |`].join('\n');
+  assert.equal(withTicket(moved,ticket).result,'filed');
+  assert.deepEqual(withTicket(moved,{...ticket,key:'Mac/ledger'}).result,'open');
+  assert.equal(withTicket(moved,ticket).text.split('\n').at(-1),`| 5 | ready | Fix it now ${marker('Mac/modelDrift')} |`);
   assert.throws(()=>withTicket('no table here',ticket),/No numbered queue table/);
 });
 
 test('a lasting problem files one ticket through the lock, and the same problem is not filed again',()=>withFolder(async folder=>{
   const queue=path.join(folder,'QUEUE.md');
   await writeFile(queue,'| # | Job | Engine | Done when | Status |\n| --- | --- | --- | --- | --- |\n| 1 | a | x | y | ready |\n');
-  // A stand-in for the queue's lock program: free, and `run <owner> -- <command>` runs the command.
-  const lock=path.join(folder,'lock');
-  await writeFile(lock,'#!/bin/sh\nif [ "$1" = status ]; then echo free; exit 0; fi\nshift 3\nexec "$@"\n');
-  await chmod(lock,0o755);
+  // A stand-in for the queue's lock program, in JavaScript so it runs on every system: free, and
+  // `run <owner> -- <command>` runs the command.
+  const lock=path.join(folder,'lock.mjs');
+  await writeFile(lock,["import {spawnSync} from 'node:child_process';","const [op,,,command,...args]=process.argv.slice(2);",
+    "if(op==='status'){console.log('free');process.exit(0);}","process.exit(spawnSync(command,args,{stdio:'inherit'}).status ?? 1);"].join('\n'));
   const config={...testConfig(folder,{role:'hub'}),selfCheck:{tickets:{file:queue,lock,engine:'Runner',commit:false}}};
   const broken=combined({devices:[mac],view:{modelDrift:[{host:'Mac',status:'unavailable'}]}});
   const first=await runSelfCheck(config,broken,{now:NOW});
@@ -87,13 +93,16 @@ test('a lasting problem files one ticket through the lock, and the same problem 
   assert.equal((await readFile(queue,'utf8')).match(/observatory-check/g).length,1);
   // Fixed: the problem is dropped, so if it comes back it is filed afresh.
   const fixed=await runSelfCheck(config,combined({devices:[mac]}),{now:NOW+2*REFILE_MS});
+  // Out of filing time: nothing is filed this run, and the problem stays for a later one.
+  const late=await runSelfCheck(config,broken,{now:NOW+3*REFILE_MS,budget:0});
+  const after=await runSelfCheck(config,broken,{now:NOW+3*REFILE_MS+PERSIST_MS,budget:0});
+  assert.deepEqual([late.filed,after.filed,after.problems],[[],[],['Mac/modelDrift']]);
   assert.deepEqual([fixed.problems,fixed.resolved],[[],['Mac/modelDrift']]);
 }));
 
 test('a held lock files nothing this tick, and with no tickets setting problems are only recorded',()=>withFolder(async folder=>{
-  const lock=path.join(folder,'lock');
-  await writeFile(lock,'#!/bin/sh\necho "held by someone, 12 s"\n');
-  await chmod(lock,0o755);
+  const lock=path.join(folder,'lock.mjs');
+  await writeFile(lock,"console.log('held by someone, 12 s');");
   assert.deepEqual(await fileTicket({file:path.join(folder,'QUEUE.md'),lock},{key:'Mac/x'}),{result:'busy'});
   let called=0;
   const broken=combined({devices:[mac],view:{modelDrift:[{host:'Mac',status:'unavailable'}]}});

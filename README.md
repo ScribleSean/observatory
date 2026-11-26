@@ -122,7 +122,7 @@ A source is read only while it is `true`. Run `npm run setup` after a change. Op
 "selfCheck": { "tickets": { "file": "/absolute/path/to/QUEUE.md", "lock": "/absolute/path/to/lock-program", "engine": "agent", "commit": true } }
 ```
 
-`lock` is optional: a program run as `<lock> run <owner> -- <command>` around the write. `commit` commits only that file with git. A ticket is filed once per computer and metric. It is filed again only if the queue no longer has it open and the problem is still there a day later.
+`lock` is optional: a program that prints `free` for `<lock> status` when no one holds it, and runs `<lock> run <owner> -- <command>` with the lock held. When it is not free, the ticket waits for the next run. A lock ending in `.js`, `.mjs` or `.cjs` runs with Node, so it works on Windows too. Filing all tickets in one run stops after two minutes. `commit` commits only that file with git. A ticket is filed once per computer and metric. It is filed again only if the queue no longer has it open and the problem is still there a day later.
 
 **Archive.** Set `"archive": { "folder": "/absolute/path" }` to keep every reading for good as JSON Lines, one file per computer and day. Observatory only appends to it. See [Raw archive](docs/RAW-ARCHIVE.md).
 

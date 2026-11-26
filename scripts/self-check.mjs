@@ -15,6 +15,8 @@ export const PERSIST_MS=30*60000;
 // A problem still there this long after its ticket is filed again, unless the queue still has it open.
 export const REFILE_MS=24*60*60000;
 export const TICKET_TIMEOUT_MS=90_000;
+// All tickets of one run together stop here, so filing never holds the tick near its deadline.
+export const FILING_BUDGET_MS=120_000;
 const STATE_FILE='state.json';
 const SCRIPT=fileURLToPath(new URL('./queue-ticket.mjs',import.meta.url));
 
@@ -53,16 +55,19 @@ export function ticketFor(problem,config) {
     doneWhen:`Observatory's self-check no longer lists ${label} on ${machine}`};
 }
 
+// A lock written in JavaScript runs with this Node, so it works on every system. Any other program runs as it is.
+const lockCommand=(lock,args)=>/\.[cm]?js$/i.test(lock)?[process.execPath,[lock,...args]]:[lock,args];
+
 /** Files one ticket through the settings' queue file and lock. Returns {result: 'filed' | 'open' | 'busy' | 'failed'}. */
-export async function fileTicket(tickets,ticket,{exec=run}={}) {
+export async function fileTicket(tickets,ticket,{exec=run,timeout=TICKET_TIMEOUT_MS}={}) {
   const args=[SCRIPT,tickets.file,JSON.stringify({ticket,engine:tickets.engine}),...(tickets.commit?['--commit']:[])];
   if(tickets.lock) {
     // A held lock means another writer is busy: try again on the next tick instead of waiting inside this one.
-    const status=await exec(tickets.lock,['status'],10_000);
+    const status=await exec(...lockCommand(tickets.lock,['status']),Math.min(10_000,timeout));
     if(status.code!==0 || status.stdout.trim()!=='free')return {result:'busy'};
   }
-  const outcome=tickets.lock?await exec(tickets.lock,['run','observatory-self-check','--',process.execPath,...args],TICKET_TIMEOUT_MS)
-    :await exec(process.execPath,args,TICKET_TIMEOUT_MS);
+  const outcome=tickets.lock?await exec(...lockCommand(tickets.lock,['run','observatory-self-check','--',process.execPath,...args]),timeout)
+    :await exec(process.execPath,args,timeout);
   const line=outcome.stdout.trim().split('\n').reverse().find(text=>text.startsWith('{'));
   try {return JSON.parse(line);} catch {return {result:'failed'};}
 }
@@ -74,7 +79,8 @@ async function readState(file) {
   } catch {return {version:1,problems:{}};}
 }
 
-export async function runSelfCheck(config,combined,{now=Date.now(),file=fileTicket}={}) {
+export async function runSelfCheck(config,combined,{now=Date.now(),file=fileTicket,budget=FILING_BUDGET_MS,clock=Date.now}={}) {
+  const started=clock();
   const folder=await privateFolder(config.dataFolder,'private-self-check');
   const stateFile=path.join(folder,STATE_FILE);
   const state=await readState(stateFile);
@@ -91,8 +97,11 @@ export async function runSelfCheck(config,combined,{now=Date.now(),file=fileTick
     const due=!entry.filedAt || now-Date.parse(entry.filedAt)>=REFILE_MS;
     const ticket=ticketFor(problem,config);
     if(!tickets || !lasted || !due || !ticket)continue;
+    const left=budget-(clock()-started);
+    // Out of time: the rest are filed on a later tick, since they stay in the state file unfiled.
+    if(left<=0)continue;
     let outcome;
-    try {outcome=await file(tickets,ticket);} catch {outcome={result:'failed'};}
+    try {outcome=await file(tickets,ticket,{timeout:Math.min(TICKET_TIMEOUT_MS,left)});} catch {outcome={result:'failed'};}
     if(outcome?.result==='filed' || outcome?.result==='open') {
       entry.filedAt=at;
       entry.row=outcome.row ?? null;
