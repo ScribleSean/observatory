@@ -494,6 +494,16 @@ test('my apps: time per label on labeled days, the change on last week, a value 
   const both = v.buildScreenTime(snapshot, at('week', '2026-11-18'), { now: NOW }).myApps;
   assert.equal(both.unlabeledDays, 0, 'a computer without rules adds no unlabeled days');
   assert.equal(both.compareLabel, week.compareLabel, 'nor does it block the change on last week');
+  const month = v.buildScreenTime(snapshot, at('month', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
+  assert.equal(month.trendUnit, 'day');
+  for (const unit of ['year', 'all']) {
+    const long = v.buildScreenTime(snapshot, at(unit, '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
+    assert.ok(long.trendDates.length <= 31 && long.rows.every(row => row.days.length === long.trendDates.length), `${unit}: at most 31 bars, so the row fits its card`);
+    assert.notEqual(long.trendUnit, 'day', unit);
+    const row = long.rows.find(item => item.label === 'Tide notes');
+    close(row.days.reduce((sum, bar) => sum + (bar.seconds ?? 0), 0), row.seconds); // zero-ok: an unlabeled bar adds nothing to the check
+  }
+  assert.equal(v.buildScreenTime(snapshot, at('year', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps.trendUnit, 'month', 'a year is one bar per month');
   const tower = v.buildScreenTime(snapshot, at('week', '2026-11-18', { devices: ['Windows'] }), { now: NOW }).myApps;
   assert.equal(tower.rules, false, 'a computer without rules has no my apps');
 });

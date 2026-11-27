@@ -30,7 +30,7 @@ Rules name the apps and sites you care about. Observatory ships none: add yours 
 - A rule with `app` matches that app's windows, and with `title` too, only the windows whose title also matches.
 - Browsers show the page title, not the address, so a title rule matches the text the page puts in its `<title>`.
 
-The Screen time view shows **My apps**: each label's time in the range, the change on the range before ("vs last week" on a week), a bar per day, and its share of screen time. **By kind of app** stays beside it.
+The Screen time view shows **My apps**: each label's time in the range, the change on the range before ("vs last week" on a week), a bar per day (per week or per month on longer ranges), and its share of screen time. `browser` and `unmatched` are not allowed as labels. **By kind of app** stays beside it.
 
 Labels are applied when screen time is read. The last 7 days are labeled on every run, and each run also labels 6 older days from ActivityWatch until its first recorded day, so the whole history uses the same rules. Changing the rules starts that again. Days ActivityWatch never recorded stay unlabeled, and the view counts them as "not labeled", never as zero.
 

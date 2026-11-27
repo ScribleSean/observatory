@@ -3,7 +3,7 @@
 // and checked, and the labels and raw window events reach the raw archive. All names here are fictional.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,readdir} from 'node:fs/promises';
+import {readFile,readdir,writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import {parseAppRules,appClassifier,rulesKey,ruleLabels} from '../lib/my-apps.mjs';
 import {parseConfig} from '../lib/config.mjs';
@@ -39,6 +39,8 @@ test('rules are checked, and the code ships none: no settings means no labels',(
     [{activity:{apps:[{label:'x',app:'x',url:'y'}]}},/unknown setting url/],
     [{activity:{hosts:['bad name']}},/activity.hosts must be a list/],
     [{activity:{other:true}},/activity has unknown setting other/],
+    [{activity:{apps:[{label:'Browser',app:'x'}]}},/cannot be "Browser"/],
+    [{activity:{apps:[{label:'unmatched',title:'x'}]}},/cannot be "unmatched"/],
   ])assert.throws(()=>parseConfig(raw,mac),error);
   assert.equal(rulesKey([]),null);
   assert.notEqual(rulesKey(RULES),rulesKey(RULES.slice(1)),'changing the rules changes the key');
@@ -258,4 +260,19 @@ test('each day\'s seconds per app reach the archive with the screen time history
   await archiveReadings(config,[{host:'Mac',snapshot}],{now:Date.parse('2026-11-26T17:00:00Z'),timeZone:'UTC'});
   const day=(await lines(root)).find(line=>line.section==='activityHistory' && line.date==='2026-11-25');
   assert.deepEqual([day.value.myApps,day.value.browserUnmatched],[{'Tide notes':3600},3600]);
+}));
+
+test('an archive README from an earlier version gets the screen time notes appended, once',()=>withFolder(async folder=>{
+  const root=path.join(folder,'archive');
+  await mkdir(root,{recursive:true});
+  await writeFile(path.join(root,'README.md'),'# Observatory raw archive\n\n- Older notes.\n');
+  const config={...testConfig(folder,{activity:{hosts:null,apps:[]}}),archive:{folder:root}};
+  const {request}=activityWatch({'aw-watcher-window_new-name.local':[event(0,5,'Safari','A page'),event(5,5,'Safari','Another')]});
+  const read=options=>windowEvents({...options,request});
+  await archiveActivityEvents(config,{read,now:Date.parse('2026-11-26T16:00:00Z'),timeZone:'UTC'});
+  await archiveReadings(config,[{host:'Mac',snapshot:{schema:2,collectedAt:'2026-11-26T16:00:00Z'}}],{now:Date.parse('2026-11-26T16:00:00Z'),timeZone:'UTC'});
+  const text=await readFile(path.join(root,'README.md'),'utf8');
+  assert.ok(text.startsWith('# Observatory raw archive\n\n- Older notes.\n'),'the old text stays as it was');
+  assert.equal(text.split('activityEvents').length-1,1,'the notes are added once');
+  assert.ok(text.includes('myApps'));
 }));

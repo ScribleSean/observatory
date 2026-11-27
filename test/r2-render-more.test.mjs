@@ -163,12 +163,12 @@ const screenVM = (unit, selected, total = 65280) => {
   const f = frame(unit, selected);
   return { frame: f, total: num(total, '18h 8m', { unit: 'seconds', breakdowns: { category: [part('AI apps', 37862, ''), part('Browser', 27418, '')] } }),
     days: f.period.dates.map(date => ({ date, seconds: num(3600, '1h'), tracked: true })), hours: unit === 'day' ? Array.from({ length: 24 }, (_, hour) => hour * 60) : null, apps: [],
-    myApps: { rules: false, rows: [], trendDates: [], compareLabel: null, labeledDays: 0, unlabeledDays: 0, labeledSeconds: 0, browser: { seconds: 0, matched: 0, unmatched: 0, hidden: 0, unmatchedShare: null } } };
+    myApps: { rules: false, rows: [], trendDates: [], trendUnit: 'day', compareLabel: null, labeledDays: 0, unlabeledDays: 0, labeledSeconds: 0, browser: { seconds: 0, matched: 0, unmatched: 0, hidden: 0, unmatchedShare: null } } };
 };
 
 test('Screen time shows my apps with their change and a bar per day, browser time no rule matched, and how to add rules', () => {
   const trendDates = ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18'];
-  const myApps = { rules: true, compareLabel: 'vs last week', labeledDays: 6, unlabeledDays: 1, labeledSeconds: 36000, trendDates,
+  const myApps = { rules: true, compareLabel: 'vs last week', labeledDays: 6, unlabeledDays: 1, labeledSeconds: 36000, trendDates, trendUnit: 'day',
     rows: [{ label: 'Tide notes', seconds: 9000, previous: 5400, delta: 3600, days: trendDates.map((date, i) => ({ date, seconds: i === 0 ? null : i * 300 })) },
       { label: 'Lantern', seconds: 1800, previous: 2400, delta: -600, days: trendDates.map(date => ({ date, seconds: 0 })) }],
     browser: { seconds: 20000, matched: 6000, unmatched: 14000, hidden: 0, unmatchedShare: 0.7 } };
@@ -181,7 +181,9 @@ test('Screen time shows my apps with their change and a bar per day, browser tim
   assert.ok(markup.includes('1 day in Nov 16 to 22 not labeled'));
   assert.ok(markup.includes('Browser time') && markup.includes('Not matched') && markup.includes('70%'));
   assert.ok(markup.includes('Most browser time matched no rule'));
-  assert.ok(markup.includes('By kind of app'), 'kind of app stays');
+  assert.ok(markup.includes('Per day') && markup.includes('By kind of app'), 'kind of app stays');
+  const monthly = html(createElement(ScreenTimeBody, { vm: { ...screenVM('year'), myApps: { ...myApps, trendUnit: 'month' } }, spend: null, config: view.config, now: NOW }));
+  assert.ok(monthly.includes('Per month') && monthly.includes('month of 2026-11-12'), 'a long range says what one bar covers');
   const hidden = html(createElement(ScreenTimeBody, { vm: { ...screenVM('week'), myApps: { ...myApps, browser: { ...myApps.browser, hidden: 12000 } } }, spend: null, config: view.config, now: NOW }));
   assert.ok(hidden.includes('kept no page titles for 3h 20m') && hidden.includes('exclude_title'));
   const none = html(createElement(ScreenTimeBody, { vm: screenVM('week'), spend: null, config: view.config, now: NOW }));

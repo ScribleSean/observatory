@@ -31,6 +31,18 @@ Every reading Observatory took, kept for good. Observatory only appends here and
 - The day totals per app the user's rules name are in the \`activityHistory\` day lines, under \`myApps\` (seconds per app), \`browserUnmatched\` (browser seconds no rule matched) and \`browserHidden\` (of those, the seconds ActivityWatch kept no title for).
 `;
 
+// The README is written once. One an earlier version of Observatory wrote gets the screen time notes appended, so
+// it describes every kind of line in the folder.
+const SCREEN_NOTES=README.split('\n').filter(line=>line.startsWith('- On a Mac with screen time on')||line.startsWith('- The day totals per app')).join('\n');
+async function writeReadme(root) {
+  const file=path.join(root,'README.md');
+  const written=await fs.writeFile(file,README,{flag:'wx',mode:0o600}).then(()=>true,error=>{if(error.code!=='EEXIST')throw error;return false;});
+  if(written)return;
+  const text=await fs.readFile(file,'utf8');
+  // A README the user wrote is theirs and stays as it is.
+  if(text.startsWith('# Observatory raw archive') && !text.includes('activityEvents'))await fs.appendFile(file,`${text.endsWith('\n')?'':'\n'}${SCREEN_NOTES}\n`);
+}
+
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0,24);
 const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 const dayIn=(timeZone,ms)=>new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(ms);
@@ -74,8 +86,7 @@ export async function archiveReadings(config,snapshots,{now=Date.now(),timeZone=
   const root=config.archive?.folder;
   if(!root)return null;
   await fs.mkdir(root,{recursive:true,mode:0o700});
-  const readme=path.join(root,'README.md');
-  await fs.writeFile(readme,README,{flag:'wx',mode:0o600}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+  await writeReadme(root);
   const indexFile=path.join(await privateFolder(config.dataFolder,'private-archive'),INDEX_FILE);
   const index=await readIndex(indexFile);
   const archivedAt=new Date(now).toISOString(),today=dayIn(timeZone,now);
@@ -152,7 +163,7 @@ export async function archiveActivityEvents(config,{read=null,now=Date.now(),tim
   }
   if(lines.length) {
     await fs.mkdir(root,{recursive:true,mode:0o700});
-    await fs.writeFile(path.join(root,'README.md'),README,{flag:'wx',mode:0o600}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+    await writeReadme(root);
     const folder=path.join(root,config.host.replace(/[^A-Za-z0-9-]/g,'_'),today.slice(0,4));
     await fs.mkdir(folder,{recursive:true,mode:0o700});
     await fs.appendFile(path.join(folder,`${today}.jsonl`),lines.join('\n')+'\n',{mode:0o600});
