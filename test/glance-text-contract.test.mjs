@@ -116,7 +116,8 @@ function surfaces(combined) {
 // not in it. `every` asks for every source anyway, to show that a hidden source is gone from the data, not only the bar.
 const scopeOf = (combined, at = now) => defaultScope(combined, { now: at });
 const every = (combined, at = now) => ({ ...scopeOf(combined, at), sources: [...SOURCE_IDS] });
-const limitsPage = (combined, at = now) => renderToStaticMarkup(createElement(Limits, { snapshot: combined, scope: scopeOf(combined, at), now: at }));
+// The page's words, with the non-breaking spaces that keep each time on one line read as plain spaces.
+const limitsPage = (combined, at = now) => renderToStaticMarkup(createElement(Limits, { snapshot: combined, scope: scopeOf(combined, at), now: at })).replace(/\u00a0/g, ' ');
 const tokensPage = (combined, at = now) => renderToStaticMarkup(createElement(Tokens, { snapshot: combined, scope: every(combined, at), now: at }));
 const limitsVM = (combined, at = now) => buildLimits(combined, scopeOf(combined, at), { now: at });
 // The Overview's Limits now: the same engines and the menu bar's line.
