@@ -13,7 +13,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AUDIT, JOBS } from '../scripts/harness/layout-audit.mjs';
+import { AUDIT, JOBS, VIEWS } from '../scripts/harness/layout-audit.mjs';
 import { findChromium, launchChromium } from '../scripts/harness/chromium.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -30,6 +30,12 @@ document.head.append(style);
 ${AUDIT}`;
 const BROKEN_KINDS = ['labels', 'plot', 'scale', 'numbers', 'key', 'card'];
 
+// The fixture's forecast follows its clock, and for a few minutes a day it is a range across two days, the longest
+// it gets ("Claude may run out Fri 11 PM to Sat 12 AM" at this instant). The views are measured once more at this
+// instant, so the longest forecast is checked on every run and not only when the clock happens to land there.
+const LONGEST_FORECAST_AT = Date.parse('2026-11-27T19:32:00Z');
+const LONGEST_FORECAST = /may run out \w{3} \d{1,2} [AP]M to \w{3} /;
+
 /** The built dashboard served with the fictional fixture, once for both engines. */
 let served;
 function serve() {
@@ -45,7 +51,8 @@ function serve() {
     await writeFile(path.join(dataFolder, 'public', 'local', 'combined.json'), JSON.stringify(sampleR2Combined(Date.now())));
     const server = createLocalServer({ assets, dataFolder });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    return { work, server, base: `http://127.0.0.1:${server.address().port}/` };
+    const fixture = now => writeFile(path.join(dataFolder, 'public', 'local', 'combined.json'), JSON.stringify(sampleR2Combined(now)));
+    return { work, server, fixture, base: `http://127.0.0.1:${server.address().port}/` };
   })();
   return served;
 }
@@ -75,7 +82,7 @@ function judgeBroken(engine, result) {
 }
 
 test('in Chromium every view is in line at every width, range and theme', { skip: skipChromium, timeout: 600000 }, async t => {
-  const { base } = await serve();
+  const { base, fixture } = await serve();
   const page = await launchChromium(chromium);
   t.after(() => page.close());
   const results = [];
@@ -86,6 +93,25 @@ test('in Chromium every view is in line at every width, range and theme', { skip
   judge('Chromium', results);
   await page.open(`${base}#overview`, { width: 1280, height: 900, scheme: 'dark' });
   judgeBroken('Chromium', JSON.parse(await page.evaluate(BROKEN)));
+
+  // Every view at the narrowest widths with the longest forecast, the fixture and the page's clock at the same instant.
+  // The WebKit test reads the same server, so the current fixture goes back afterwards.
+  await fixture(LONGEST_FORECAST_AT);
+  const longest = [];
+  try {
+    for (const width of [320, 375]) for (const address of VIEWS) {
+      const job = { address, width, scheme: 'dark' };
+      await page.open(base + address, { width, height: 900, scheme: 'dark', now: LONGEST_FORECAST_AT });
+      longest.push({ job, result: JSON.parse(await page.evaluate(AUDIT)) });
+      if (address === '#overview') {
+        const forecast = await page.evaluate(`return [...document.querySelectorAll('.lim .h span.pace')].map(span => span.textContent).join(' | ');`);
+        assert.match(forecast, LONGEST_FORECAST, `Chromium: the fixture at ${new Date(LONGEST_FORECAST_AT).toISOString()} shows a forecast range (${forecast})`);
+      }
+    }
+  } finally {
+    await fixture(Date.now());
+  }
+  judge('Chromium, longest forecast', longest, { cards: VIEWS.length * 2 });
 });
 
 test('in WebKit every view is in line at every width, range and theme', { skip: skipWebKit, timeout: 900000 }, async () => {

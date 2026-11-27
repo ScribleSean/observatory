@@ -27,8 +27,8 @@ export function findChromium(env=process.env,platform=process.platform) {
 }
 
 /**
- * Starts the browser and returns one page: open(url, {width, height, scheme}) loads an address at a window size and
- * colour scheme, evaluate(body) runs the body of an async function in the page and returns what it returns,
+ * Starts the browser and returns one page: open(url, {width, height, scheme, now}) loads an address at a window size and
+ * colour scheme (and with the page's clock started at `now` when given), evaluate(body) runs the body of an async function in the page and returns what it returns,
  * screenshot(file, clip?) writes a PNG, close() stops the browser and removes its profile.
  */
 export async function launchChromium(executable) {
@@ -76,9 +76,13 @@ export async function launchChromium(executable) {
     const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++nextId;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
     const event=(method,ms)=>Promise.race([new Promise(resolve=>waiting.set(method,resolve)),sleep(ms)]);
     await send('Page.enable');
+    let clockScript=null;
     return {
-      async open(url,{width=1280,height=900,scheme='dark'}={}) {
+      async open(url,{width=1280,height=900,scheme='dark',now}={}) {
         await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+        // now: the page's clock starts at this instant and runs on from there, to match a fixture made for that instant.
+        if(clockScript){await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:clockScript});clockScript=null;}
+        if(now!==undefined)clockScript=(await send('Page.addScriptToEvaluateOnNewDocument',{source:`{const T=${Number(now)},R=Date,b=R.now();class D extends R{constructor(...a){a.length?super(...a):super(T+R.now()-b);}static now(){return T+R.now()-b;}}globalThis.Date=D;}`})).identifier;
         await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:scheme}]});
         // A blank page first: an address that differs only by its hash would not load again.
         const blank=event('Page.loadEventFired',30000);

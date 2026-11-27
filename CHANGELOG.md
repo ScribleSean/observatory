@@ -34,6 +34,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 
 ### Changed
 
+- A forecast range across two days, such as "Claude may run out Fri 11 PM to Sat 12 AM", wraps inside its Limits card on a narrow phone. Before, it ran past the card and the dashboard scrolled sideways at 320 px.
 - A time always names its day, today included: "Wed 4 PM", never "4 PM". The dashboard's read time and computer chips do too.
 - The dashboard's fonts, Geist and Geist Mono, are bundled with it. The page loads nothing from the network.
 - The menu bar and tray show the same forecast words as the dashboard, "at this pace" included.

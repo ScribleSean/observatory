@@ -68,7 +68,7 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
       <div className="h"><span>{title}</span><span>{window.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone, now)}` : 'Reset Unknown')}</span></div>
       <div className="h" style={{ marginTop: 2 }}>
         <b className={spent ? 'acc' : undefined}>{pct(state.used)}<small>used</small></b>
-        {pace && <span className={state.runsOut ? 'acc' : undefined}>{pace}</span>}
+        {pace && <span className={state.runsOut ? 'pace acc' : 'pace'}>{pace}</span>}
       </div>
       <div className="meter">
         <i style={{ width: `${state.used}%`, ...(spent ? { background: 'var(--accent)' } : {}) }} />
