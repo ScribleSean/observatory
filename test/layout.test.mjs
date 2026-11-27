@@ -34,7 +34,7 @@ const BROKEN_KINDS = ['labels', 'plot', 'scale', 'numbers', 'key', 'card'];
 // it gets ("Claude may run out Fri 11 PM to Sat 12 AM" at this instant). The views are measured once more at this
 // instant, so the longest forecast is checked on every run and not only when the clock happens to land there.
 const LONGEST_FORECAST_AT = Date.parse('2026-11-27T19:32:00Z');
-const LONGEST_FORECAST = /may run out \w{3} \d{1,2} [AP]M to \w{3} /;
+const LONGEST_FORECAST = /may run out \w{3}\s\d{1,2}\s[AP]M to \w{3}\s/;
 
 /** The built dashboard served with the fictional fixture, once for both engines. */
 let served;

@@ -9,6 +9,7 @@ import { PINS, blockList } from '../pins';
 import { BlockBoundary } from '../Boundary';
 import { Loading } from '../Loading';
 import { LimitMeter as MeterRows } from './LimitMeter';
+import { wholeTimes } from '../views/parts';
 import { GrokRequests as GrokBlock, GrokRequestsRow } from './GrokRequests';
 
 type MeterProps = import('../../../../lib/r2-blocks.mjs').LimitMeterProps;
@@ -55,7 +56,7 @@ export function LimitMeter({ element }: ComponentRenderProps<MeterProps>) {
   return (
     <section className="blk" aria-label="Limits now">
       <div className="bh"><h3>Limits now</h3></div>
-      <p className="sayline">{headline}</p>
+      <p className="sayline">{wholeTimes(headline)}</p>
       {engines ? <MeterRows engine={engines} windowId={window} now={now} timeZone={frame.timeZone} /> : <div className="empty"><b>Off</b>This limit is turned off in observatory.config.json.</div>}
       {grok && grok.total.value !== 0 && <GrokRequestsRow vm={grok} label={frame.period.label} />}
       {codex && <MeterRows engine={codex} now={now} timeZone={frame.timeZone} />}

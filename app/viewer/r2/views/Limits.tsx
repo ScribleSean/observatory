@@ -6,7 +6,7 @@ import { buildLimits, resolveBlock } from '../../../../lib/view-r2.mjs';
 import { limitHistorySeries } from '../../../../lib/view-limit-history.mjs';
 import { LimitMeter, NOT_REPORTED, windowNow, type Engine } from '../blocks/LimitMeter';
 import { GrokRequests } from '../blocks/GrokRequests';
-import { Block, BarList, Empty, StateView, Strip, Tail, UNKNOWN, addDays, clock, dateIn, dateSpan, dayClock, names, shortDate, span, weekday, type Cell } from './parts';
+import { Block, BarList, Empty, StateView, Strip, Tail, UNKNOWN, addDays, clock, dateIn, dateSpan, dayClock, names, shortDate, span, weekday, type Cell, wholeTimes } from './parts';
 import './more.css';
 
 export type Reading = { at: number; used: number };
@@ -130,13 +130,13 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
     state && state.used !== null
       ? { label: 'Claude Code weekly limit', value: pct(state.used), unit: 'used', accent: state.used >= 100 && !weekly?.asOf,
         // The stored reset label, never a countdown. An old reading says when it was read.
-        context: weekly?.asOf ?? weekly?.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone, now)}` : readOn ?? '') }
+        context: wholeTimes(weekly?.asOf ?? weekly?.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone, now)}` : readOn ?? '')) }
       : { label: 'Claude Code weekly limit', value: claude ? UNKNOWN : 'Off', unknown: true, context: claude ? weekly?.checkedAt ? `not reported since ${shortDate(dateIn(Date.parse(weekly.checkedAt), timeZone))}` : 'no reading yet' : 'turned off in settings' },
     state && state.gone !== null && state.length
       ? { label: 'Week gone', value: pct(100 * state.gone), context: `${span(state.gone * state.length)} of 7d` }
       : { label: 'Week gone', value: UNKNOWN, context: 'no reset time read' },
     state && state.projected !== null
-      ? { label: 'Projected at the reset', value: pct(state.projected), accent: state.projected >= 100, context: weekly?.forecastText ?? UNKNOWN }
+      ? { label: 'Projected at the reset', value: pct(state.projected), accent: state.projected >= 100, context: weekly?.forecastText ? wholeTimes(weekly.forecastText) : UNKNOWN }
       : { label: 'Projected at the reset', value: UNKNOWN, context: 'not enough readings yet' },
     lastFour.length
       ? { label: 'Weeks that ran out early', value: String(ranOut.length), unit: `of the last ${lastFour.length}`, context: ranOut.length ? `last in the week of ${shortDate(ranOut[0].key)}` : 'every recorded week lasted' }
@@ -144,7 +144,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
     fiveHour?.state === 'absent'
       ? { label: 'Claude Code 5 hour', value: NOT_REPORTED, unknown: true, context: '' }
       : five && five.used !== null
-      ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: fiveHour?.asOf ?? fiveHour?.forecastResets ?? (five.reset ? `Resets ${dayClock(five.reset, timeZone, now)}` : '') }
+      ? { label: 'Claude Code 5 hour', value: pct(five.used), unit: 'used', context: wholeTimes(fiveHour?.asOf ?? fiveHour?.forecastResets ?? (five.reset ? `Resets ${dayClock(five.reset, timeZone, now)}` : '')) }
       : { label: 'Claude Code 5 hour', value: UNKNOWN, context: fiveHour?.checkedAt ? `not in the ${clock(fiveHour.checkedAt, timeZone, now)} read` : 'not reported by the app' },
     grok
       ? { label: 'Grok requests', value: grokWeek === null ? UNKNOWN : String(grokWeek), unit: 'last 7 days',
@@ -156,7 +156,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
   const today = dateIn(now, timeZone);
   return (
     <div className="grid more">
-      <p className="sayline" aria-label="Forecast">{vm.headline}</p>
+      <p className="sayline" aria-label="Forecast">{wholeTimes(vm.headline)}</p>
       {claude?.signIn && (
         <Block span={12} title={`Claude Code is signed out on ${claude.signIn.on}`}>
           <Empty title="Sign in to read its limits" line={claude.signIn.line} />
@@ -174,7 +174,7 @@ export function LimitsBody({ vm, grok, readings, byDevice, now, timeZone }: Limi
           {past.length === 0 ? <Empty title="No past weeks" line="A week shows here once its reset has passed." /> : (
             <div className="tw"><table><tbody>
               <tr><td className="name">{state?.reset && state.length ? dateSpan(dateIn(state.reset - state.length, timeZone), dateIn(state.reset - HOUR, timeZone)) : 'This week'}
-                <div className="sub">{weekly?.forecastText ?? UNKNOWN}</div></td>
+                <div className="sub">{weekly?.forecastText ? wholeTimes(weekly.forecastText) : UNKNOWN}</div></td>
                 {/* zero-ok: meter width only, the cell beside it reads Unknown */}
                 <td style={{ width: '34%' }} aria-hidden="true"><div className="meter" style={{ margin: 0 }}><i style={{ width: `${state?.used ?? 0}%` }} /></div></td>
                 <td className="r strong">{state?.used === null || !state ? UNKNOWN : pct(state.used)}</td></tr>

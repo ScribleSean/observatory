@@ -45,6 +45,10 @@ export const plural = (count: number, word: string) => `${count.toLocaleString('
 
 export { clock, dayClock } from '../data';
 
+/** Keeps each time in a sentence on one line when it wraps: "Sat 12 AM" never splits, though a range can still break at "to". */
+export const wholeTimes = (text: string) =>
+  text.replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (?=\d)/g, '$1\u00a0').replace(/(\d) (AM|PM)\b/g, '$1\u00a0$2');
+
 /** YYYY-MM-DD in a time zone. */
 export function dateIn(at: number, timeZone: string) {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);

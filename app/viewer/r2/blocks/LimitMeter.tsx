@@ -1,7 +1,7 @@
 // One engine's limit windows as meter rows: used, a tick at the share of the window gone, the projection
 // at the reset and the computer the reading came from. An account limit is never summed across computers.
 import type { LimitWindowVM, LimitsVM } from '../../../../lib/view-r2.mjs';
-import { UNKNOWN, clock, dayClock } from '../views/parts';
+import { UNKNOWN, clock, dayClock, wholeTimes } from '../views/parts';
 import '../views/more.css';
 
 export type Engine = LimitsVM['engines'][number];
@@ -62,7 +62,7 @@ function Row({ name, window, now, timeZone }: { name: string; window: LimitWindo
   }
   const spent = state.used >= 100 || window.state === 'spent';
   // The stored forecast's words, exactly as the menu bar shows them (lib/forecast.mjs shown()).
-  const pace = window.forecastText;
+  const pace = window.forecastText && wholeTimes(window.forecastText);
   return (
     <div className="lim">
       <div className="h"><span>{title}</span><span>{window.forecastResets ?? (state.reset ? `Resets ${dayClock(state.reset, timeZone, now)}` : 'Reset Unknown')}</span></div>
