@@ -2,7 +2,7 @@
 // already on the computer (or the one CHROME names) with a throwaway profile. test/layout.test.mjs measures the
 // dashboard's layout with it; findChromium() returns null when there is no browser, and the test skips.
 import {spawn,spawnSync} from 'node:child_process';
-import {existsSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,9 @@ export function findChromium(env=process.env,platform=process.platform) {
   return null;
 }
 
+/** How long a browser may take to start. */
+const START_MS=120000;
+
 /**
  * Starts the browser and returns one page: open(url, {width, height, scheme, now}) loads an address at a window size and
  * colour scheme (and with the page's clock started at `now` when given), evaluate(body) runs the body of an async function in the page and returns what it returns,
@@ -45,17 +48,26 @@ export async function launchChromium(executable) {
   };
   try {
     // The browser prints the address it listens on, so no port has to be guessed.
-    const address=await new Promise((resolve,reject)=>{
-      let text='';
-      const timer=setTimeout(()=>reject(Error(`The browser did not start: ${text.slice(-300)}`)),30000);
+    // The browser says where it listens twice: a line on stderr and a DevToolsActivePort file in its profile. Either
+    // one is enough. A first start on a fresh Windows runner can take well over 30 seconds while the new chrome.exe
+    // is scanned, so the wait is long, and a failure says how long it waited and whether the browser was still running.
+    const started=Date.now();
+    const port=await new Promise((resolve,reject)=>{
+      let text='',done=false;
+      const finish=(error,value)=>{if(done)return;done=true;clearTimeout(timer);clearInterval(poll);if(error)reject(error);else resolve(value);};
+      const timer=setTimeout(()=>finish(Error(`The browser did not start in ${Math.round((Date.now()-started)/1000)} s (still running: ${browser.exitCode===null}): ${text.slice(-300)}`)),START_MS);
+      const poll=setInterval(()=>{
+        try {const found=readFileSync(path.join(profile,'DevToolsActivePort'),'utf8').match(/^(\d+)\n/);if(found)finish(null,found[1]);}catch {}
+      },100);
       browser.stderr.on('data',chunk=>{
         text+=chunk;
         const found=text.match(/DevTools listening on (ws:\/\/\S+)/);
-        if(found) {clearTimeout(timer);resolve(found[1]);}
+        if(found)finish(null,new URL(found[1]).port);
       });
-      browser.once('exit',code=>{clearTimeout(timer);reject(Error(`The browser exited with ${code}: ${text.slice(-300)}`));});
+      browser.once('exit',code=>finish(Error(`The browser exited with ${code}: ${text.slice(-300)}`)));
+      if(browser.exitCode!==null)finish(Error(`The browser exited with ${browser.exitCode}: ${text.slice(-300)}`));
     });
-    const port=new URL(address).port;
+    if(process.env.CI)console.error(`# browser started in ${((Date.now()-started)/1000).toFixed(1)} s`);
     let target;
     for(let attempt=0;attempt<50 && !target;attempt++) {
       try {target=(await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(each=>each.type==='page');}catch {}
