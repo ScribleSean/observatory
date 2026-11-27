@@ -56,6 +56,16 @@ test('the favicon is the 32 pixel app icon', () => {
   assert.equal(read('public/favicon.svg'), appIconSvg(32));
 });
 
+test('the web page links the favicon, the 180 pixel home screen icon and a bar color for each theme', () => {
+  const page = read('app/web/index.html');
+  assert.match(page, /<link rel="icon" href="..\/..\/public\/favicon.svg" type="image\/svg\+xml"\/>/);
+  assert.match(page, /<link rel="apple-touch-icon" href="..\/..\/public\/apple-touch-icon.png"\/>/);
+  assert.match(page, new RegExp(`content="${ICON.tileDark}" media="\\(prefers-color-scheme: dark\\)"`));
+  assert.match(page, new RegExp(`content="${ICON.tileLight}" media="\\(prefers-color-scheme: light\\)"`));
+  const touch = readFileSync(new URL('../public/apple-touch-icon.png', import.meta.url));
+  assert.deepEqual([touch.readUInt32BE(16), touch.readUInt32BE(20)], [180, 180]);
+});
+
 // Whether `source` holds this code, however it is spaced.
 const holds = (source, code) => new RegExp(code.trim().replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/\s+/g, '\\s*')).test(source);
 const assertHolds = (source, file, ...codes) => { for (const code of codes) assert.ok(holds(source, code), `${file} does not hold: ${code}`); };

@@ -23,6 +23,8 @@ const SessionPanel = lazy(() => import('./views/Sessions').then(module => ({ def
 type Theme = 'light' | 'dark' | null;
 const REFRESH_MS = 5 * 60000;
 const THEME_KEY = 'observatory-theme';
+// The page colors (--bg in r2.css), for the browser bar. app/web/index.html sets them by the system theme.
+const BAR_COLOR = { light: '#efece7', dark: '#161715' };
 
 async function fetchJson(file: string): Promise<unknown> {
   try {
@@ -97,6 +99,8 @@ export function R2Shell({ snapshot, now, loaded, saved = [], initialHash = '', i
 
   useEffect(() => {
     if (theme) document.documentElement.dataset.theme = theme; else delete document.documentElement.dataset.theme;
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'))
+      meta.content = BAR_COLOR[theme ?? (meta.media.includes('dark') ? 'dark' : 'light')];
   }, [theme]);
   const flipTheme = () => {
     const dark = theme ? theme === 'dark' : !window.matchMedia('(prefers-color-scheme: light)').matches;
