@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0, the lean hub (unreleased)
+## 2.0.0 (unreleased)
 
 Observatory was rebuilt from a full desktop app into a small menu bar companion with a local dashboard. The old app is kept on the `archive/full-app` tag.
 
@@ -26,7 +26,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 
 - **One forecast, the same words everywhere.** Each computer works out the forecast once per reading and stores it, worded, in its `combined.json`. The dashboard, the menu bar, the tray and `npm run status -- --json` all show that stored result, so they always name the same time. A forecast older than a snapshot may be says when it was made ("as of Wed 7:40 AM"), and one whose window has reset since reads Unknown.
 - **Turn a computer off.** `"off": true` on a `hub.spokes` entry stops the hub from reaching that computer, and every surface shows it as Off instead of the time of its last reading. A computer that is on but unreachable still shows that time, now with its day.
-- **Round 2 dashboard.** Seven views, Overview, Sessions, Limits, Tokens, Screen time, Drift and Settings, under one scope bar that picks the computers, a day, week, month, year or all of it, and the sources. Each headline number (spend at API prices, branches merged, commits on main, commits not yet on main, cost per landed change, spend with no commits) is compared with the same days of the previous period and opens into its parts. Sessions read as "[Builder] Lantern", with a role from the title, your own `sessions.roles` map, how the session ran or its kind of work.
+- **A new dashboard.** Seven views, Overview, Sessions, Limits, Tokens, Screen time, Drift and Settings, under one scope bar that picks the computers, a day, week, month, year or all of it, and the sources. Each headline number (spend at API prices, branches merged, commits on main, commits not yet on main, cost per landed change, spend with no commits) is compared with the same days of the previous period and opens into its parts. Sessions read as "[Builder] Lantern", with a role from the title, your own `sessions.roles` map, how the session ran or its kind of work.
 - **Daily ledger history.** Each computer keeps a record per tool and day of spend, sessions, subagents, tokens, commits and merges, so month, year and all-time views have data. The full record stays in a private store on that computer. The snapshot carries a trimmed copy, and a large history drops its oldest session rows first, keeping every day's totals.
 - **Ask and pinned questions.** The Ask field and questions such as "Where did today's spend go?" rearrange the same blocks. Nothing in the dashboard calls a model.
 - **Optional MCP server.** `scripts/mcp-server.mjs` lets your own Claude client compose and save a view. A saved view holds queries, never numbers or titles, and is checked by the same block catalog as the built-in views. See `docs/MCP.md`.
@@ -56,7 +56,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - The Claude Code status-line bridge and its installer. Claude Code limits still come from the installed `claude` CLI's usage command, run at each collection.
 - The Overview tiles for screen time and cost, and the Sources page with its empty Dictation card. The home view now shows the limit forecast, and history is one click away.
 - Code left over from the full app that nothing used any more: the old consent marker, session cost, the chart rasterizer and the old combine modules.
-- The Week and History pages, replaced by the round 2 views, with the skin setting and the view-models only they used.
+- The Week and History pages, replaced by the new views, with the skin setting and the view-models only they used.
 
 ### Before you update from the full app
 

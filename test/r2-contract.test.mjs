@@ -1,4 +1,4 @@
-// The round 2 contract (docs/R2-PLAN.md): the modules every lane builds on export what the plan names, and the
+// The dashboard contract: the shared modules export what the views build on, and the
 // fictional fixture has the shape lib/r2-shape.mjs describes.
 import test from 'node:test';
 import assert from 'node:assert/strict';

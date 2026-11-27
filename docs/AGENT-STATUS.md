@@ -51,7 +51,7 @@
 - `headroom` is the lowest `percentLeft` across the engine's windows. It is 0 when any current window is at 0, and `null` when the engine is unknown.
 - `effectiveHeadroom` is `percentLeft` scaled by time left: `percentLeft * windowMinutes / minutesToReset`, capped at 100 and never rounded down to 0 while anything is left. 100 means on or under the straight-line budget. The engine's value is the lowest across its windows.
 - `nextReturn` has one entry for each engine whose `status` is `out`, with the `resetsAt` and `minutesToReset` of its window at 0 (the later one when both windows are at 0). Both are `null` when the reset time is unknown. It is `{}` when no engine is out.
-- Account limits come from the freshest reading on either computer. They are never added across computers.
+- Account limits come from the freshest reading on any computer. They are not added across computers.
 
 ## Pace
 

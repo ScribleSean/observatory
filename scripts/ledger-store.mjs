@@ -3,7 +3,7 @@
 // again for reaching main) and Grok's request count per day, for as long as the folder exists. The
 // snapshot's ledgerHistory row is shaped from it (historyRow) and trimmed by lib/r2-shape.mjs.
 //
-// How days change (docs/R2-PLAN.md): each collection rebuilds the last REDERIVE_DAYS from transcripts
+// How days change: each collection rebuilds the last REDERIVE_DAYS from transcripts
 // and git. Older days are frozen, except that commits on main are checked again for ONMAIN_RECHECK_DAYS
 // from the stored commit ids. The first collection for a tool backfills every day its transcripts still
 // hold, and a collector that was off for a while fills the gap the same way.
