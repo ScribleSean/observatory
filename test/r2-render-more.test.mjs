@@ -180,14 +180,19 @@ test('Screen time shows my apps with their change and a bar per day, browser tim
   assert.ok(markup.includes('class="u"'), 'a day not labeled is drawn as Unknown, not zero');
   assert.ok(markup.includes('1 day in Nov 16 to 22 not labeled'));
   assert.ok(markup.includes('Browser time') && markup.includes('Not matched') && markup.includes('70%'));
-  assert.ok(markup.includes('Most browser time matched no rule'));
+  assert.ok(markup.includes('Most of it matched none of your apps'));
+  assert.ok(markup.includes('Of screen time'), 'the share says what it is a share of');
+  assert.ok(markup.includes('6 labeled days only'), 'browser time says it counts the labeled days only');
+  for (const setup of ['.md', 'config', 'activity.apps', 'exclude_title', 'URL watcher', 'on each run']) assert.ok(!markup.includes(setup), `no setup text on screen: ${setup}`);
   assert.ok(markup.includes('Per day') && markup.includes('By kind of app'), 'kind of app stays');
   const monthly = html(createElement(ScreenTimeBody, { vm: { ...screenVM('year'), myApps: { ...myApps, trendUnit: 'month' } }, spend: null, config: view.config, now: NOW }));
   assert.ok(monthly.includes('Per month') && monthly.includes('month of 2026-11-12'), 'a long range says what one bar covers');
   const hidden = html(createElement(ScreenTimeBody, { vm: { ...screenVM('week'), myApps: { ...myApps, browser: { ...myApps.browser, hidden: 12000 } } }, spend: null, config: view.config, now: NOW }));
-  assert.ok(hidden.includes('kept no page titles for 3h 20m') && hidden.includes('exclude_title'));
+  assert.ok(hidden.includes('Most of it has no page title to match.') && !hidden.includes('exclude_title'));
+  const noCompare = html(createElement(ScreenTimeBody, { vm: { ...screenVM('all'), myApps: { ...myApps, compareLabel: null, rows: myApps.rows.map(row => ({ ...row, previous: null, delta: null })) } }, spend: null, config: view.config, now: NOW }));
+  assert.ok(!noCompare.includes('Change'), 'no comparison, no empty Change column');
   const none = html(createElement(ScreenTimeBody, { vm: screenVM('week'), spend: null, config: view.config, now: NOW }));
-  assert.ok(none.includes('No rules yet') && none.includes('activity.apps'));
+  assert.ok(none.includes('No apps named yet.') && !none.includes('activity.apps'));
 });
 
 test('Screen time follows the settings echo: off everywhere, off on one computer, and no invented screen on and off split', () => {

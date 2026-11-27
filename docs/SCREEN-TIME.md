@@ -30,17 +30,17 @@ Rules name the apps and sites you care about. Observatory ships none: add yours 
 - A rule with `app` matches that app's windows, and with `title` too, only the windows whose title also matches.
 - Browsers show the page title, not the address, so a title rule matches the text the page puts in its `<title>`.
 
-The Screen time view shows **My apps**: each label's time in the range, the change on the range before ("vs last week" on a week), a bar per day (per week or per month on longer ranges), and its share of screen time. `browser` and `unmatched` are not allowed as labels. **By kind of app** stays beside it.
+The Screen time view shows **My apps**: each label's time in the range, the change on the range before ("vs last week" on a week), a bar per day, week or month (the same buckets as the Hours chart), and its share of screen time. `browser` and `unmatched` are not allowed as labels. **By kind of app** stays beside it.
 
 Labels are applied when screen time is read. The last 7 days are labeled on every run, and each run also labels 6 older days from ActivityWatch until its first recorded day, so the whole history uses the same rules. Changing the rules starts that again. Days ActivityWatch never recorded stay unlabeled, and the view counts them as "not labeled", never as zero.
 
 ## Browser time no rule matched
 
-**Browser time** shows how much browser time your rules matched and how much they did not, on the labeled days. The self-check lists **Browser time matched to my apps** as a problem when, over the last 7 labeled days, there was at least an hour of browser time and more than half of it matched no rule. Either the rules miss sites you use, or page titles are not enough to tell them apart.
+**Browser time** shows how much browser time your rules matched and how much they did not. Like My apps, it counts the labeled days only, and says so when the range has days that are not labeled. The self-check lists **Browser time matched to my apps** as a problem when, over the last 7 labeled days, there was at least an hour of browser time and more than half of it matched no rule. Either the rules miss sites you use, or page titles are not enough to tell them apart.
 
 ### Hidden titles
 
-ActivityWatch's window watcher can keep no titles at all: with `exclude_title = true` in its `aw-watcher-window.toml`, every window's title is recorded as `excluded`. Title rules then match nothing, and only `app` rules label time. Observatory counts that time apart: **Browser time** says how much of the unmatched time had no title, and the self-check reads `hidden` instead of `unmatched` when most of it did. Turning `exclude_title` off keeps titles from then on; it does not bring back the earlier ones.
+ActivityWatch's window watcher can keep no titles at all: with `exclude_title = true` in its `aw-watcher-window.toml`, every window's title is recorded as `excluded`. Title rules then match nothing, and only `app` rules label time. Observatory counts that time apart: **Browser time** says when most of the unmatched time had no title, and the self-check reads `hidden` instead of `unmatched` when most of it did. Turning `exclude_title` off keeps titles from then on; it does not bring back the earlier ones.
 
 ## A URL watcher (optional)
 

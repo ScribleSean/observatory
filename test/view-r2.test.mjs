@@ -494,16 +494,22 @@ test('my apps: time per label on labeled days, the change on last week, a value 
   const both = v.buildScreenTime(snapshot, at('week', '2026-11-18'), { now: NOW }).myApps;
   assert.equal(both.unlabeledDays, 0, 'a computer without rules adds no unlabeled days');
   assert.equal(both.compareLabel, week.compareLabel, 'nor does it block the change on last week');
+  const later = week.rows[0].days.filter(bar => bar.later);
+  assert.ok(later.every(bar => bar.seconds === null && bar.date > '2026-11-18'), 'days still to come are empty bars, never zero');
+  assert.equal(week.trendDates.length, 7, 'a week has a bar for each of its days, as the Hours chart');
   const month = v.buildScreenTime(snapshot, at('month', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
   assert.equal(month.trendUnit, 'day');
   for (const unit of ['year', 'all']) {
     const long = v.buildScreenTime(snapshot, at(unit, '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
-    assert.ok(long.trendDates.length <= 31 && long.rows.every(row => row.days.length === long.trendDates.length), `${unit}: at most 31 bars, so the row fits its card`);
+    assert.ok(long.trendDates.length <= 53 && long.rows.every(row => row.days.length === long.trendDates.length), `${unit}: at most 53 bars, so the row fits its card`);
     assert.notEqual(long.trendUnit, 'day', unit);
     const row = long.rows.find(item => item.label === 'Tide notes');
     close(row.days.reduce((sum, bar) => sum + (bar.seconds ?? 0), 0), row.seconds); // zero-ok: an unlabeled bar adds nothing to the check
   }
   assert.equal(v.buildScreenTime(snapshot, at('year', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps.trendUnit, 'month', 'a year is one bar per month');
+  const all = v.buildScreenTime(snapshot, at('all', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
+  assert.equal(all.trendUnit, 'week');
+  assert.ok(all.trendDates.slice(1).every(date => new Date(`${date}T12:00:00Z`).getUTCDay() === 1), 'all is in Monday weeks, as the Hours chart');
   const tower = v.buildScreenTime(snapshot, at('week', '2026-11-18', { devices: ['Windows'] }), { now: NOW }).myApps;
   assert.equal(tower.rules, false, 'a computer without rules has no my apps');
 });

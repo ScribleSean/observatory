@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { clock, type ViewId } from './data';
 import { markShapes } from '../../../lib/glance-icon.mjs';
 
@@ -16,6 +17,25 @@ type Props = { view: ViewId; onView: (view: ViewId) => void; readAt: string | nu
 
 /** The top bar: brand, the seven views, the time of the newest read and the theme button. */
 export function Nav({ view, onView, readAt, timeZone, now, onTheme }: Props) {
+  // On a narrow screen the views scroll sideways: the current one is scrolled fully into sight.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const reveal = () => {
+      const on = nav.querySelector<HTMLElement>('a.on');
+      if (!on) return;
+      const left = on.offsetLeft - nav.offsetLeft, right = left + on.offsetWidth;
+      if (left < nav.scrollLeft) nav.scrollLeft = left;
+      else if (right > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = right - nav.clientWidth;
+    };
+    reveal();
+    // The tabs change width as fonts load and the window resizes, so it is checked again then.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(reveal);
+    observer?.observe(nav);
+    for (const tab of nav.querySelectorAll('a')) observer?.observe(tab);
+    return () => observer?.disconnect();
+  }, [view]);
   return (
     <header className="top"><div className="wrap">
       <div className="brand">
@@ -23,7 +43,7 @@ export function Nav({ view, onView, readAt, timeZone, now, onTheme }: Props) {
         <svg aria-hidden="true" viewBox="0 0 18 18" width="18" height="18" dangerouslySetInnerHTML={{ __html: HEADER_MARK }} />
         <span>Observatory</span>
       </div>
-      <nav className="nav" aria-label="Views">
+      <nav className="nav" aria-label="Views" ref={navRef}>
         {VIEWS.map(([id, name]) => <a key={id} href={`#${id}`} className={view === id ? 'on' : ''} aria-current={view === id ? 'page' : undefined}
           onClick={event => { event.preventDefault(); onView(id); }}>{name}</a>)}
       </nav>

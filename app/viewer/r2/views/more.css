@@ -101,9 +101,15 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 .r2 .sayline{margin:0;font-size:15px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
 .r2 .grid.more>.sayline{grid-column:1/-1}
 .r2 .blk>.sayline{padding:var(--sp-1) var(--pad) var(--sp-2);font-size:13px}
-/* My apps: one small bar per day, Unknown days as a faint stub. */
-.mini{display:inline-flex;align-items:flex-end;gap:2px;height:18px;vertical-align:middle;min-width:4rem}
-.mini i{display:block;flex:1 1 0;min-width:3px;max-width:10px;background:var(--g0);border-radius:1px}
+/* My apps: the name and numbers take their own width, the bars fill what is left. Unknown buckets are a faint stub. */
+.myapps td.name{width:auto;max-width:14rem;min-width:6rem}
+.myapps th.r,.myapps td.r{width:1%}
+.myapps .trend{width:100%;min-width:6rem}
+.mini{display:flex;align-items:flex-end;justify-content:space-between;gap:2px;height:22px;width:100%}
+.mini i{display:block;flex:1 1 0;min-width:2px;max-width:2.25rem;background:var(--g1);border-radius:1px}
 .mini i.u{height:2px;background:var(--line)}
-.myapps td.name{min-width:6rem}
+.mini i.f{height:0;background:none}
+.blk>.tw:has(.myapps):last-child{padding-bottom:var(--sp-2)}
 .bb .note{margin:var(--sp-2) 0 0;font-size:var(--fs-small)}
+/* A kind of app is one short word: it is shown whole and the bar gives way. */
+.more .kinds .bl{grid-template-columns:max-content minmax(2.5rem,2fr) auto auto}
