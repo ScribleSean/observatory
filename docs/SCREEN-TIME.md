@@ -52,4 +52,4 @@ When titles are not enough, ActivityWatch's browser extension, [aw-watcher-web](
 
 ## The raw archive
 
-With `archive.folder` set (see [Raw archive](RAW-ARCHIVE.md)), each day's seconds per label are kept in the `activityHistory` day lines (`myApps`, `browserUnmatched`), and every ActivityWatch window event is kept once, with its app and title, as `activityEvents` lines. The first run keeps every event the watchers hold.
+With `archive.folder` set (see [Raw archive](RAW-ARCHIVE.md)), each day's seconds per label are kept in the `activityHistory` day lines (`myApps`, `browserUnmatched`), and every ActivityWatch window event is kept once, with its app, its label (or `browser` or `unmatched`) and its times, as `activityEvents` lines. Window titles are not kept. The first run keeps every event the watchers hold.

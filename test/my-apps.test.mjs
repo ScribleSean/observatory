@@ -220,25 +220,31 @@ const lines=async root=>{
   return out;
 };
 
-test('raw window events are archived once each, the newest one only after another follows it',()=>withFolder(async folder=>{
+test('raw window events are archived once each with their app and label, never their title, the newest one only after another follows it',()=>withFolder(async folder=>{
   const root=path.join(folder,'archive');
-  const config={...testConfig(folder,{activity:{hosts:null,apps:[]}}),archive:{folder:root}};
+  const config={...testConfig(folder,{activity:{hosts:null,apps:RULES}}),archive:{folder:root}};
   const base='2026-11-26T15:00:00Z';
-  const events={'aw-watcher-window_new-name.local':[event(0,5,'Safari','Tide Notes',base),event(5,5,'Lantern','Lantern',base),event(10,1,'Safari','Still open',base)]};
+  const events={'aw-watcher-window_new-name.local':[event(0,5,'Safari','Tide Notes',base),event(5,5,'Lantern','Lantern',base),event(7,2,'Safari','Private page',base),
+    event(9,1,'Chat','Secret plan',base),event(10,1,'Safari','Still open',base)]};
   const {request}=activityWatch(events);
   const read=options=>windowEvents({...options,request});
   const now=Date.parse('2026-11-26T16:00:00Z');
-  assert.equal(await archiveActivityEvents(config,{read,now,timeZone:'UTC'}),2);
+  assert.equal(await archiveActivityEvents(config,{read,now,timeZone:'UTC'}),4);
   let all=await lines(root);
-  assert.deepEqual(all.map(line=>[line.section,line.kind,line.part,line.date,line.value.app,line.value.title]),[
-    ['activityEvents','event','aw-watcher-window_new-name.local','2026-11-26','Safari','Tide Notes'],
-    ['activityEvents','event','aw-watcher-window_new-name.local','2026-11-26','Lantern','Lantern']]);
+  assert.deepEqual(all.map(line=>[line.section,line.kind,line.part,line.date,line.value.app,line.value.label]),[
+    ['activityEvents','event','aw-watcher-window_new-name.local','2026-11-26','Safari','Tide notes'],
+    ['activityEvents','event','aw-watcher-window_new-name.local','2026-11-26','Lantern','Lantern'],
+    ['activityEvents','event','aw-watcher-window_new-name.local','2026-11-26','Safari','browser'],
+    ['activityEvents','event','aw-watcher-window_new-name.local','2026-11-26','Chat','unmatched']]);
+  assert.deepEqual(Object.keys(all[0].value).sort(),['app','duration','label','timestamp']);
   assert.equal(all[0].value.duration,300);
+  const written=JSON.stringify(all);
+  for(const title of ['Tide Notes','Private page','Secret plan'])assert.ok(!written.includes(title),`the title "${title}" is never written`);
   assert.equal(await archiveActivityEvents(config,{read,now:now+60000,timeZone:'UTC'}),0,'nothing new, nothing written');
   events['aw-watcher-window_new-name.local'].push(event(11,3,'Safari','Next',base));
   assert.equal(await archiveActivityEvents(config,{read,now:now+120000,timeZone:'UTC'}),1,'the open event is written once a newer one follows');
   all=await lines(root);
-  assert.equal(all.at(-1).value.title,'Still open');
+  assert.deepEqual([all.at(-1).value.label,JSON.stringify(all).includes('Still open')],['browser',false]);
   assert.equal(await archiveActivityEvents({...config,platform:'windows'},{read,now,timeZone:'UTC'}),null,'only a Mac reads ActivityWatch here');
   assert.equal(await archiveActivityEvents({...config,archive:{folder:null}},{read,now,timeZone:'UTC'}),null);
 }));

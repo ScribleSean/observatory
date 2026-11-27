@@ -10,6 +10,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {writeJsonAtomic} from '../lib/atomic-file.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
+import {appClassifier} from '../lib/my-apps.mjs';
+import {category} from './snapshot-clean.mjs';
 
 export const ARCHIVE_VERSION=1;
 export const TODAY_EVERY_MS=60*60000;
@@ -25,7 +27,7 @@ Every reading Observatory took, kept for good. Observatory only appends here and
 - A daily reading appears again whenever it changed, at most hourly while it is the current day and once more after the day ended. The last line for a \`host\`, \`section\`, \`part\` and \`date\` is its final value.
 - \`point\` lines are single limit readings and appear once each.
 - Unknown is never written as zero: a missing value stays missing or null, as in the snapshot.
-- On a Mac with screen time on, ActivityWatch's window events are kept too, each once: \`section\` \`activityEvents\`, \`part\` the watcher's bucket, \`kind\` \`event\`, \`date\` the day the event started, and \`value\` {timestamp, duration (seconds), app, title}. Window titles are here and nowhere else Observatory writes.
+- On a Mac with screen time on, ActivityWatch's window events are kept too, each once: \`section\` \`activityEvents\`, \`part\` the watcher's bucket, \`kind\` \`event\`, \`date\` the day the event started, and \`value\` {timestamp, duration (seconds), app, label}. \`label\` is the app the user's rules matched, or \`browser\` for a browser window no rule matched, or \`unmatched\` for any other window. Window titles are not written: they are only used, in memory, to match the rules.
 - The day totals per app the user's rules name are in the \`activityHistory\` day lines, under \`myApps\` (seconds per app), \`browserUnmatched\` (browser seconds no rule matched) and \`browserHidden\` (of those, the seconds ActivityWatch kept no title for).
 `;
 
@@ -114,14 +116,18 @@ export async function archiveReadings(config,snapshots,{now=Date.now(),timeZone=
 }
 
 const EVENTS_INDEX='activity-events.json';
-const eventValue=event=>{
+// An event as the archive keeps it: the app, the label the rules give it, and its times. The title is read to match
+// the rules and then dropped, so no window title is written.
+const eventValue=(event,classify)=>{
   const data=object(event.data)?event.data:{};
-  const text=value=>typeof value==='string'?value.slice(0,2000):null;
-  return {timestamp:new Date(event.timestamp).toISOString(),duration:Math.round(event.duration*1000)/1000,app:text(data.app),title:text(data.title)};
+  const app=typeof data.app==='string'?data.app.slice(0,200):null;
+  const browser=category(String(data.app))==='Browser';
+  const label=classify({app:data.app,title:data.title,browser}) ?? (browser?'browser':'unmatched');
+  return {timestamp:new Date(event.timestamp).toISOString(),duration:Math.round(event.duration*1000)/1000,app,label};
 };
 
 /**
- * Appends ActivityWatch's window events, each once, to the archive. The first run keeps every event the watchers
+ * Appends ActivityWatch's window events, each once and without their titles, to the archive. The first run keeps every event the watchers
  * hold. Returns how many lines were written, or null when there is no archive or screen time is not read here.
  * @param {object} config  parsed settings (archive.folder, dataFolder, platform, sources, activity.hosts)
  * @param {{read?: Function, now?: number, timeZone?: string}} [options]  read: scripts/mac-activity.mjs windowEvents
@@ -135,11 +141,12 @@ export async function archiveActivityEvents(config,{read=null,now=Date.now(),tim
   try {index=JSON.parse(await fs.readFile(indexFile,'utf8'));} catch {index=null;}
   if(index?.version!==ARCHIVE_VERSION || !object(index.after))index={version:ARCHIVE_VERSION,after:{}};
   const buckets=await read({after:index.after,hosts:config.activity?.hosts ?? null});
+  const classify=appClassifier(config.activity?.apps ?? []);
   const archivedAt=new Date(now).toISOString(),today=dayIn(timeZone,now);
   const base={v:ARCHIVE_VERSION,archivedAt,host:config.host,collectedAt:archivedAt,section:'activityEvents'};
   const lines=[];
   for(const {bucket,events} of buckets)for(const event of events) {
-    const value=eventValue(event);
+    const value=eventValue(event,classify);
     lines.push(JSON.stringify({...base,part:bucket,date:dayIn(timeZone,Date.parse(value.timestamp)),kind:'event',value}));
     if(!index.after[bucket] || Date.parse(value.timestamp)>Date.parse(index.after[bucket]))index.after[bucket]=value.timestamp;
   }
