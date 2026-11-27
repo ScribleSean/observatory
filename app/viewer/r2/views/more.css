@@ -101,3 +101,9 @@ td .sub{font-size:var(--fs-small);color:var(--faint);white-space:normal}
 .r2 .sayline{margin:0;font-size:15px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
 .r2 .grid.more>.sayline{grid-column:1/-1}
 .r2 .blk>.sayline{padding:var(--sp-1) var(--pad) var(--sp-2);font-size:13px}
+/* My apps: one small bar per day, Unknown days as a faint stub. */
+.mini{display:inline-flex;align-items:flex-end;gap:2px;height:18px;vertical-align:middle;min-width:4rem}
+.mini i{display:block;flex:1 1 0;min-width:3px;max-width:10px;background:var(--g0);border-radius:1px}
+.mini i.u{height:2px;background:var(--line)}
+.myapps td.name{min-width:6rem}
+.bb .note{margin:var(--sp-2) 0 0;font-size:var(--fs-small)}

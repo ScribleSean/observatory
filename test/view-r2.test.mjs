@@ -469,3 +469,31 @@ test('sessions count distinct sessions, and an Unknown count gives a true lower 
   assert.equal(bare.text, 'Unknown');
   assert.equal(bare.atLeast, null);
 });
+
+test('my apps: time per label on labeled days, the change on last week, a value per day, and unlabeled days never read as zero', () => {
+  const mac = snapshot.view.activityHistory.find(row => row.host === 'Mac');
+  const labeled = mac.days.filter(day => day.myApps && day.seconds > 0);
+  const week = v.buildScreenTime(snapshot, at('week', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
+  assert.equal(week.rules, true);
+  const dates = week.trendDates;
+  const expected = labeled.filter(day => dates.includes(day.date)).reduce((sum, day) => sum + day.myApps['Tide notes'], 0);
+  close(week.rows.find(row => row.label === 'Tide notes').seconds, expected);
+  assert.deepEqual(week.rows.map(row => row.seconds), week.rows.map(row => row.seconds).sort((a, b) => b - a), 'largest first');
+  assert.equal(week.compareLabel, 'vs same days last week');
+  for (const row of week.rows) assert.equal(row.delta, row.seconds - row.previous);
+  const browser = labeled.filter(day => dates.includes(day.date)).reduce((sum, day) => sum + day.categories.Browser, 0);
+  close(week.browser.seconds, browser);
+  close(week.browser.matched + week.browser.unmatched, browser);
+  const day = v.buildScreenTime(snapshot, at('day', '2026-11-18', { devices: ['Mac'] }), { now: NOW }).myApps;
+  assert.equal(day.trendDates.length, 7, 'a single day shows the week to it');
+  assert.equal(day.trendDates.at(-1), '2026-11-18');
+  const early = mac.days.find(day => !day.myApps && day.seconds > 0).date;
+  const before = v.buildScreenTime(snapshot, at('week', early, { devices: ['Mac'] }), { now: NOW }).myApps;
+  assert.equal(before.rows.length, 0, 'no labels before the rules');
+  assert.ok(before.unlabeledDays > 0);
+  const both = v.buildScreenTime(snapshot, at('week', '2026-11-18'), { now: NOW }).myApps;
+  assert.equal(both.unlabeledDays, 0, 'a computer without rules adds no unlabeled days');
+  assert.equal(both.compareLabel, week.compareLabel, 'nor does it block the change on last week');
+  const tower = v.buildScreenTime(snapshot, at('week', '2026-11-18', { devices: ['Windows'] }), { now: NOW }).myApps;
+  assert.equal(tower.rules, false, 'a computer without rules has no my apps');
+});

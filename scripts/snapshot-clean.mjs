@@ -1,4 +1,5 @@
 import { cleanIntervals, summarizeTracked } from './activity-timeline.mjs';
+import {appLabelOk} from '../lib/my-apps.mjs';
 import {createHmac} from 'node:crypto';
 import {LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
 import {isWorkKind} from './ledger-kinds.mjs';
@@ -49,18 +50,20 @@ export function category(app) {
   if (/codex|chatgpt|antigravity|claude|grok|gemini|perplexity/i.test(app)) return 'AI apps';
   if (/code\.exe|visual studio|cursor|\bidea(64)?\b|intellij|pycharm|xcode|\bzed\b|sublime|windsurf|android studio/i.test(app)) return 'Editors';
   if (/terminal|powershell|cmd\.exe|conhost|wezterm|ubuntu|iterm|ghostty|\bwarp\b|alacritty|\bkitty\b|wt\.exe/i.test(app)) return 'Terminal';
-  if (/chrome|firefox|msedge|brave|safari|arc\b|opera|vivaldi/i.test(app)) return 'Browser';
+  if (/chrome|firefox|msedge|brave|safari|arc\b|opera|vivaldi|mullvad browser|tor browser|orion|duckduckgo/i.test(app)) return 'Browser';
   if (/discord|slack|teams|zoom|messages|facetime|whatsapp|telegram|signal|\bmail\b|outlook/i.test(app)) return 'Communication';
   if (/steam|battle\.net|overwatch|valorant|riot client|league of legends|epicgames|minecraft|-win64-shipping/i.test(app)) return 'Games';
   return 'Other';
 }
+// raw.labels: the my-apps labels the reader applied (scripts/mac-activity.mjs), when the settings have rules.
 export function cleanActivity(raw, host) {
   if (Array.isArray(raw.intervals)) {
-    const intervals = cleanIntervals(raw.intervals, raw.start, raw.end);
+    const labels = Array.isArray(raw.labels) ? raw.labels.filter(appLabelOk) : null;
+    const intervals = cleanIntervals(raw.intervals, raw.start, raw.end, { labels });
     const trackingIntervals = Array.isArray(raw.trackingIntervals) ? cleanIntervals(raw.trackingIntervals.map(r=>({start:r.start,end:r.end,category:'Other'})),raw.start,raw.end) : undefined;
     return { host, status: 'ok', start: raw.start, end: raw.end,
       latestEvent: Number.isFinite(Date.parse(raw.latestEvent)) ? new Date(raw.latestEvent).toISOString() : null,
-      ...summarizeTracked(intervals, trackingIntervals, raw.start, raw.end), intervals, trackingIntervals };
+      ...summarizeTracked(intervals, trackingIntervals, raw.start, raw.end, { labeled: labels !== null }), intervals, trackingIntervals };
   }
   const categories = Object.fromEntries(
     ['Coding', 'Terminal', 'Browser', 'Other'].map((k) => [

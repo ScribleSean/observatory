@@ -7,7 +7,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {writeJsonAtomic} from '../lib/atomic-file.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
-import {findProblems,METRICS,ACCOUNT_METRICS} from '../lib/self-check.mjs';
+import {findProblems,METRICS,ACCOUNT_METRICS,UNMATCHED} from '../lib/self-check.mjs';
 import {HOSTS} from '../lib/combine.mjs';
 
 // A problem must last this long before it is filed, so one slow read is not a ticket.
@@ -27,9 +27,9 @@ const run=(file,args,timeout)=>new Promise(resolve=>{
 // A ticket is read by whoever works the queue, and part of a problem comes from another computer's snapshot.
 // So a ticket holds only words chosen here: a status from this list, a metric from lib/self-check.mjs, the
 // machine's name from this computer's own settings, and a time this computer formats.
-export const STATUSES=Object.freeze(['missing','stale','unavailable','unknown','not-connected','refused']);
+export const STATUSES=Object.freeze(['missing','stale','unavailable','unknown','not-connected','refused','unmatched','hidden']);
 export const MAX_FIELD=80;
-const LABELS=new Map([['snapshot','Snapshot'],['claude-model','Claude Code model'],['claude-effort','Claude Code effort'],['claude-speed','Claude Code speed'],
+const LABELS=new Map([['snapshot','Snapshot'],[UNMATCHED.key,UNMATCHED.label],['claude-model','Claude Code model'],['claude-effort','Claude Code effort'],['claude-speed','Claude Code speed'],
   ...[...METRICS,...ACCOUNT_METRICS].map(({key,label})=>[key,label])]);
 const PLATFORM_HOST={mac:'Mac',windows:'Windows',linux:'Linux'};
 /** Short, single-line text with no table or markup characters. */
@@ -50,6 +50,11 @@ export function ticketFor(problem,config) {
   const status=STATUSES.includes(problem.status)?problem.status:'unexpected';
   const at=Date.parse(problem.since);
   const since=Number.isFinite(at)?` since the ${new Date(at).toISOString().slice(0,16).replace('T',' ')} UTC read`:'';
+  if(problem.metric===UNMATCHED.key)return {key:`${problem.host}/${problem.metric}`,label,machine,
+    job:status==='hidden'
+      ?`Observatory self-check: most browser time on ${machine} in the last week has no page title, so no my-apps rule can match it${since}. ActivityWatch's window watcher has exclude_title on (aw-watcher-window.toml). Ask the owner whether to turn it off, or to use a URL watcher (docs/SCREEN-TIME.md).`
+      :`Observatory self-check: most browser time on ${machine} in the last week matched no my-apps rule${since}. Add rules for the sites in use to activity.apps in its observatory.config.json, or install a URL watcher if page titles are not enough (docs/SCREEN-TIME.md).`,
+    doneWhen:`Observatory's self-check no longer lists ${label} on ${machine}`};
   return {key:`${problem.host}/${problem.metric}`,label,machine,
     job:`Observatory self-check: ${label} on ${machine} reads ${status}${since}. Find the first place it goes wrong and fix it there, with a test.`,
     doneWhen:`Observatory's self-check no longer lists ${label} on ${machine}`};

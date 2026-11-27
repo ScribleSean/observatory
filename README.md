@@ -60,7 +60,7 @@ Every five minutes it takes one snapshot of this computer:
 | Claude Code | `~/.claude/projects` | Tokens per day, hour and model. Per session: its title, times, tokens, models, subagent counts and the names of the repositories it wrote to |
 | Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts, and the same per-session facts where Codex records them |
 | Commits | The local git repositories a session wrote to | Commit counts per session and whether they reached the default branch (estimated) |
-| Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category |
+| Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category, and per app or site your own rules name ([Screen time](docs/SCREEN-TIME.md)) |
 | Grok (optional) | Local files you name | Percent left, reset time and requests per day |
 
 Snapshots hold no prompts, responses, commands, window titles, paths or credentials. Session titles are kept so the dashboard can name sessions. Set `"sessions": { "titles": false }` to keep a short hash instead. A private cache in the data folder holds file locations so the collector can resume reading where it stopped. It does not leave the computer. [SECURITY.md](SECURITY.md) has the full list.

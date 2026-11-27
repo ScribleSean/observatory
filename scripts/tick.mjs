@@ -11,7 +11,7 @@ import {TIME_ZONE} from '../lib/timezone.mjs';
 import {collect} from './collect.mjs';
 import {runHub,recombine} from './hub.mjs';
 import {runSelfCheck} from './self-check.mjs';
-import {archiveReadings} from './raw-archive.mjs';
+import {archiveReadings,archiveActivityEvents} from './raw-archive.mjs';
 
 // The flags shown in the menu bar and tray: lib/ledger-flags.mjs pools every computer's sessions per tool.
 export async function glanceFlags(combined) {
@@ -45,7 +45,7 @@ export function archivedSnapshots(config,own,combined) {
   return list;
 }
 
-export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=recombine,glanceStep=writeGlance,checkStep=runSelfCheck,archiveStep=archiveReadings}={}) {
+export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=recombine,glanceStep=writeGlance,checkStep=runSelfCheck,archiveStep=archiveReadings,eventsStep=archiveActivityEvents}={}) {
   const lockFolder=await privateFolder(config.dataFolder,'.runtime');
   return withRunLock(path.join(lockFolder,'tick.lock'),async()=>{
     const result={role:config.role,collect:'ok'};
@@ -60,6 +60,8 @@ export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=
     // Neither step can stop the tick: each reports its own failure.
     try {result.archived=await archiveStep(config,archivedSnapshots(config,own,combined));}
     catch(error) {result.archived=error.message;}
+    try {const events=await eventsStep(config);if(events!==null)result.archivedEvents=events;}
+    catch(error) {result.archivedEvents=error.message;}
     // The hub sees every computer, so it alone checks what reads Unknown or stale.
     if(config.role==='hub') {
       try {result.selfCheck=await checkStep(config,combined);}

@@ -25,6 +25,8 @@ Every reading Observatory took, kept for good. Observatory only appends here and
 - A daily reading appears again whenever it changed, at most hourly while it is the current day and once more after the day ended. The last line for a \`host\`, \`section\`, \`part\` and \`date\` is its final value.
 - \`point\` lines are single limit readings and appear once each.
 - Unknown is never written as zero: a missing value stays missing or null, as in the snapshot.
+- On a Mac with screen time on, ActivityWatch's window events are kept too, each once: \`section\` \`activityEvents\`, \`part\` the watcher's bucket, \`kind\` \`event\`, \`date\` the day the event started, and \`value\` {timestamp, duration (seconds), app, title}. Window titles are here and nowhere else Observatory writes.
+- The day totals per app the user's rules name are in the \`activityHistory\` day lines, under \`myApps\` (seconds per app), \`browserUnmatched\` (browser seconds no rule matched) and \`browserHidden\` (of those, the seconds ActivityWatch kept no title for).
 `;
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0,24);
@@ -109,4 +111,46 @@ export async function archiveReadings(config,snapshots,{now=Date.now(),timeZone=
   // The index only saves repeats. Losing it writes some readings twice, never loses one.
   await writeJsonAtomic(indexFile,index);
   return written;
+}
+
+const EVENTS_INDEX='activity-events.json';
+const eventValue=event=>{
+  const data=object(event.data)?event.data:{};
+  const text=value=>typeof value==='string'?value.slice(0,2000):null;
+  return {timestamp:new Date(event.timestamp).toISOString(),duration:Math.round(event.duration*1000)/1000,app:text(data.app),title:text(data.title)};
+};
+
+/**
+ * Appends ActivityWatch's window events, each once, to the archive. The first run keeps every event the watchers
+ * hold. Returns how many lines were written, or null when there is no archive or screen time is not read here.
+ * @param {object} config  parsed settings (archive.folder, dataFolder, platform, sources, activity.hosts)
+ * @param {{read?: Function, now?: number, timeZone?: string}} [options]  read: scripts/mac-activity.mjs windowEvents
+ */
+export async function archiveActivityEvents(config,{read=null,now=Date.now(),timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone}={}) {
+  const root=config.archive?.folder;
+  if(!root || config.platform!=='mac' || !config.sources?.screenTime)return null;
+  read??=(await import('./mac-activity.mjs')).windowEvents;
+  const indexFile=path.join(await privateFolder(config.dataFolder,'private-archive'),EVENTS_INDEX);
+  let index;
+  try {index=JSON.parse(await fs.readFile(indexFile,'utf8'));} catch {index=null;}
+  if(index?.version!==ARCHIVE_VERSION || !object(index.after))index={version:ARCHIVE_VERSION,after:{}};
+  const buckets=await read({after:index.after,hosts:config.activity?.hosts ?? null});
+  const archivedAt=new Date(now).toISOString(),today=dayIn(timeZone,now);
+  const base={v:ARCHIVE_VERSION,archivedAt,host:config.host,collectedAt:archivedAt,section:'activityEvents'};
+  const lines=[];
+  for(const {bucket,events} of buckets)for(const event of events) {
+    const value=eventValue(event);
+    lines.push(JSON.stringify({...base,part:bucket,date:dayIn(timeZone,Date.parse(value.timestamp)),kind:'event',value}));
+    if(!index.after[bucket] || Date.parse(value.timestamp)>Date.parse(index.after[bucket]))index.after[bucket]=value.timestamp;
+  }
+  if(lines.length) {
+    await fs.mkdir(root,{recursive:true,mode:0o700});
+    await fs.writeFile(path.join(root,'README.md'),README,{flag:'wx',mode:0o600}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+    const folder=path.join(root,config.host.replace(/[^A-Za-z0-9-]/g,'_'),today.slice(0,4));
+    await fs.mkdir(folder,{recursive:true,mode:0o700});
+    await fs.appendFile(path.join(folder,`${today}.jsonl`),lines.join('\n')+'\n',{mode:0o600});
+  }
+  // Saved after the lines, so a run stopped between the two writes some events twice and loses none.
+  await writeJsonAtomic(indexFile,index);
+  return lines.length;
 }

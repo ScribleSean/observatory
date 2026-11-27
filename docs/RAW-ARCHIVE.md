@@ -35,3 +35,10 @@ Each line is one JSON object:
 - To get the latest value of a reading, take the last line with the same `host`, `section`, `part`, `date` and `kind`.
 
 Unknown is never written as zero: a value the snapshot did not have stays missing or null. The index that tells which readings were already written lives in the data folder (`private-archive/index.json`). If it is lost, some readings are written twice and none is lost.
+
+## Screen time
+
+On a Mac with screen time on, two more kinds of line are written (see [Screen time](SCREEN-TIME.md)):
+
+- `activityHistory` day lines carry `myApps` (seconds per label your `activity.apps` rules name), `browserUnmatched` (browser seconds no rule matched) and `browserHidden` (the part of those with no title, see [Screen time](SCREEN-TIME.md)).
+- `activityEvents` lines hold each ActivityWatch window event once: `part` is the watcher's bucket, `kind` is `event`, `date` is the day the event started, and `value` is `{timestamp, duration, app, title}` with the duration in seconds. The first run writes every event the watchers hold. A watcher's newest event is written once a newer one follows it, since ActivityWatch can still lengthen it. Which events were written is kept in `private-archive/activity-events.json`.

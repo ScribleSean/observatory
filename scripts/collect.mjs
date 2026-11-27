@@ -12,7 +12,8 @@ import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {cleanActivity,cleanSettings,cleanLedgerRow} from './snapshot-clean.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {attachTokenHours} from './token-hours.mjs';
-import {retainActivityHistory} from './activity-history.mjs';
+import {retainActivityHistory,settleMyApps,addMyAppsChunk} from './activity-history.mjs';
+import {rulesKey} from '../lib/my-apps.mjs';
 import {serializeSnapshot,snapshotMaximumBytes} from './snapshot-size.mjs';
 import {collectQuota,findCodexExecutable} from './collect-quota.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
@@ -101,10 +102,15 @@ export function defaultReaders(config) {
     screenTime:async()=>{
       if(config.platform==='mac') {
         const {macActivity}=await import('./mac-activity.mjs');
-        return macActivity({raw:true});
+        return macActivity({raw:true,rules:config.activity?.apps ?? [],hosts:config.activity?.hosts ?? null});
       }
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
+    // An older stretch of screen time, to label past days with the my-apps rules (scripts/activity-history.mjs).
+    ...(config.platform==='mac'?{activityRange:async(start,end)=>{
+      const {macActivity}=await import('./mac-activity.mjs');
+      return macActivity({raw:true,rules:config.activity?.apps ?? [],hosts:config.activity?.hosts ?? null,start,end});
+    }}:{}),
     codex:async()=>readCodexRoots(await roots(),{cacheFor:cacheFor('codex')}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform!=='windows'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
@@ -302,6 +308,18 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     ledger:[ledger,...peer(disconnected)],ledgerHistory:[ledgerHistory],configEcho:configEcho(config,at)};
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
+  // My apps: label past days too, one older chunk per run, so the whole history uses the same rules.
+  const rules=config.platform==='mac' && config.sources.screenTime?config.activity?.apps ?? []:[];
+  data.activityHistory=await Promise.all(data.activityHistory.map(async row=>{
+    const {row:settled,chunk}=settleMyApps(row,history.find(item=>item.host===row.host),
+      {key:rulesKey(rules),rules:rules.length,windowStart:activity.status==='ok'?activity.start:null});
+    if(!chunk || !readers.activityRange)return settled;
+    try {
+      const raw=await readers.activityRange(chunk.start,chunk.end);
+      const {intervals:_i,trackingIntervals:_t,...read}=cleanActivity(raw,host);
+      return addMyAppsChunk(settled,chunk,{...read,firstRecorded:raw.firstRecorded});
+    } catch {return settled;}
+  }));
   const result={data};
   attachProviderTokenEstimates(result);
   const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits,grokLimits].filter(row=>!['not-connected','unsupported'].includes(row.status));

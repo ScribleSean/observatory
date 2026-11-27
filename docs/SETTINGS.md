@@ -25,6 +25,7 @@ A source is read only while it is `true` under `sources`.
 - `"sessions": { "titles": false }`: keeps a short hash instead of each session title. See [SECURITY.md](../SECURITY.md).
 - `"sessions": { "roles": { "tidepool notes": "Researcher" } }`: maps the start of your own session titles to a role. Roles are Chief of staff, Builder, Reviewer, Designer, Researcher, Runner, Sweeper and Ops. Without a match, the role comes from a `Role:` prefix in the title, how the session ran or the kind of work it did.
 - `hub.spokes`: other computers to combine into one view. See [Several computers](SEVERAL-COMPUTERS.md).
+- `activity`: screen time detail on a Mac. `apps` holds your own rules that name apps and sites, and `hosts` limits which ActivityWatch watchers are read. See [Screen time](SCREEN-TIME.md).
 
 ## Engines
 

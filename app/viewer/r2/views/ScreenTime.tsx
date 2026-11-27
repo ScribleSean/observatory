@@ -1,7 +1,7 @@
 // Screen time: follows the device chips and the range. A day with tracking off is Unknown on its own, and a
 // longer period adds the tracked days only. There is no block that splits spend by screen on or off: no
 // data joins spend to screen time yet, so the view does not guess one.
-import type { Frame, Num, ScreenTimeVM } from '../../../../lib/view-r2.mjs';
+import type { Frame, MyAppsVM, Num, ScreenTimeVM } from '../../../../lib/view-r2.mjs';
 import type { ConfigEcho } from '../../../../lib/r2-shape.mjs';
 import type { Scope } from '../../../../lib/scope.mjs';
 import { buildScreenTime, metric } from '../../../../lib/view-r2.mjs';
@@ -56,8 +56,47 @@ export function ScreenTimeBody({ vm, spend, config, now }: ScreenTimeData) {
       <Side><Block span={4} title="By kind of app" sub="share of screen time">
         <div className="bb">{categories.length ? <BarList items={partBars(categories)} format={hours} /> : <div className="fa">Not tracked by kind of app on these computers.</div>}</div>
       </Block></Side>
+      <MyApps vm={vm.myApps} period={period.label} />
     </div>
   );
+}
+
+const signed = (seconds: number) => `${seconds > 0 ? '+' : seconds < 0 ? '−' : '±'}${hours(Math.abs(seconds))}`;
+
+/** Time per "my apps" label, its change on the earlier period, and a bar per day. Browser time no rule matched beside it. */
+function MyApps({ vm, period }: { vm: MyAppsVM; period: string }) {
+  const unlabeled = vm.unlabeledDays ? `${plural(vm.unlabeledDays, 'day')} in ${period} not labeled` : '';
+  const sub = vm.rows.length ? `${period}${vm.compareLabel ? `, ${vm.compareLabel}` : ''}` : undefined;
+  // zero-ok: bar height scale only
+  const top = Math.max(...vm.rows.flatMap(row => row.days.map(day => day.seconds ?? 0)), 1);
+  const empty = !vm.rules ? <>No rules yet. Name your apps and sites with <code>activity.apps</code> in observatory.config.json.</>
+    : !vm.labeledDays ? `Not labeled yet for ${period}.` : `None of your apps was used in ${period}.`;
+  const unmatched = vm.browser.unmatchedShare;
+  return <>
+    <Block span={8} title="My apps" sub={sub} foot={unlabeled ? `${unlabeled}. Labels are added to older days on each run.` : undefined} label="My apps">
+      {vm.rows.length ? <div className="tw"><table className="myapps">
+        <thead><tr><th>App</th><th className="r">Time</th><th className="r">{vm.compareLabel ? 'Change' : ''}</th><th className="hide-s">Per day</th><th className="r">Share</th></tr></thead>
+        <tbody>{vm.rows.map(row => (
+          <tr key={row.label}><td className="name">{row.label}</td>
+            <td className="r strong">{hours(row.seconds)}</td>
+            <td className={`r${row.delta === null ? ' fa' : row.delta > 0 ? ' acc' : ''}`}>{row.delta === null ? (vm.compareLabel ? UNKNOWN : '') : signed(row.delta)}</td>
+            <td className="hide-s" aria-label={`${row.label} per day`}><span className="mini">{row.days.map(day => (
+              <i key={day.date} title={`${day.date}: ${day.seconds === null ? UNKNOWN : hours(day.seconds)}`} className={day.seconds === null ? 'u' : undefined}
+                style={{ height: day.seconds === null ? undefined : `${Math.max(day.seconds ? 8 : 0, 100 * day.seconds / top)}%` }} />))}</span></td>
+            <td className="r fa">{vm.labeledSeconds ? share(row.seconds, vm.labeledSeconds) : ''}</td></tr>))}
+        </tbody></table></div> : <div className="bb fa">{empty}</div>}
+    </Block>
+    <Side><Block span={4} title="Browser time" sub="matched to my apps" label="Browser time">
+      <div className="bb">{vm.labeledDays && vm.browser.seconds > 0 ? <>
+        <BarList items={[{ key: 'matched', label: 'Matched', value: vm.browser.matched }, { key: 'unmatched', label: 'Not matched', value: vm.browser.unmatched }]} format={hours} />
+        <p className="fa note">{vm.browser.hidden > vm.browser.unmatched / 2
+          ? <>ActivityWatch kept no page titles for {hours(vm.browser.hidden)} of it, so title rules cannot match. Its window watcher has <code>exclude_title</code> on (see docs/SCREEN-TIME.md).</>
+          : unmatched !== null && unmatched > 0.5
+          ? 'Most browser time matched no rule. Add a rule for the sites you use, or a URL watcher if titles are not enough (see docs/SCREEN-TIME.md).'
+          : 'Matched from page titles. A URL watcher would match by address instead (see docs/SCREEN-TIME.md).'}</p>
+      </> : <span className="fa">{vm.rules ? `No labeled browser time in ${period}.` : 'Needs my-apps rules.'}</span>}</div>
+    </Block></Side>
+  </>;
 }
 
 export function ScreenTime({ snapshot, scope, now }: { snapshot: { view: { config?: ConfigEcho[] } }; scope: Scope; now: number }) {

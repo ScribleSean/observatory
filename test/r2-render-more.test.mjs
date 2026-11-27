@@ -162,8 +162,31 @@ test('Tokens shows Unknown for a stale computer alone today, and an empty state 
 const screenVM = (unit, selected, total = 65280) => {
   const f = frame(unit, selected);
   return { frame: f, total: num(total, '18h 8m', { unit: 'seconds', breakdowns: { category: [part('AI apps', 37862, ''), part('Browser', 27418, '')] } }),
-    days: f.period.dates.map(date => ({ date, seconds: num(3600, '1h'), tracked: true })), hours: unit === 'day' ? Array.from({ length: 24 }, (_, hour) => hour * 60) : null, apps: [] };
+    days: f.period.dates.map(date => ({ date, seconds: num(3600, '1h'), tracked: true })), hours: unit === 'day' ? Array.from({ length: 24 }, (_, hour) => hour * 60) : null, apps: [],
+    myApps: { rules: false, rows: [], trendDates: [], compareLabel: null, labeledDays: 0, unlabeledDays: 0, labeledSeconds: 0, browser: { seconds: 0, matched: 0, unmatched: 0, hidden: 0, unmatchedShare: null } } };
 };
+
+test('Screen time shows my apps with their change and a bar per day, browser time no rule matched, and how to add rules', () => {
+  const trendDates = ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18'];
+  const myApps = { rules: true, compareLabel: 'vs last week', labeledDays: 6, unlabeledDays: 1, labeledSeconds: 36000, trendDates,
+    rows: [{ label: 'Tide notes', seconds: 9000, previous: 5400, delta: 3600, days: trendDates.map((date, i) => ({ date, seconds: i === 0 ? null : i * 300 })) },
+      { label: 'Lantern', seconds: 1800, previous: 2400, delta: -600, days: trendDates.map(date => ({ date, seconds: 0 })) }],
+    browser: { seconds: 20000, matched: 6000, unmatched: 14000, hidden: 0, unmatchedShare: 0.7 } };
+  const markup = clean(html(createElement(ScreenTimeBody, { vm: { ...screenVM('week'), myApps }, spend: null, config: view.config, now: NOW })), 'My apps');
+  assert.ok(markup.includes('My apps') && markup.includes('Tide notes') && markup.includes('2h 30m'));
+  assert.ok(markup.includes('+1h') && markup.includes('−10m'), 'the change on last week, both ways');
+  assert.ok(markup.includes('vs last week'));
+  assert.equal((markup.match(/<span class="mini">/g) ?? []).length, 2, 'a bar per day for each app');
+  assert.ok(markup.includes('class="u"'), 'a day not labeled is drawn as Unknown, not zero');
+  assert.ok(markup.includes('1 day in Nov 16 to 22 not labeled'));
+  assert.ok(markup.includes('Browser time') && markup.includes('Not matched') && markup.includes('70%'));
+  assert.ok(markup.includes('Most browser time matched no rule'));
+  assert.ok(markup.includes('By kind of app'), 'kind of app stays');
+  const hidden = html(createElement(ScreenTimeBody, { vm: { ...screenVM('week'), myApps: { ...myApps, browser: { ...myApps.browser, hidden: 12000 } } }, spend: null, config: view.config, now: NOW }));
+  assert.ok(hidden.includes('kept no page titles for 3h 20m') && hidden.includes('exclude_title'));
+  const none = html(createElement(ScreenTimeBody, { vm: screenVM('week'), spend: null, config: view.config, now: NOW }));
+  assert.ok(none.includes('No rules yet') && none.includes('activity.apps'));
+});
 
 test('Screen time follows the settings echo: off everywhere, off on one computer, and no invented screen on and off split', () => {
   const off = view.config.map(row => ({ ...row, sources: { ...row.sources, screenTime: false } }));
