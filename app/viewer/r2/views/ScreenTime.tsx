@@ -68,7 +68,8 @@ const signed = (seconds: number) => `${seconds > 0 ? '+' : seconds < 0 ? '−' :
  * days in the range are not labeled. */
 function MyApps({ vm, period }: { vm: MyAppsVM; period: string }) {
   const partly = vm.unlabeledDays > 0;
-  const sub = vm.rows.length ? `${period}${vm.compareLabel ? `, ${vm.compareLabel}` : ''}` : undefined;
+  const only = vm.only ? `${names(vm.only)} only` : null;
+  const sub = vm.rows.length ? [period, only, vm.compareLabel].filter(Boolean).join(', ') : only ?? undefined;
   // zero-ok: bar height scale only
   const top = Math.max(...vm.rows.flatMap(row => row.days.map(day => day.seconds ?? 0)), 1);
   const empty = !vm.rules ? 'No apps named yet.' : !vm.labeledDays ? `Not labeled for ${period}.` : `None of your apps used in ${period}.`;
@@ -76,9 +77,9 @@ function MyApps({ vm, period }: { vm: MyAppsVM; period: string }) {
   const note = vm.browser.hidden > vm.browser.unmatched / 2 ? 'Most of it has no page title to match.'
     : vm.browser.unmatchedShare !== null && vm.browser.unmatchedShare > 0.5 ? 'Most of it matched none of your apps.' : null;
   return <>
-    <Block span={8} title="My apps" sub={sub} foot={partly ? `${plural(vm.unlabeledDays, 'day')} in ${period} not labeled` : undefined} label="My apps">
+    <Block span={8} title="My apps" sub={sub} foot={partly ? `${plural(vm.unlabeledDays, 'day')} not labeled` : undefined} label="My apps">
       {vm.rows.length ? <div className="tw"><table className="myapps">
-        <thead><tr><th>App</th><th className="r">Time</th>{compare && <th className="r">Change</th>}<th className="hide-s trend">Per {vm.trendUnit}</th><th className="r">Of screen time</th></tr></thead>
+        <thead><tr><th>App</th><th className="r">Time</th>{compare && <th className="r">Change</th>}<th className="hide-s trend">Per {vm.trendUnit}</th><th className="r" title={vm.only ? `Of ${names(vm.only)}'s screen time` : undefined}>Of screen time</th></tr></thead>
         <tbody>{vm.rows.map(row => (
           <tr key={row.label}><td className="name">{row.label}</td>
             <td className="r strong">{hours(row.seconds)}</td>
@@ -89,7 +90,7 @@ function MyApps({ vm, period }: { vm: MyAppsVM; period: string }) {
             <td className="r fa">{vm.labeledSeconds ? share(row.seconds, vm.labeledSeconds) : UNKNOWN}</td></tr>))}
         </tbody></table></div> : <div className="bb fa">{empty}</div>}
     </Block>
-    <Side><Block span={4} title="Browser time" sub={partly ? `matched to my apps, ${plural(vm.labeledDays, 'labeled day')} only` : 'matched to my apps'} label="Browser time">
+    <Side><Block span={4} title="Browser time" sub={['matched to my apps', only, partly ? `on ${plural(vm.labeledDays, 'labeled day')}` : null].filter(Boolean).join(', ')} label="Browser time">
       <div className="bb">{vm.labeledDays && vm.browser.seconds > 0 ? <>
         <BarList items={[{ key: 'matched', label: 'Matched', value: vm.browser.matched }, { key: 'unmatched', label: 'Not matched', value: vm.browser.unmatched }]} format={hours} />
         {note && <p className="fa note">{note}</p>}

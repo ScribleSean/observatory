@@ -36,7 +36,7 @@ Labels are applied when screen time is read. The last 7 days are labeled on ever
 
 ## Browser time no rule matched
 
-**Browser time** shows how much browser time your rules matched and how much they did not. Like My apps, it counts the labeled days only, and says so when the range has days that are not labeled. The self-check lists **Browser time matched to my apps** as a problem when, over the last 7 labeled days, there was at least an hour of browser time and more than half of it matched no rule. Either the rules miss sites you use, or page titles are not enough to tell them apart.
+**Browser time** shows how much browser time your rules matched and how much they did not. Like My apps, it counts the labeled days only, and says so when the range has days that are not labeled. When some of the computers on the page have no rules, both name the computers they count, and the share is of those computers' screen time. The self-check lists **Browser time matched to my apps** as a problem when, over the last 7 labeled days, there was at least an hour of browser time and more than half of it matched no rule. Either the rules miss sites you use, or page titles are not enough to tell them apart.
 
 ### Hidden titles
 

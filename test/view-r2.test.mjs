@@ -491,7 +491,11 @@ test('my apps: time per label on labeled days, the change on last week, a value 
   const before = v.buildScreenTime(snapshot, at('week', early, { devices: ['Mac'] }), { now: NOW }).myApps;
   assert.equal(before.rows.length, 0, 'no labels before the rules');
   assert.ok(before.unlabeledDays > 0);
+  assert.equal(week.only, null, 'one computer with rules, alone on the page, needs no note');
   const both = v.buildScreenTime(snapshot, at('week', '2026-11-18'), { now: NOW }).myApps;
+  assert.deepEqual(both.only, ['Studio'], 'with a computer without rules on the page, My apps names the one it counts');
+  close(both.labeledSeconds, week.labeledSeconds);
+  close(both.browser.seconds, week.browser.seconds);
   assert.equal(both.unlabeledDays, 0, 'a computer without rules adds no unlabeled days');
   assert.equal(both.compareLabel, week.compareLabel, 'nor does it block the change on last week');
   const later = week.rows[0].days.filter(bar => bar.later);
